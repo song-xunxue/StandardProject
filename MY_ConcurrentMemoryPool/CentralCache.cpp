@@ -32,20 +32,35 @@ Span* CentralCache::GetOneSpan(SpanList& list, size_t size)
 
 	//划分申请的span大块空间
 	char* start = (char*)(newspan->_pageID << PAGE_SHIFT);
-	size_t bytesize = newspan->n << PAGE_SHIFT;
+	size_t bytesize = newspan->n << PAGE_SHIFT;//申请的大块空间的大小
 	char* end = start + bytesize;
-	newspan->_freelist = start;
 
+	newspan->_freelist = start;
+	//先切一块方便尾插
 	void* tail = start;
 	start += size;
 
-	while (tail < end)
+	while (start < end)
 	{
 		ObjectNext(tail) = start;
 		tail = start;
 		start += size;
 	}
+
 	ObjectNext(tail) = NULL;
+	//int j = 0;
+	//void* cur = newspan->_freelist;
+	//while (cur)
+	//{
+	//	cur = ObjectNext(cur);
+	//	++j;
+	//}
+	//if (j != (bytesize / size))
+	//{
+	//	cout << "error" << endl;
+	//}
+
+
 
 	list._mtx.lock();
 	list.PushFront(newspan);
@@ -94,7 +109,7 @@ void CentralCache::RealeaseListToSpan(void* start, size_t size)
 		//头插回收的空间
 		ObjectNext(start) = span->_freelist;
 		span->_freelist = start;
-		span->_useCount;
+		span->_useCount--;//修复之前没有--
 
 		if (span->_useCount==0)
 		{
@@ -102,7 +117,7 @@ void CentralCache::RealeaseListToSpan(void* start, size_t size)
 			span->_freelist = nullptr;
 			span->_next = nullptr;
 			span->_prev = nullptr;
-
+			
 			_spanLists[index]._mtx.unlock();
 			page->_pageMtx.lock();
 			page->RealeaseSpanToPageCache(span);
@@ -110,6 +125,8 @@ void CentralCache::RealeaseListToSpan(void* start, size_t size)
 			//PageCache::GetInstance()->_pageMtx.lock();
 			//PageCache::GetInstance()->RealeaseSpanToPageCache(span);
 			//PageCache::GetInstance()->_pageMtx.unlock();
+			
+			_spanLists[index]._mtx.lock();//终于找到了
 		}
 		start = next;
 	}

@@ -24,24 +24,12 @@ Page* PageCache::NewSpan(size_t k)
 		////当释放的时候也是整个换回来的
 		//_idSpanMap[span->_pageID] = span;
 		//return span;
-
-
-
 		//d搭配定长内存池进行使用
 		void* ptr = SystemAlloc(k);
 		Span* span = _spanPool.New();//注意delete
 		span->n = k;
 		span->_pageID = (PAGE_ID)ptr >> PAGE_SHIFT;
-
-		////建立索引
-		//for (size_t i = 0; i < k; ++i)
-		//{
-		//	_idSpanMap[span->_pageID + i] = span;
-		//}
-		//不需要建立索引，因为整个span的空间都给出去了
-		// 浪费空间不超过一个span
-		//当释放的时候也是整个换回来的
-		_idSpanMap[span->_pageID] = span;
+		//_idSpanMap[span->_pageID] = span;如果建立此映射在释放时也应该注意删除
 		return span;
 	}
 
@@ -50,7 +38,7 @@ Page* PageCache::NewSpan(size_t k)
 	{
 		//返回一个span，让centralCache自己去划分空间
 		Span* kspan= _spanLists[k].PopFront();
-		for (size_t i = 0; i < kspan->n; i++)
+		for (PAGE_ID i = 0; i < kspan->n; ++i)
 		{
 			_idSpanMap[kspan->_pageID + i]= kspan;
 		}
@@ -70,7 +58,8 @@ Page* PageCache::NewSpan(size_t k)
 			{
 
 				Span* nspan = _spanLists[i].PopFront();
-				Span* kspan = new Span;//划分的k页空间
+				//Span* kspan = new Span;//划分的k页空间
+				Span* kspan = _spanPool.New();
 				kspan->n = k;
 				nspan->n -= k;
 
@@ -79,7 +68,7 @@ Page* PageCache::NewSpan(size_t k)
 				nspan->_pageID += k;
 
 				_spanLists[nspan->n].PushFront(nspan);//余下的空间挂回对应的哈希桶
-				for (size_t i = 0; i < kspan->n; i++)
+				for (PAGE_ID i = 0; i < kspan->n; ++i)
 				{
 					_idSpanMap[kspan->_pageID + i] = kspan;
 				}
@@ -94,7 +83,8 @@ Page* PageCache::NewSpan(size_t k)
 		}
 
 		//如果没有大块空间，就向堆进行申请
-		Span* Bigspan = new Span;
+		//Span* Bigspan = new Span;
+		Span* Bigspan = _spanPool.New();
 		void* ptr = SystemAlloc(NPAGE-1);
 		Bigspan->_pageID = (PAGE_ID)ptr >> PAGE_SHIFT;
 		Bigspan->n = NPAGE - 1;
@@ -123,12 +113,12 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 	//大块内存的释放
 	if (span->n > NPAGE - 1)
 	{
-		////删除大块内存的索引
-		//for (size_t i = 0; i < span->n; ++i)
-		//{
-		//	_idSpanMap.erase(span->_pageID+i);
-		//}
-		_idSpanMap.erase(span->_pageID);
+		//删除大块内存的索引
+		/*for (size_t i = 0; i < span->n; ++i)
+		{
+			_idSpanMap.erase(span->_pageID+i);
+		}
+		_idSpanMap.erase(span->_pageID);*/
 		
 		//释放
 		void* ptr = (void*)(span->_pageID << PAGE_SHIFT);
@@ -136,6 +126,11 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 		//delete span;
 		_spanPool.Delete(span);
 		return;
+	}
+
+	//先删除当前span的所有索引之后统一建立新的索引关系
+	for (PAGE_ID i = 0; i < span->n; ++i) {
+		_idSpanMap.erase(span->_pageID + i);
 	}
 
 
@@ -168,7 +163,8 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 		_spanLists[prev_span->n].Erase(prev_span);
 		//_spanLists[span->n].PushFront(span);
 		//清除对象
-		delete prev_span;
+		//delete prev_span;
+		_spanPool.Delete(prev_span);
 
 	}
 	//前后合并
@@ -197,12 +193,16 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 		span->n += next_span->n;
 		_spanLists[next_span->n].Erase(next_span);
 		//清除对象
-		delete next_span;
+		//delete next_span;
+		_spanPool.Delete(next_span);
 	}
 	//合并完之后再插入，减少操作和重复插入删除
 	_spanLists[span->n].PushFront(span);
 	span->_isUse = false;
-	//新的映射关系插入
-	_idSpanMap[span->_pageID] = span;
-	_idSpanMap[span->_pageID+span->n] = span;
+	//建立所有新的映射关系
+	for (PAGE_ID i = 0; i < span->n; ++i) {
+		_idSpanMap[span->_pageID + i] = span;
+	}
+	//_idSpanMap[span->_pageID] = span;
+	//_idSpanMap[span->_pageID+span->n] = span;
 }

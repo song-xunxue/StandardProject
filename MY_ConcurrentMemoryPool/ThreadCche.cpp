@@ -4,8 +4,6 @@
 
 void* ThreadCache::Allocate(size_t size)
 {
-
-
 	assert(size <= MAX_BYTES);
 	//计算内存对齐数和哈希桶位置
 	size_t alignsize = SizeClass::RounUp(size);

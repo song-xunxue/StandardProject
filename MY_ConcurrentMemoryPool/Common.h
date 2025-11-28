@@ -80,6 +80,7 @@ public:
 		void* obj = _Freelist;
 		_Freelist = ObjectNext(_Freelist);
 		--_size;
+
 		return obj;
 	}
 	void PushRange(void* start,void* end,size_t n)

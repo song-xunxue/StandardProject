@@ -16,10 +16,13 @@ void* ThreadCache::Allocate(size_t size)
 	{
 		return FetchFromCentralCache(index, alignsize);
 	}
+	assert(false);
 	return nullptr;
 }
 void ThreadCache::Deallocate(void* ptr, size_t size)
 {
+	assert(ptr);
+	assert(size < MAX_BYTES);
 	size_t index = SizeClass::Index(size);
 	_freelists[index].push(ptr);
 

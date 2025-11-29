@@ -37,10 +37,10 @@ Page* PageCache::NewSpan(size_t k)
 	if (!_spanLists[k].Empty())
 	{
 		//返回一个span，让centralCache自己去划分空间
-		Span* kspan= _spanLists[k].PopFront();
+		Span* kspan = _spanLists[k].PopFront();
 		for (PAGE_ID i = 0; i < kspan->n; ++i)
 		{
-			_idSpanMap[kspan->_pageID + i]= kspan;
+			_idSpanMap[kspan->_pageID + i] = kspan;
 		}
 
 		return kspan;
@@ -74,7 +74,7 @@ Page* PageCache::NewSpan(size_t k)
 				}
 				//建立映射
 				_idSpanMap[nspan->_pageID] = nspan;
-				_idSpanMap[nspan->_pageID+nspan->n-1] = nspan;
+				_idSpanMap[nspan->_pageID + nspan->n - 1] = nspan;
 
 
 				return kspan;
@@ -85,7 +85,7 @@ Page* PageCache::NewSpan(size_t k)
 		//如果没有大块空间，就向堆进行申请
 		//Span* Bigspan = new Span;
 		Span* Bigspan = _spanPool.New();
-		void* ptr = SystemAlloc(NPAGE-1);
+		void* ptr = SystemAlloc(NPAGE - 1);
 		Bigspan->_pageID = (PAGE_ID)ptr >> PAGE_SHIFT;
 		Bigspan->n = NPAGE - 1;
 		_spanLists[NPAGE - 1].PushFront(Bigspan);
@@ -95,6 +95,7 @@ Page* PageCache::NewSpan(size_t k)
 
 Span* PageCache::GetSpanFromPAGE_ID(void* ptr)
 {
+	std::lock_guard<std::mutex> lock(_pageMtx);   // 加锁
 	//理论上一定能够找到的
 	PAGE_ID id = ((PAGE_ID)ptr >> PAGE_SHIFT);
 	auto it = _idSpanMap.find(id);
@@ -119,7 +120,7 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 			_idSpanMap.erase(span->_pageID+i);
 		}
 		_idSpanMap.erase(span->_pageID);*/
-		
+
 		//释放
 		void* ptr = (void*)(span->_pageID << PAGE_SHIFT);
 		SystemFree(ptr);
@@ -129,9 +130,9 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 	}
 
 	//先删除当前span的所有索引之后统一建立新的索引关系
-	for (PAGE_ID i = 0; i < span->n; ++i) {
-		_idSpanMap.erase(span->_pageID + i);
-	}
+	//for (PAGE_ID i = 0; i < span->n; ++i) {
+	//	_idSpanMap.erase(span->_pageID + i);
+	//}
 
 
 	//前向合并
@@ -157,7 +158,7 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 		}
 		//此处开始合并
 		//旧的映射关系删除
-		_idSpanMap.erase(prev_id);
+		//_idSpanMap.erase(prev_id);
 		span->_pageID = prev_span->_pageID;
 		span->n += prev_span->n;
 		_spanLists[prev_span->n].Erase(prev_span);
@@ -189,7 +190,7 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 			break;
 		}
 		//旧的映射关系删除
-		_idSpanMap.erase(next_id);
+		//_idSpanMap.erase(next_id);
 		span->n += next_span->n;
 		_spanLists[next_span->n].Erase(next_span);
 		//清除对象
@@ -200,9 +201,10 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 	_spanLists[span->n].PushFront(span);
 	span->_isUse = false;
 	//建立所有新的映射关系
-	for (PAGE_ID i = 0; i < span->n; ++i) {
-		_idSpanMap[span->_pageID + i] = span;
-	}
-	//_idSpanMap[span->_pageID] = span;
-	//_idSpanMap[span->_pageID+span->n] = span;
+	//for (PAGE_ID i = 0; i < span->n; ++i) {
+	//	_idSpanMap[span->_pageID + i] = span;
+	//}
+	_idSpanMap[span->_pageID] = span;
+	_idSpanMap[span->_pageID+span->n] = span;
+	//span划分时建立映射关系就不需要删除了，会替代原有的映射关系
 }

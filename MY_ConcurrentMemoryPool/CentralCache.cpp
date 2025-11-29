@@ -47,7 +47,7 @@ Span* CentralCache::GetOneSpan(SpanList& list, size_t size)
 		start += size;
 	}
 
-	ObjectNext(tail) = NULL;
+	ObjectNext(tail) = nullptr;
 	//int j = 0;
 	//void* cur = newspan->_freelist;
 	//while (cur)
@@ -105,6 +105,9 @@ void CentralCache::RealeaseListToSpan(void* start, size_t size)
 	{
 		void* next = ObjectNext(start);
 		auto page = PageCache::GetInstance();
+		//这里的访问没有加锁，这导致了竞态条件
+		// 比如，一个线程正在RealeaseSpanToPageCache中删除映射（在锁内），
+		// 另一个线程在GetSpanFromPAGE_ID中读取（无锁），就会导致读取到无效的指针或者找不到映射
 		Span* span = page->GetSpanFromPAGE_ID(start);
 		//头插回收的空间
 		ObjectNext(start) = span->_freelist;

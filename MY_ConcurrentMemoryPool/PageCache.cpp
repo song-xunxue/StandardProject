@@ -40,7 +40,8 @@ Page* PageCache::NewSpan(size_t k)
 		Span* kspan = _spanLists[k].PopFront();
 		for (PAGE_ID i = 0; i < kspan->n; ++i)
 		{
-			_idSpanMap[kspan->_pageID + i] = kspan;
+			//_idSpanMap[kspan->_pageID + i] = kspan;
+			_idSpanMap.set(kspan->_pageID + i, kspan);
 		}
 
 		return kspan;
@@ -70,11 +71,14 @@ Page* PageCache::NewSpan(size_t k)
 				_spanLists[nspan->n].PushFront(nspan);//余下的空间挂回对应的哈希桶
 				for (PAGE_ID i = 0; i < kspan->n; ++i)
 				{
-					_idSpanMap[kspan->_pageID + i] = kspan;
+					//_idSpanMap[kspan->_pageID + i] = kspan;
+					_idSpanMap.set(kspan->_pageID + i, kspan);
 				}
 				//建立映射
-				_idSpanMap[nspan->_pageID] = nspan;
-				_idSpanMap[nspan->_pageID + nspan->n - 1] = nspan;
+				//_idSpanMap[nspan->_pageID] = nspan;
+				//_idSpanMap[nspan->_pageID + nspan->n - 1] = nspan;
+				_idSpanMap.set(nspan->_pageID, nspan);
+				_idSpanMap.set(nspan->_pageID + nspan->n - 1, nspan);
 
 
 				return kspan;
@@ -98,16 +102,19 @@ Span* PageCache::GetSpanFromPAGE_ID(void* ptr)
 	std::lock_guard<std::mutex> lock(_pageMtx);   // 加锁
 	//理论上一定能够找到的
 	PAGE_ID id = ((PAGE_ID)ptr >> PAGE_SHIFT);
-	auto it = _idSpanMap.find(id);
-	if (it != _idSpanMap.end())
-	{
-		return it->second;
-	}
-	else
-	{
-		assert(false);
-		return nullptr;
-	}
+	//auto it = _idSpanMap.find(id);
+	//if (it != _idSpanMap.end())
+	//{
+	//	return it->second;
+	//}
+	//else
+	//{
+	//	assert(false);
+	//	return nullptr;
+	//}
+	auto it = _idSpanMap.get(id);
+	assert(it != nullptr);
+	return (Span*)it;
 }
 void PageCache::RealeaseSpanToPageCache(Span* span)
 {
@@ -139,13 +146,20 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 	while (1)
 	{
 		PAGE_ID prev_id = span->_pageID - 1;
-		auto it = _idSpanMap.find(prev_id);
+		//auto it = _idSpanMap.find(prev_id);
 		//没有找到，还没有回收前面的空间
-		if (it == _idSpanMap.end())
+		//if (it == _idSpanMap.end())
+		//{
+		//	break;
+		//}
+		auto it = (Span*)_idSpanMap.get(prev_id);
+		if (it == nullptr)
 		{
 			break;
 		}
-		Span* prev_span = it->second;
+
+		//Span* prev_span = it->second;
+		Span* prev_span = it;
 		//找到了，但是合并之后会大于128页，无法管理
 		if (prev_span->n + span->n > NPAGE)
 		{
@@ -172,13 +186,22 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 	while (1)
 	{
 		PAGE_ID next_id = span->_pageID + span->n;
-		auto it = _idSpanMap.find(next_id);
+		//auto it = _idSpanMap.find(next_id);
+		
+		
 		//没有找到，还没有回收前面的空间
-		if (it == _idSpanMap.end())
+		//if (it == _idSpanMap.end())
+		//{
+		//	break;
+		//}
+		auto it = (Span*)_idSpanMap.get(next_id);
+		if (it == nullptr)
 		{
 			break;
 		}
-		Span* next_span = it->second;
+		
+		//Span* next_span = it->second;
+		Span* next_span = it;
 		//找到了，但是合并之后会大于128页，无法管理
 		if (next_span->n + span->n > NPAGE)
 		{
@@ -204,7 +227,10 @@ void PageCache::RealeaseSpanToPageCache(Span* span)
 	//for (PAGE_ID i = 0; i < span->n; ++i) {
 	//	_idSpanMap[span->_pageID + i] = span;
 	//}
-	_idSpanMap[span->_pageID] = span;
-	_idSpanMap[span->_pageID+span->n] = span;
+	//_idSpanMap[span->_pageID] = span;
+	//_idSpanMap[span->_pageID+span->n-1] = span;
 	//span划分时建立映射关系就不需要删除了，会替代原有的映射关系
+
+	_idSpanMap.set(span->_pageID, span);
+	_idSpanMap.set(span->_pageID+span->n-1, span);
 }

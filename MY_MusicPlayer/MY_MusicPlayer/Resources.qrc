@@ -1,0 +1,43 @@
+<RCC>
+    <qresource prefix="/">
+        <file>images/add.png</file>
+        <file>images/bg.png</file>
+        <file>images/ci.png</file>
+        <file>images/default_cover.png</file>
+        <file>images/down.png</file>
+        <file>images/down_page.png</file>
+        <file>images/ilikebg.png</file>
+        <file>images/like.png</file>
+        <file>images/like_1.png</file>
+        <file>images/like_2.png</file>
+        <file>images/like_3.png</file>
+        <file>images/list_play.png</file>
+        <file>images/local.png</file>
+        <file>images/max.png</file>
+        <file>images/min.png</file>
+        <file>images/music.png</file>
+        <file>images/non-music.png</file>
+        <file>images/order_play.png</file>
+        <file>images/play.png</file>
+        <file>images/play_2.png</file>
+        <file>images/play_on.png</file>
+        <file>images/play3.png</file>
+        <file>images/quit.png</file>
+        <file>images/radio.png</file>
+        <file>images/rec.png</file>
+        <file>images/recent.png</file>
+        <file>images/recentbg.png</file>
+        <file>images/shuffle.png</file>
+        <file>images/shuffle_2.png</file>
+        <file>images/silent.png</file>
+        <file>images/single_play.png</file>
+        <file>images/skin.png</file>
+        <file>images/up.png</file>
+        <file>images/up_page.png</file>
+        <file>images/volumn.png</file>
+        <file>images/xiala.png</file>
+        <file>images/Logo.png</file>
+        <file>images/Logo2.png</file>
+        <file>images/addmodule.png</file>
+    </qresource>
+</RCC>

@@ -16,23 +16,35 @@ DEFINES += QT_DEPRECATED_WARNINGS
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    commonpage.cpp \
+    listitembox.cpp \
     localform.cpp \
     main.cpp \
     musicplayer.cpp \
     onlineform.cpp \
-    recbox.cpp
+    recbox.cpp \
+    recboxitem.cpp \
+    volumetool.cpp
 
 HEADERS += \
+    commonpage.h \
+    listitembox.h \
     localform.h \
     musicplayer.h \
     onlineform.h \
-    recbox.h
+    recbox.h \
+    recboxitem.h \
+    volumetool.h
 
 FORMS += \
+    commonpage.ui \
+    listitembox.ui \
     localform.ui \
     musicplayer.ui \
     onlineform.ui \
-    recbox.ui
+    recbox.ui \
+    recboxitem.ui \
+    volumetool.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

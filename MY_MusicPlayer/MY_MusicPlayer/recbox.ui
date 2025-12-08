@@ -108,6 +108,12 @@ QPushButton:hover
       </property>
       <item>
        <widget class="QWidget" name="recBoxListUp" native="true">
+        <property name="maximumSize">
+         <size>
+          <width>720</width>
+          <height>16777215</height>
+         </size>
+        </property>
         <layout class="QHBoxLayout" name="horizontalLayout_4">
          <property name="spacing">
           <number>0</number>
@@ -125,13 +131,23 @@ QPushButton:hover
           <number>0</number>
          </property>
          <item>
-          <layout class="QHBoxLayout" name="recListUphorizontalLayout"/>
+          <layout class="QHBoxLayout" name="recListUphorizontalLayout">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+          </layout>
          </item>
         </layout>
        </widget>
       </item>
       <item>
        <widget class="QWidget" name="recBoxListDown" native="true">
+        <property name="maximumSize">
+         <size>
+          <width>720</width>
+          <height>16777215</height>
+         </size>
+        </property>
         <layout class="QHBoxLayout" name="horizontalLayout_5">
          <property name="spacing">
           <number>0</number>
@@ -149,7 +165,11 @@ QPushButton:hover
           <number>0</number>
          </property>
          <item>
-          <layout class="QHBoxLayout" name="recListDownhorizontalLayout"/>
+          <layout class="QHBoxLayout" name="recListDownhorizontalLayout">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+          </layout>
          </item>
         </layout>
        </widget>

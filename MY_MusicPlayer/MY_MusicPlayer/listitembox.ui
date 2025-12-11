@@ -14,22 +14,7 @@
    <string>Form</string>
   </property>
   <property name="styleSheet">
-   <string notr="true">#likeBtn 
-{ 
-	border:none; 
-}
-#VIPLabel
-{
-	border:1px solid #1ECD96;
-	color:#1ECD96; 
-	border-radius:2px;
-}
-#SQLabel 
-{ 
-	border:1px solid #FF6600; 
-	color:#FF6600; 
-	border-radius:2px; 
-}</string>
+   <string notr="true"/>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayout">
    <property name="spacing">
@@ -79,7 +64,7 @@
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <property name="spacing">
-       <number>0</number>
+       <number>10</number>
       </property>
       <property name="leftMargin">
        <number>10</number>
@@ -108,7 +93,8 @@
          </size>
         </property>
         <property name="styleSheet">
-         <string notr="true">background-color:rgb(255, 255, 255);</string>
+         <string notr="true">background-color:rgb(255, 255, 255);
+border:none;</string>
         </property>
         <property name="text">
          <string/>
@@ -217,7 +203,7 @@
        <number>0</number>
       </property>
       <property name="leftMargin">
-       <number>0</number>
+       <number>5</number>
       </property>
       <property name="topMargin">
        <number>0</number>

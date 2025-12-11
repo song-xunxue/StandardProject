@@ -23,6 +23,7 @@
 #include <QtWidgets/QWidget>
 #include <commonpage.h>
 #include <localform.h>
+#include <musicslider.h>
 #include <onlineform.h>
 #include <recbox.h>
 
@@ -100,7 +101,7 @@ public:
     CommonPage *recentPage;
     CommonPage *likePage;
     CommonPage *localPage;
-    QWidget *progressbar;
+    MusicSlider *progressbar;
     QWidget *control;
     QHBoxLayout *horizontalLayout_9;
     QWidget *play1;
@@ -584,10 +585,10 @@ public:
 
         verticalLayout_8->addWidget(stackedWidget);
 
-        progressbar = new QWidget(BodyRight);
+        progressbar = new MusicSlider(BodyRight);
         progressbar->setObjectName(QString::fromUtf8("progressbar"));
         progressbar->setMinimumSize(QSize(0, 20));
-        progressbar->setStyleSheet(QString::fromUtf8("background-color:rgb(85, 255, 255);"));
+        progressbar->setStyleSheet(QString::fromUtf8(""));
 
         verticalLayout_8->addWidget(progressbar);
 
@@ -663,31 +664,37 @@ public:
         horizontalLayout_11->setObjectName(QString::fromUtf8("horizontalLayout_11"));
         playMode = new QPushButton(play2);
         playMode->setObjectName(QString::fromUtf8("playMode"));
+        playMode->setMinimumSize(QSize(0, 25));
 
         horizontalLayout_11->addWidget(playMode);
 
         playUp = new QPushButton(play2);
         playUp->setObjectName(QString::fromUtf8("playUp"));
+        playUp->setMinimumSize(QSize(0, 25));
 
         horizontalLayout_11->addWidget(playUp);
 
         play = new QPushButton(play2);
         play->setObjectName(QString::fromUtf8("play"));
+        play->setMinimumSize(QSize(0, 25));
 
         horizontalLayout_11->addWidget(play);
 
         playDown = new QPushButton(play2);
         playDown->setObjectName(QString::fromUtf8("playDown"));
+        playDown->setMinimumSize(QSize(0, 25));
 
         horizontalLayout_11->addWidget(playDown);
 
         volumn = new QPushButton(play2);
         volumn->setObjectName(QString::fromUtf8("volumn"));
+        volumn->setMinimumSize(QSize(0, 25));
 
         horizontalLayout_11->addWidget(volumn);
 
         addlocal = new QPushButton(play2);
         addlocal->setObjectName(QString::fromUtf8("addlocal"));
+        addlocal->setMinimumSize(QSize(0, 25));
 
         horizontalLayout_11->addWidget(addlocal);
 
@@ -759,7 +766,7 @@ public:
 
         retranslateUi(MusicPlayer);
 
-        stackedWidget->setCurrentIndex(4);
+        stackedWidget->setCurrentIndex(1);
 
 
         QMetaObject::connectSlotsByName(MusicPlayer);

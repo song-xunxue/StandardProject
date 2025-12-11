@@ -2,7 +2,10 @@ release/commonpage.o
 release/listitembox.o
 release/localform.o
 release/main.o
+release/musicitem.o
+release/musiclist.o
 release/musicplayer.o
+release/musicslider.o
 release/onlineform.o
 release/recbox.o
 release/recboxitem.o
@@ -12,6 +15,7 @@ release/moc_commonpage.o
 release/moc_listitembox.o
 release/moc_localform.o
 release/moc_musicplayer.o
+release/moc_musicslider.o
 release/moc_onlineform.o
 release/moc_recbox.o
 release/moc_recboxitem.o

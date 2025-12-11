@@ -18,6 +18,8 @@ MusicPlayer::MusicPlayer(QWidget *parent)
 
     ConnectSignalWithSlot();
     InitUI();
+
+    InitPageMusic();
 }
 
 MusicPlayer::~MusicPlayer()
@@ -59,6 +61,7 @@ void MusicPlayer::InitUI()
     ui->supplymusicBox->InitRecBox(RandomPiction(),2);
 
     volumetool=new VolumeTool(this);
+    ui->stackedWidget->setCurrentIndex(0);
 }
 
 void MusicPlayer::InitLocalMusic()
@@ -67,10 +70,12 @@ void MusicPlayer::InitLocalMusic()
     ui->like->setInfo(":/images/like.png","我喜欢", 3 );
     ui->local->setInfo(":/images/local.png","本地播放", 4 );
 
-    ui->recentPage->setCommonPage("最近播放", ":/images/recentbg.png");
-    ui->likePage->setCommonPage("我喜欢", ":/images/ilikebg.png");
-    ui->localPage->setCommonPage("本地⾳乐", ":/images/localbg.png");
+    ui->recentPage->setCommonPageUI("最近播放", ":/images/recentbg.png");
+    ui->likePage->setCommonPageUI("我喜欢", ":/images/ilikebg.png");
+    ui->localPage->setCommonPageUI("本地⾳乐", ":/images/localbg.png");
 }
+
+
 
 
 
@@ -80,6 +85,19 @@ void MusicPlayer::InitOnlineMusic()
     ui->radio->setInfo(":/images/radio.png","电台",1);
 }
 
+void MusicPlayer::InitPageMusic()
+{
+    ui->recentPage->setPageType(PageType::RECENT_PAGE);
+    ui->recentPage->reFresh(musiclist);
+
+    ui->likePage->setPageType(PageType::LIKE_PAGE);
+    ui->likePage->reFresh(musiclist);
+
+    ui->localPage->setPageType(PageType::LOCAL_PAGE);
+    ui->localPage->reFresh(musiclist);
+
+    ui->localPage->addMusicToPlayList(musiclist);
+}
 
 void MusicPlayer::mouseMoveEvent(QMouseEvent *event)
 {
@@ -164,4 +182,47 @@ void MusicPlayer::on_volumn_clicked()
 
     volumetool->move(volumeLeftTop);
     volumetool->show();
+}
+
+void MusicPlayer::on_addlocal_clicked()
+{
+    //添加本地音乐
+    QFileDialog filedialog(this);
+    filedialog.setWindowTitle("添加本地音乐");
+    //设置打开格式
+    filedialog.setAcceptMode(QFileDialog::AcceptOpen);
+    //设置接受多个文件
+    filedialog.setFileMode(QFileDialog::ExistingFiles);
+    //设置打开路径
+    QDir currentpath(QDir::currentPath());
+//    qDebug()<<currentpath;
+    currentpath.cdUp();
+    QString despath=currentpath.path();//转QString
+    despath+="/MY_MusicPlayer/QQMusics";
+//    qDebug()<<despath;
+    filedialog.setDirectory(despath);
+
+    //设置MIME类型的过滤器
+    QStringList mimefiterlist;
+    mimefiterlist<<"application/octet-stream";
+    filedialog.setMimeTypeFilters(mimefiterlist);
+
+    //模态对话框
+    if(filedialog.exec() == QFileDialog::Accepted)
+    {
+        ui->stackedWidget->setCurrentIndex(4);
+        QList<QUrl> musicUrls=filedialog.selectedUrls();
+//        qDebug()<<"打印Urls";
+
+//        for(auto u:musicUrls)
+//        {
+//            qDebug()<<u;
+//        }
+        musiclist.addMusicByUrls(musicUrls);
+        if(musiclist.isEmpty())
+        {
+            qDebug()<<"musiclist 为空 addMusicByUrls Failed";
+        }
+        ui->localPage->reFresh(musiclist);
+    }
 }

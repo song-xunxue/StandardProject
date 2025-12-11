@@ -16,6 +16,11 @@ public:
     explicit ListItemBox(QWidget *parent = nullptr);
     ~ListItemBox();
 
+    void  setMusicName(const QString& musicName);
+    void  setMusicSinger(const QString& musicSinger);
+    void  setmusicAlbum(const QString& musicAlbum);
+    void  setLikeIcon(bool);
+
 protected:
     //自带hover，但是不符合主题需要重写事件
 

@@ -42,22 +42,7 @@ public:
         if (ListItemBox->objectName().isEmpty())
             ListItemBox->setObjectName(QString::fromUtf8("ListItemBox"));
         ListItemBox->resize(800, 45);
-        ListItemBox->setStyleSheet(QString::fromUtf8("#likeBtn \n"
-"{ \n"
-"	border:none; \n"
-"}\n"
-"#VIPLabel\n"
-"{\n"
-"	border:1px solid #1ECD96;\n"
-"	color:#1ECD96; \n"
-"	border-radius:2px;\n"
-"}\n"
-"#SQLabel \n"
-"{ \n"
-"	border:1px solid #FF6600; \n"
-"	color:#FF6600; \n"
-"	border-radius:2px; \n"
-"}"));
+        ListItemBox->setStyleSheet(QString::fromUtf8(""));
         horizontalLayout = new QHBoxLayout(ListItemBox);
         horizontalLayout->setSpacing(0);
         horizontalLayout->setObjectName(QString::fromUtf8("horizontalLayout"));
@@ -81,14 +66,15 @@ public:
 "	border-radius:2px; \n"
 "}"));
         horizontalLayout_2 = new QHBoxLayout(musicNameBox);
-        horizontalLayout_2->setSpacing(0);
+        horizontalLayout_2->setSpacing(10);
         horizontalLayout_2->setObjectName(QString::fromUtf8("horizontalLayout_2"));
         horizontalLayout_2->setContentsMargins(10, 0, 0, 0);
         likeBtn = new QPushButton(musicNameBox);
         likeBtn->setObjectName(QString::fromUtf8("likeBtn"));
         likeBtn->setMinimumSize(QSize(25, 25));
         likeBtn->setMaximumSize(QSize(25, 25));
-        likeBtn->setStyleSheet(QString::fromUtf8("background-color:rgb(255, 255, 255);"));
+        likeBtn->setStyleSheet(QString::fromUtf8("background-color:rgb(255, 255, 255);\n"
+"border:none;"));
 
         horizontalLayout_2->addWidget(likeBtn);
 
@@ -131,7 +117,7 @@ public:
         horizontalLayout_3 = new QHBoxLayout(musicSingerBox);
         horizontalLayout_3->setSpacing(0);
         horizontalLayout_3->setObjectName(QString::fromUtf8("horizontalLayout_3"));
-        horizontalLayout_3->setContentsMargins(0, 0, 0, 0);
+        horizontalLayout_3->setContentsMargins(5, 0, 0, 0);
         musicSingerLabel = new QLabel(musicSingerBox);
         musicSingerLabel->setObjectName(QString::fromUtf8("musicSingerLabel"));
         musicSingerLabel->setMinimumSize(QSize(200, 0));

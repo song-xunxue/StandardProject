@@ -1,8 +1,12 @@
-QT       += core gui
+QT       += core gui  multimedia
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG += c++11
+
+CONFIG += debug
+CONFIG -= release
+QMAKE_CXXFLAGS_DEBUG += -O0
 
 # The following define makes your compiler emit warnings if you use
 # any Qt feature that has been marked deprecated (the exact warnings
@@ -20,7 +24,10 @@ SOURCES += \
     listitembox.cpp \
     localform.cpp \
     main.cpp \
+    musicitem.cpp \
+    musiclist.cpp \
     musicplayer.cpp \
+    musicslider.cpp \
     onlineform.cpp \
     recbox.cpp \
     recboxitem.cpp \
@@ -30,7 +37,10 @@ HEADERS += \
     commonpage.h \
     listitembox.h \
     localform.h \
+    musicitem.h \
+    musiclist.h \
     musicplayer.h \
+    musicslider.h \
     onlineform.h \
     recbox.h \
     recboxitem.h \
@@ -41,6 +51,7 @@ FORMS += \
     listitembox.ui \
     localform.ui \
     musicplayer.ui \
+    musicslider.ui \
     onlineform.ui \
     recbox.ui \
     recboxitem.ui \

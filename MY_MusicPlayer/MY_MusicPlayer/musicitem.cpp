@@ -60,6 +60,16 @@ QString MusicItem::GetMusicID()
     return musicId;
 }
 
+void MusicItem::setIsLike(bool like)
+{
+    isLike=like;
+}
+
+void MusicItem::setIsHistory(bool History)
+{
+    isHistory=History;
+}
+
 void MusicItem::parseMediaMetaData()
 {
     QMediaPlayer player;

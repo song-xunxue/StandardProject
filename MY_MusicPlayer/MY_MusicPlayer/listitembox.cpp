@@ -4,7 +4,8 @@
 
 ListItemBox::ListItemBox(QWidget *parent) :
     QWidget(parent),
-    ui(new Ui::ListItemBox)
+    ui(new Ui::ListItemBox),
+    isLike(false)
 {
     ui->setupUi(this);
 }
@@ -32,7 +33,8 @@ void ListItemBox::setmusicAlbum(const QString &musicAlbum)
 
 void ListItemBox::setLikeIcon(bool like)
 {
-    if(like)
+    isLike=like;
+    if(isLike)
     {
         ui->likeBtn->setIcon(QIcon(":/images/like_2.png"));
     }
@@ -52,4 +54,10 @@ void ListItemBox::leaveEvent(QEvent *event)
 {
     (void)event;
     setStyleSheet("");
+}
+
+void ListItemBox::on_likeBtn_clicked()
+{
+    setLikeIcon(!isLike);
+    emit setIsLike(isLike);
 }

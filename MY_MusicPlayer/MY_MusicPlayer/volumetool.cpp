@@ -1,11 +1,16 @@
 #include "volumetool.h"
 #include "ui_volumetool.h"
+
 #include <QGraphicsDropShadowEffect>
 #include <QPainter>
 
+//#include <QDebug>
+
 VolumeTool::VolumeTool(QWidget *parent) :
     QWidget(parent),
-    ui(new Ui::VolumeTool)
+    ui(new Ui::VolumeTool),
+    isMuted(false),
+    volumeRatio(20)
 {
     ui->setupUi(this);
     //Popup设置弹出界面  禁用边框 禁用下落格式
@@ -22,9 +27,10 @@ VolumeTool::VolumeTool(QWidget *parent) :
     //设置默认音量为20%
     ui->outSlider->setGeometry(ui->outSlider->x(), 25+144, ui->outSlider->width(), 36);
     ui->sliderBtn->move(ui->sliderBtn->x(), ui->outSlider->y() - ui->sliderBtn->height()/2);
-    ui->volumeRatio->setText("20%");
+    ui->volumeRatioLabel->setText("20%");
 
-
+    //安装事件过滤器
+    ui->sliderBox->installEventFilter(this);
 }
 
 VolumeTool::~VolumeTool()
@@ -52,4 +58,68 @@ void VolumeTool::paintEvent(QPaintEvent *event)
 
     painter.drawPolygon(polygon);
 
+}
+
+bool VolumeTool::eventFilter(QObject *object, QEvent *event)
+{
+    if(object == ui->sliderBox)
+    {
+        if(event->type() == QEvent::MouseButtonPress)
+        {
+            setVolumn();
+        }
+        else if(event->type() == QEvent::MouseMove)
+        {
+            // 如果是⿏标滚动事件，修改sliderBtn和outLine的位置，并计算 volumeRation
+            setVolumn();
+            // 并发射setMusicVolume信号
+            emit MusicVolumeChange(volumeRatio);
+        }
+        else if(event->type() == QEvent::MouseButtonRelease)
+        {
+
+            // 如果是⿏标释放事件，直接发射setMusicVolume信号
+            emit MusicVolumeChange(volumeRatio);
+        }
+    }
+    return true;
+}
+
+void VolumeTool::setVolumn()
+{
+    //获取鼠标坐标 只需要高度即可
+    int height=ui->sliderBox->mapFromGlobal(QCursor().pos()).y();
+    height=height < 25 ? 25 : height;
+    height=height > 205 ? 205 : height;
+//    qDebug()<<"调节："<<height;
+
+    //移动Outline
+    ui->outSlider->setGeometry(ui->outSlider->x(),height , 4 ,205-height);
+
+    //移动SliderBtn
+    ui->sliderBtn->move(ui->sliderBtn->x(), height - ui->sliderBtn->height()/2);
+
+    //计算音量并显示
+    volumeRatio = (int)((int)ui->outSlider->height()/(float)180*100);
+    ui->volumeRatioLabel->setText(QString::number(volumeRatio)+"%");
+    emit MusicVolumeChange(volumeRatio);
+}
+
+
+void VolumeTool::on_silenceBtn_clicked()
+{
+    isMuted=!isMuted;
+    if(isMuted)
+    {
+        ui->silenceBtn->setIcon(QIcon(":/images/silent.png"));
+        //简化
+//        ui->outSlider->setGeometry(ui->outSlider->x(),205,4,0);
+//        ui->sliderBtn->move(ui->sliderBtn->x(), 205);
+//        ui->volumeRatio->setText("0%");
+    }
+    else
+    {
+        ui->silenceBtn->setIcon(QIcon(":/images/volumn.png"));
+    }
+    emit MutedChange(isMuted);
 }

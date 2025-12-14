@@ -52,7 +52,7 @@
      <string>静音</string>
     </property>
    </widget>
-   <widget class="QLabel" name="volumeRatio">
+   <widget class="QLabel" name="volumeRatioLabel">
     <property name="geometry">
      <rect>
       <x>25</x>
@@ -74,7 +74,7 @@
      </size>
     </property>
     <property name="text">
-     <string>45%</string>
+     <string>20%</string>
     </property>
     <property name="alignment">
      <set>Qt::AlignCenter</set>

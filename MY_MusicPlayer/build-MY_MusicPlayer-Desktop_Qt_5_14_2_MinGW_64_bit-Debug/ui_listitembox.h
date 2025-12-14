@@ -52,7 +52,6 @@ public:
         musicNameBox->setMinimumSize(QSize(400, 0));
         musicNameBox->setMaximumSize(QSize(400, 16777215));
         musicNameBox->setStyleSheet(QString::fromUtf8("\n"
-"\n"
 "#VIPLabel\n"
 "{\n"
 "	border:1px solid #1ECD96;\n"
@@ -73,8 +72,7 @@ public:
         likeBtn->setObjectName(QString::fromUtf8("likeBtn"));
         likeBtn->setMinimumSize(QSize(25, 25));
         likeBtn->setMaximumSize(QSize(25, 25));
-        likeBtn->setStyleSheet(QString::fromUtf8("background-color:rgb(255, 255, 255);\n"
-"border:none;"));
+        likeBtn->setStyleSheet(QString::fromUtf8("border:none;"));
 
         horizontalLayout_2->addWidget(likeBtn);
 

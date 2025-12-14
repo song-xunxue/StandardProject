@@ -48,7 +48,6 @@
      </property>
      <property name="styleSheet">
       <string notr="true">
-
 #VIPLabel
 {
 	border:1px solid #1ECD96;
@@ -93,8 +92,7 @@
          </size>
         </property>
         <property name="styleSheet">
-         <string notr="true">background-color:rgb(255, 255, 255);
-border:none;</string>
+         <string notr="true">border:none;</string>
         </property>
         <property name="text">
          <string/>

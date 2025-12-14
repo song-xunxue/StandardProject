@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <listitembox.h>
+#include <QMediaPlaylist>
 #include "musiclist.h"
 
 namespace Ui {
@@ -28,7 +29,18 @@ public:
 
     void  addMusicToMusicPage(MusicList &musiclist);//添加音乐到每一个page专属的musicIDOfPage
     void  reFresh(MusicList& musiclist);//更新界面 通过Musiclist构建listitemBox 添加到界面
-    void  addMusicToPlayList(MusicList& musiclist);//添加音乐到播放队列
+    void  addMusicToPlayList(MusicList& musiclist,QMediaPlaylist* playlist);//添加音乐到播放队列
+    QString GetMusicIDByIndex(int index);
+
+
+signals:
+    void refreshLikeMusic();
+    void playAllMusic(CommonPage*);
+    void MusicItemdoubleClicked(CommonPage*,const QModelIndex & index);
+private slots:
+    void on_playAllBtn_clicked();
+
+    void on_pageMusicList_doubleClicked(const QModelIndex &index);
 
 private:
     Ui::CommonPage *ui;

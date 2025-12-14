@@ -18,6 +18,8 @@ public:
     QUrl GetMusicUrl();
     QString GetMusicID();
 
+    void setIsLike(bool like);
+    void setIsHistory(bool like);
 
 private:
     void parseMediaMetaData();

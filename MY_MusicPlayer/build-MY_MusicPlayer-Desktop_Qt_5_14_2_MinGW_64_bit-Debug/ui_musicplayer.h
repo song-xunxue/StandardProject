@@ -124,6 +124,7 @@ public:
     QLabel *line;
     QLabel *totalTime;
     QPushButton *lrcword;
+    QPushButton *palayList;
 
     void setupUi(QWidget *MusicPlayer)
     {
@@ -635,10 +636,12 @@ public:
 "{\n"
 "	background-color:rgba(255,0,0,0.5);\n"
 "}\n"
+"/*\n"
 "#playMode\n"
 "{\n"
-"	background-image:url(\":/images/shuffle_2.png\");\n"
+"	background-image:url(\":/images/list_play.png\");\n"
 "}\n"
+"*/\n"
 "#playUp\n"
 "{\n"
 "	background-image:url(\":/images/up.png\");\n"
@@ -647,10 +650,11 @@ public:
 "{\n"
 "	background-image:url(\":/images/down.png\");\n"
 "}\n"
-"#play\n"
+"\n"
+"/*#play\n"
 "{\n"
 "	background-image:url(\":/images/play.png\");\n"
-"}\n"
+"}*/\n"
 "#volumn\n"
 "{\n"
 "	background-image:url(\":/images/volumn.png\");\n"
@@ -748,6 +752,17 @@ public:
 
         horizontalLayout_10->addWidget(lrcword);
 
+        palayList = new QPushButton(play3);
+        palayList->setObjectName(QString::fromUtf8("palayList"));
+        palayList->setMinimumSize(QSize(25, 25));
+        palayList->setMaximumSize(QSize(25, 25));
+        palayList->setStyleSheet(QString::fromUtf8("border:none;\n"
+"background-image:url(\":/images/order_play.png\");\n"
+"background-repeat:norepeat;\n"
+"background-position:center center;"));
+
+        horizontalLayout_10->addWidget(palayList);
+
 
         horizontalLayout_9->addWidget(play3);
 
@@ -766,7 +781,7 @@ public:
 
         retranslateUi(MusicPlayer);
 
-        stackedWidget->setCurrentIndex(1);
+        stackedWidget->setCurrentIndex(3);
 
 
         QMetaObject::connectSlotsByName(MusicPlayer);
@@ -802,6 +817,7 @@ public:
         line->setText(QCoreApplication::translate("MusicPlayer", "/", nullptr));
         totalTime->setText(QCoreApplication::translate("MusicPlayer", "4.32", nullptr));
         lrcword->setText(QCoreApplication::translate("MusicPlayer", "\350\257\215", nullptr));
+        palayList->setText(QString());
     } // retranslateUi
 
 };

@@ -3,6 +3,10 @@
 
 #include <QWidget>
 #include <QFileDialog>
+#include <QMediaPlayer>
+#include <QMediaPlaylist>
+
+#include <QModelIndex>
 
 #include "localform.h"
 #include "onlineform.h"
@@ -10,6 +14,7 @@
 #include "volumetool.h"
 #include "musiclist.h"
 #include  "commonpage.h"
+
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MusicPlayer; }
@@ -22,16 +27,19 @@ class MusicPlayer : public QWidget
 public:
     MusicPlayer(QWidget *parent = nullptr);
     ~MusicPlayer();
+    void ConnectSignalWithSlot();
     void InitUI();
-    void  ConnectSignalWithSlot();
+    void InitPlayer();
+
 
 protected:
-    void InitOnlineMusic();//在线音乐栏初始化
-    void InitLocalMusic();//本地音乐栏初始化
+    void InitOnlineMusicUI();//在线音乐栏初始化
+    void InitLocalMusicUI();//本地音乐栏初始化
     void InitPageMusic();//音乐页面初始化
     void mouseMoveEvent(QMouseEvent *event) ;
     void mousePressEvent(QMouseEvent *event) ;
     QJsonArray  RandomPiction();
+    void PlayByIndex(CommonPage *page,int index);
 
 private slots:
     void on_quit_clicked();
@@ -41,10 +49,32 @@ private slots:
 
     void on_addlocal_clicked();
 
+    void onrefreshLikeMusic();
+
+    void on_play_clicked();
+
+    void onPalyerStateChanged();
+    void on_playMode_clicked();
+
+    void on_playDown_clicked();
+
+    void on_playUp_clicked();
+
+    void onPlayAllMusic(CommonPage* page);
+
+    void onMusicItemdoubleClicked(CommonPage* page,const QModelIndex & index);
+    void onCurrentIndexChanged(int index);
+
+    void onMusicVolumeChange(int);
+
 private:
     Ui::MusicPlayer *ui;
     QPoint dragPosition ;
     VolumeTool* volumetool;
     MusicList musiclist;
+
+    QMediaPlayer* player;//播放器
+    QMediaPlaylist* playList;//播放列表
+    CommonPage* currentPage;//最近播放需要记录当前播放页面
 };
 #endif // MUSICPLAYER_H

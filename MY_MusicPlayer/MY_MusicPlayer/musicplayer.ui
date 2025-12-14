@@ -869,7 +869,7 @@ QPushButton:hover
             <item>
              <widget class="QStackedWidget" name="stackedWidget">
               <property name="currentIndex">
-               <number>1</number>
+               <number>3</number>
               </property>
               <widget class="QWidget" name="recPage">
                <layout class="QHBoxLayout" name="horizontalLayout_12">
@@ -1126,10 +1126,12 @@ QPushButton:hover
 {
 	background-color:rgba(255,0,0,0.5);
 }
+/*
 #playMode
 {
-	background-image:url(&quot;:/images/shuffle_2.png&quot;);
+	background-image:url(&quot;:/images/list_play.png&quot;);
 }
+*/
 #playUp
 {
 	background-image:url(&quot;:/images/up.png&quot;);
@@ -1138,10 +1140,11 @@ QPushButton:hover
 {
 	background-image:url(&quot;:/images/down.png&quot;);
 }
-#play
+
+/*#play
 {
 	background-image:url(&quot;:/images/play.png&quot;);
-}
+}*/
 #volumn
 {
 	background-image:url(&quot;:/images/volumn.png&quot;);
@@ -1337,6 +1340,31 @@ QPushButton:hover
                     </property>
                     <property name="text">
                      <string>词</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="palayList">
+                    <property name="minimumSize">
+                     <size>
+                      <width>25</width>
+                      <height>25</height>
+                     </size>
+                    </property>
+                    <property name="maximumSize">
+                     <size>
+                      <width>25</width>
+                      <height>25</height>
+                     </size>
+                    </property>
+                    <property name="styleSheet">
+                     <string notr="true">border:none;
+background-image:url(&quot;:/images/order_play.png&quot;);
+background-repeat:norepeat;
+background-position:center center;</string>
+                    </property>
+                    <property name="text">
+                     <string/>
                     </property>
                    </widget>
                   </item>

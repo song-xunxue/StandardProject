@@ -23,7 +23,7 @@ class Ui_VolumeTool
 public:
     QWidget *volumeWidget;
     QPushButton *silenceBtn;
-    QLabel *volumeRatio;
+    QLabel *volumeRatioLabel;
     QWidget *sliderBox;
     QFrame *inSlider;
     QFrame *outSlider;
@@ -53,12 +53,12 @@ public:
 "{ \n"
 "	background-color:#F0F0F0; \n"
 "}"));
-        volumeRatio = new QLabel(volumeWidget);
-        volumeRatio->setObjectName(QString::fromUtf8("volumeRatio"));
-        volumeRatio->setGeometry(QRect(25, 230, 27, 30));
-        volumeRatio->setMinimumSize(QSize(0, 30));
-        volumeRatio->setMaximumSize(QSize(16777215, 30));
-        volumeRatio->setAlignment(Qt::AlignCenter);
+        volumeRatioLabel = new QLabel(volumeWidget);
+        volumeRatioLabel->setObjectName(QString::fromUtf8("volumeRatioLabel"));
+        volumeRatioLabel->setGeometry(QRect(25, 230, 27, 30));
+        volumeRatioLabel->setMinimumSize(QSize(0, 30));
+        volumeRatioLabel->setMaximumSize(QSize(16777215, 30));
+        volumeRatioLabel->setAlignment(Qt::AlignCenter);
         sliderBox = new QWidget(volumeWidget);
         sliderBox->setObjectName(QString::fromUtf8("sliderBox"));
         sliderBox->setGeometry(QRect(0, 0, 80, 225));
@@ -102,7 +102,7 @@ public:
     {
         VolumeTool->setWindowTitle(QCoreApplication::translate("VolumeTool", "Form", nullptr));
         silenceBtn->setText(QCoreApplication::translate("VolumeTool", "\351\235\231\351\237\263", nullptr));
-        volumeRatio->setText(QCoreApplication::translate("VolumeTool", "45%", nullptr));
+        volumeRatioLabel->setText(QCoreApplication::translate("VolumeTool", "20%", nullptr));
         sliderBtn->setText(QString());
     } // retranslateUi
 

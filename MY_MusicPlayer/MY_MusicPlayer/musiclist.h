@@ -6,7 +6,7 @@
 #include <QVector>
 #include <QUrl>
 
-typedef     QVector<MusicItem>::iterator iterator;
+typedef QVector<MusicItem>::iterator iterator;
 
 class MusicList
 {

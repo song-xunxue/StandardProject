@@ -38,7 +38,7 @@ void CommonPage::setPageType(PageType pagetype)
 
 void CommonPage::addMusicToMusicPage(MusicList &musiclist)
 {
-    qDebug()<<"addMusicToMusicPage 调用";
+//    qDebug()<<"addMusicToMusicPage 调用";
     musicIdOfPage.clear();
     for(auto& e : musiclist)
     {
@@ -70,10 +70,10 @@ void CommonPage::reFresh(MusicList &musiclist)
     addMusicToMusicPage(musiclist);//更新界面的musicOfPage
     if(musicIdOfPage.isEmpty())
     {
-        qDebug()<<"musicIdOfpag 为空";
+        qDebug()<< pageType<<"musicIdOfpag 为空";
         return ;
     }
-    qDebug()<< "开始添加"<<musicIdOfPage.size()<<"个box";
+//    qDebug()<< "开始添加"<<musicIdOfPage.size()<<"个box";
     // 批量添加项：临时阻塞信号+禁止更新，提升性能
     ui->pageMusicList->blockSignals(true);
     ui->pageMusicList->setUpdatesEnabled(false);
@@ -102,6 +102,14 @@ void CommonPage::reFresh(MusicList &musiclist)
             listWidgetItem->setSizeHint(QSize(0, 45));
             ui->pageMusicList->setItemWidget(listWidgetItem, listitemBox);//间接绑定
 //            qDebug()<< "绑定 第"<<count<<"个组件";
+
+            //绑定每一个listitem和槽函数 发送更新喜欢列表的信号让musiceplayer处理
+            connect(listitemBox,&ListItemBox::setIsLike,this,[=](bool isLike){
+                it->setIsLike(isLike);
+                //如果不在此处修改就需要传递ID
+                //在上层进行查找和修改like
+                emit refreshLikeMusic();
+            });
     }
     //刷新界面  恢复信号和更新，触发一次重绘
 //    qDebug()<<"开始刷新界面";
@@ -112,9 +120,46 @@ void CommonPage::reFresh(MusicList &musiclist)
 //    qDebug()<<"刷新成功";
 }
 
-void CommonPage::addMusicToPlayList(MusicList &musiclist)
+void CommonPage::addMusicToPlayList(MusicList &musiclist, QMediaPlaylist* playlist)
 {
-    (void) musiclist;
+    for(auto& music : musiclist)
+    {
+        switch (pageType) {
+            case RECENT_PAGE :
+                if(music.GetisHistory())
+                {
+                    playlist->addMedia(music.GetMusicUrl());
+                }
+                 break;
+            case LIKE_PAGE:
+                if(music.GetisLike())
+                {
+                    playlist->addMedia(music.GetMusicUrl());
+                }
+                 break;
+            case LOCAL_PAGE:
+                playlist->addMedia(music.GetMusicUrl());
+                break;
+            default:
+                break;
+        }
+    }
 }
 
+QString CommonPage::GetMusicIDByIndex(int index)
+{
+    return musicIdOfPage[index];
+}
+
+void CommonPage::on_playAllBtn_clicked()
+{
+    //播放全部
+//    addMusicToPlayList();
+    emit playAllMusic(this);
+}
+
+void CommonPage::on_pageMusicList_doubleClicked(const QModelIndex &index)
+{
+    emit MusicItemdoubleClicked(this,index);
+}
 

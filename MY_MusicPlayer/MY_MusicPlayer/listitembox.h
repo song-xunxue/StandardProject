@@ -21,14 +21,20 @@ public:
     void  setmusicAlbum(const QString& musicAlbum);
     void  setLikeIcon(bool);
 
+signals:
+    void  setIsLike(bool);
 protected:
     //自带hover，但是不符合主题需要重写事件
 
     void enterEvent(QEvent *event);
     void leaveEvent(QEvent *event);
 
+private slots:
+    void on_likeBtn_clicked();
+
 private:
     Ui::ListItemBox *ui;
+    bool  isLike;
 };
 
 #endif // LISTITEMBOX_H

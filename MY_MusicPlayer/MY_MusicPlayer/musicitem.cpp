@@ -84,13 +84,29 @@ void MusicItem::parseMediaMetaData()
         musicAlbum= player.metaData("AlbumTitle").toString();
         duration=player.duration();
 
+        //"Akie秋绘 - 天ノ弱 (天之弱)_H"
+        QString filename=musicUrl.fileName();
+        int index=filename.indexOf("-");
         if(musicName.isEmpty())
         {
-            musicName="歌名未知";
+            if(index!=-1)
+            {
+                musicName=filename.mid(0,index).trimmed();
+            }
+            else
+            {
+                musicName="歌名未知";
+            }
         }
         if(musicSinger.isEmpty())
         {
-            musicSinger="歌手未知";
+            if(index!=-1)
+            {
+                musicSinger=filename.mid(index+1,filename.indexOf(".")).trimmed();
+            }
+            else {
+                musicSinger="歌手未知";
+            }
         }
         if(musicAlbum.isEmpty())
         {

@@ -7,6 +7,9 @@ CommonPage::CommonPage(QWidget *parent) :
     ui(new Ui::CommonPage)
 {
     ui->setupUi(this);
+
+    //移除水平滚动条
+    ui->pageMusicList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 }
 
 CommonPage::~CommonPage()

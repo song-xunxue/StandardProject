@@ -141,6 +141,25 @@ public:
 
         pageMusicList = new QListWidget(CommonPage);
         pageMusicList->setObjectName(QString::fromUtf8("pageMusicList"));
+        pageMusicList->setStyleSheet(QString::fromUtf8("#pageMusicList::item::selected\n"
+"{\n"
+"	background-color:#EFEFEF;\n"
+"}\n"
+"\n"
+"QScrollBar:vertical\n"
+"{\n"
+"	border:none;\n"
+"	width:10px;\n"
+"	background-color:#FFFFFF; \n"
+"	margin:0px,0px,0px,0px; \n"
+"}\n"
+"QScrollBar::handle:vertical\n"
+"{ \n"
+"	width:10px; \n"
+"	background-color:#EFEFEF; \n"
+"	border-radius:5px; \n"
+"	min-height:20px; \n"
+"}"));
 
         verticalLayout->addWidget(pageMusicList);
 

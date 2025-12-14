@@ -231,7 +231,29 @@
     </widget>
    </item>
    <item>
-    <widget class="QListWidget" name="pageMusicList"/>
+    <widget class="QListWidget" name="pageMusicList">
+     <property name="styleSheet">
+      <string notr="true">#pageMusicList::item::selected
+{
+	background-color:#EFEFEF;
+}
+
+QScrollBar:vertical
+{
+	border:none;
+	width:10px;
+	background-color:#FFFFFF; 
+	margin:0px,0px,0px,0px; 
+}
+QScrollBar::handle:vertical
+{ 
+	width:10px; 
+	background-color:#EFEFEF; 
+	border-radius:5px; 
+	min-height:20px; 
+}</string>
+     </property>
+    </widget>
    </item>
   </layout>
  </widget>

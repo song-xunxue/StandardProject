@@ -1,6 +1,6 @@
 #include "recbox.h"
 #include "ui_recbox.h"
-#include <QDebug>
+//#include <QDebug>
 #include <math.h>
 
 RecBox::RecBox(QWidget *parent) :

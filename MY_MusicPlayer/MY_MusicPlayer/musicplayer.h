@@ -66,6 +66,10 @@ private slots:
     void onCurrentIndexChanged(int index);
 
     void onMusicVolumeChange(int);
+    void onDurationChanged(qint64 duration);
+    void onPositionChanged(qint64 position);
+    void onSetMusicSliderPosition(float Radio);
+//    void onMetaDataAvailableChanged(bool); //未知错误，引入currenIndex导致程序异常终止  已解决 并优化
 
 private:
     Ui::MusicPlayer *ui;
@@ -76,5 +80,8 @@ private:
     QMediaPlayer* player;//播放器
     QMediaPlaylist* playList;//播放列表
     CommonPage* currentPage;//最近播放需要记录当前播放页面
+    int currentIndex; //捕获当前播放的音乐的index   这一行添加了之后异常终止
+//    原因是栈溢出，main.cpp中musicplayer是栈上定义的 改为new 之后就没有问题了
+    qint64 currentDuration;
 };
 #endif // MUSICPLAYER_H

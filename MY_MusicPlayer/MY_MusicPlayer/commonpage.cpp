@@ -1,6 +1,6 @@
 #include "commonpage.h"
 #include "ui_commonpage.h"
-#include <QDebug>
+//#include <QDebug>
 
 CommonPage::CommonPage(QWidget *parent) :
     QWidget(parent),
@@ -43,7 +43,7 @@ void CommonPage::addMusicToMusicPage(MusicList &musiclist)
     for(auto& e : musiclist)
     {
         QString musicId=e.GetMusicID();
-        qDebug()<<"pageType:"<<pageType;
+//        qDebug()<<"pageType:"<<pageType;
         switch (pageType) {
             case RECENT_PAGE :
                 if(e.GetisHistory())
@@ -116,7 +116,8 @@ void CommonPage::reFresh(MusicList &musiclist)
 //    repaint();
     ui->pageMusicList->setUpdatesEnabled(true);
     ui->pageMusicList->blockSignals(false);
-    ui->pageMusicList->update(); // 替代repaint，异步高效重绘
+//    ui->pageMusicList->update(); // 替代repaint，异步高效重绘
+    ui->pageMusicList->repaint();
 //    qDebug()<<"刷新成功";
 }
 
@@ -149,6 +150,12 @@ void CommonPage::addMusicToPlayList(MusicList &musiclist, QMediaPlaylist* playli
 QString CommonPage::GetMusicIDByIndex(int index)
 {
     return musicIdOfPage[index];
+}
+
+void CommonPage::setImage(QPixmap p)
+{
+    qDebug()<<"设置当前页面的图片";
+    ui->musicImageLabel->setPixmap(p);
 }
 
 void CommonPage::on_playAllBtn_clicked()

@@ -32,6 +32,8 @@ public:
     void  addMusicToPlayList(MusicList& musiclist,QMediaPlaylist* playlist);//添加音乐到播放队列
     QString GetMusicIDByIndex(int index);
 
+    void setImage(QPixmap);
+
 
 signals:
     void refreshLikeMusic();

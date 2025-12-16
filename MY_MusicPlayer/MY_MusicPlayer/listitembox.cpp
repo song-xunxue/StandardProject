@@ -1,6 +1,6 @@
 #include "listitembox.h"
 #include "ui_listitembox.h"
-#include <QDebug>
+//#include <QDebug>
 
 ListItemBox::ListItemBox(QWidget *parent) :
     QWidget(parent),
@@ -12,7 +12,7 @@ ListItemBox::ListItemBox(QWidget *parent) :
 
 ListItemBox::~ListItemBox()
 {
-    qDebug()<<"ListItemBox 释放";
+//    qDebug()<<"ListItemBox 释放";
     delete ui;
 }
 

@@ -101,14 +101,14 @@ public:
     CommonPage *recentPage;
     CommonPage *likePage;
     CommonPage *localPage;
-    MusicSlider *progressbar;
+    MusicSlider *musicSlider;
     QWidget *control;
     QHBoxLayout *horizontalLayout_9;
     QWidget *play1;
     QGridLayout *gridLayout;
-    QLabel *songimage;
-    QLabel *songname;
-    QLabel *signer;
+    QLabel *musicName;
+    QLabel *musicImgLabel;
+    QLabel *musicSinger;
     QWidget *play2;
     QHBoxLayout *horizontalLayout_11;
     QPushButton *playMode;
@@ -514,7 +514,7 @@ public:
         scrollArea->setWidgetResizable(true);
         scrollAreaWidgetContents = new QWidget();
         scrollAreaWidgetContents->setObjectName(QString::fromUtf8("scrollAreaWidgetContents"));
-        scrollAreaWidgetContents->setGeometry(QRect(0, 0, 818, 498));
+        scrollAreaWidgetContents->setGeometry(QRect(0, 0, 157, 125));
         scrollAreaWidgetContents->setMaximumSize(QSize(16777215, 16777215));
         verticalLayout_9 = new QVBoxLayout(scrollAreaWidgetContents);
         verticalLayout_9->setSpacing(5);
@@ -586,12 +586,12 @@ public:
 
         verticalLayout_8->addWidget(stackedWidget);
 
-        progressbar = new MusicSlider(BodyRight);
-        progressbar->setObjectName(QString::fromUtf8("progressbar"));
-        progressbar->setMinimumSize(QSize(0, 20));
-        progressbar->setStyleSheet(QString::fromUtf8(""));
+        musicSlider = new MusicSlider(BodyRight);
+        musicSlider->setObjectName(QString::fromUtf8("musicSlider"));
+        musicSlider->setMinimumSize(QSize(0, 20));
+        musicSlider->setStyleSheet(QString::fromUtf8(""));
 
-        verticalLayout_8->addWidget(progressbar);
+        verticalLayout_8->addWidget(musicSlider);
 
         control = new QWidget(BodyRight);
         control->setObjectName(QString::fromUtf8("control"));
@@ -603,23 +603,25 @@ public:
         horizontalLayout_9->setContentsMargins(0, 0, 0, 0);
         play1 = new QWidget(control);
         play1->setObjectName(QString::fromUtf8("play1"));
+        play1->setMaximumSize(QSize(16777215, 16777215));
         play1->setStyleSheet(QString::fromUtf8(""));
         gridLayout = new QGridLayout(play1);
         gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
-        songimage = new QLabel(play1);
-        songimage->setObjectName(QString::fromUtf8("songimage"));
+        musicName = new QLabel(play1);
+        musicName->setObjectName(QString::fromUtf8("musicName"));
 
-        gridLayout->addWidget(songimage, 0, 0, 2, 1);
+        gridLayout->addWidget(musicName, 0, 1, 1, 1);
 
-        songname = new QLabel(play1);
-        songname->setObjectName(QString::fromUtf8("songname"));
+        musicImgLabel = new QLabel(play1);
+        musicImgLabel->setObjectName(QString::fromUtf8("musicImgLabel"));
+        musicImgLabel->setMaximumSize(QSize(40, 40));
 
-        gridLayout->addWidget(songname, 0, 1, 1, 1);
+        gridLayout->addWidget(musicImgLabel, 0, 0, 2, 1);
 
-        signer = new QLabel(play1);
-        signer->setObjectName(QString::fromUtf8("signer"));
+        musicSinger = new QLabel(play1);
+        musicSinger->setObjectName(QString::fromUtf8("musicSinger"));
 
-        gridLayout->addWidget(signer, 1, 1, 1, 1);
+        gridLayout->addWidget(musicSinger, 1, 1, 1, 1);
 
 
         horizontalLayout_9->addWidget(play1);
@@ -803,9 +805,9 @@ public:
         recMainText->setText(QCoreApplication::translate("MusicPlayer", "\346\216\250\350\215\220", nullptr));
         recText->setText(QCoreApplication::translate("MusicPlayer", "\344\273\212\346\227\245\346\216\250\350\215\220", nullptr));
         suppText->setText(QCoreApplication::translate("MusicPlayer", "\344\275\240\347\232\204\346\255\214\346\233\262\350\241\245\347\273\231\347\253\231", nullptr));
-        songimage->setText(QCoreApplication::translate("MusicPlayer", "\346\255\214\346\233\262\345\233\276\347\211\207", nullptr));
-        songname->setText(QCoreApplication::translate("MusicPlayer", "\346\255\214\345\220\215", nullptr));
-        signer->setText(QCoreApplication::translate("MusicPlayer", "\346\255\214\346\211\213", nullptr));
+        musicName->setText(QString());
+        musicImgLabel->setText(QString());
+        musicSinger->setText(QString());
         playMode->setText(QString());
         playUp->setText(QString());
         play->setText(QString());

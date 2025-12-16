@@ -356,9 +356,26 @@ release/moc_commonpage.cpp: ../MY_MusicPlayer/commonpage.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
 		../MY_MusicPlayer/listitembox.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlaylist \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplaylist.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediacontent.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaresource.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkrequest.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetworkglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetwork-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QSharedDataPointer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QString \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVariant \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimediaglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimedia-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmultimedia.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediabindableinterface.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaenumdebug.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qmetaobject.h \
 		../MY_MusicPlayer/musiclist.h \
 		../MY_MusicPlayer/musicitem.h \
-		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QList \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVector \
 		release/moc_predefs.h \
@@ -700,6 +717,30 @@ release/moc_musicplayer.cpp: ../MY_MusicPlayer/musicplayer.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qdir.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qfileinfo.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtWidgets/qdialog.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlayer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplayer.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimediaglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimedia-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmultimedia.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediacontent.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaresource.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkrequest.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetworkglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetwork-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QSharedDataPointer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QString \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVariant \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaenumdebug.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qmetaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qaudio.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkconfiguration.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlaylist \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplaylist.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediabindableinterface.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QModelIndex \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qabstractitemmodel.h \
 		../MY_MusicPlayer/localform.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/QMouseEvent \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QPropertyAnimation \
@@ -719,7 +760,6 @@ release/moc_musicplayer.cpp: ../MY_MusicPlayer/musicplayer.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
 		../MY_MusicPlayer/musiclist.h \
 		../MY_MusicPlayer/musicitem.h \
-		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QList \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVector \
 		../MY_MusicPlayer/commonpage.h \
@@ -833,6 +873,7 @@ release/moc_musicslider.cpp: ../MY_MusicPlayer/musicslider.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qfiledevice.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qvector2d.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/QMouseEvent \
 		release/moc_predefs.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/bin/moc.exe
 	C:\Qt\Qt5.14.2\5.14.2\mingw73_64\bin\moc.exe $(DEFINES) --include D:/code/Git_Local/StandardProject/MY_MusicPlayer/build-MY_MusicPlayer-Desktop_Qt_5_14_2_MinGW_64_bit-Debug/release/moc_predefs.h -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/mkspecs/win32-g++ -ID:/code/Git_Local/StandardProject/MY_MusicPlayer/MY_MusicPlayer -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtWidgets -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtANGLE -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore -I. -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++ -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++/x86_64-w64-mingw32 -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++/backward -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include-fixed -IC:/Qt/Qt5.14.2/Tools/mingw730_64/x86_64-w64-mingw32/include ..\MY_MusicPlayer\musicslider.h -o release\moc_musicslider.cpp
@@ -1276,6 +1317,7 @@ release/moc_volumetool.cpp: ../MY_MusicPlayer/volumetool.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qvector2d.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/QMouseEvent \
 		release/moc_predefs.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/bin/moc.exe
 	C:\Qt\Qt5.14.2\5.14.2\mingw73_64\bin\moc.exe $(DEFINES) --include D:/code/Git_Local/StandardProject/MY_MusicPlayer/build-MY_MusicPlayer-Desktop_Qt_5_14_2_MinGW_64_bit-Debug/release/moc_predefs.h -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/mkspecs/win32-g++ -ID:/code/Git_Local/StandardProject/MY_MusicPlayer/MY_MusicPlayer -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtWidgets -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtANGLE -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork -IC:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore -I. -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++ -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++/x86_64-w64-mingw32 -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include/c++/backward -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include -IC:/Qt/Qt5.14.2/Tools/mingw730_64/lib/gcc/x86_64-w64-mingw32/7.3.0/include-fixed -IC:/Qt/Qt5.14.2/Tools/mingw730_64/x86_64-w64-mingw32/include ..\MY_MusicPlayer\volumetool.h -o release\moc_volumetool.cpp
@@ -1736,9 +1778,26 @@ ui_musicplayer.h: ../MY_MusicPlayer/musicplayer.ui \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
 		../MY_MusicPlayer/listitembox.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlaylist \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplaylist.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediacontent.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaresource.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkrequest.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetworkglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetwork-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QSharedDataPointer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QString \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVariant \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimediaglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimedia-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmultimedia.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediabindableinterface.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaenumdebug.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qmetaobject.h \
 		../MY_MusicPlayer/musiclist.h \
 		../MY_MusicPlayer/musicitem.h \
-		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QList \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVector \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtWidgets/QWidget \
@@ -1844,7 +1903,8 @@ ui_musicplayer.h: ../MY_MusicPlayer/musicplayer.ui \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qfile.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qfiledevice.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qvector2d.h \
-		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/QMouseEvent
 	C:\Qt\Qt5.14.2\5.14.2\mingw73_64\bin\uic.exe ..\MY_MusicPlayer\musicplayer.ui -o ui_musicplayer.h
 
 ui_musicslider.h: ../MY_MusicPlayer/musicslider.ui \
@@ -1986,12 +2046,30 @@ release/commonpage.o: ../MY_MusicPlayer/commonpage.cpp ../MY_MusicPlayer/commonp
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
 		../MY_MusicPlayer/listitembox.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlaylist \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplaylist.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediacontent.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaresource.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkrequest.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetworkglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetwork-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QSharedDataPointer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QString \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVariant \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimediaglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimedia-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmultimedia.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediabindableinterface.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaenumdebug.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qmetaobject.h \
 		../MY_MusicPlayer/musiclist.h \
 		../MY_MusicPlayer/musicitem.h \
-		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QList \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVector \
-		ui_commonpage.h
+		ui_commonpage.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QDebug
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release\commonpage.o ..\MY_MusicPlayer\commonpage.cpp
 
 release/listitembox.o: ../MY_MusicPlayer/listitembox.cpp ../MY_MusicPlayer/listitembox.h \
@@ -2100,7 +2178,8 @@ release/listitembox.o: ../MY_MusicPlayer/listitembox.cpp ../MY_MusicPlayer/listi
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qvector2d.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
-		ui_listitembox.h
+		ui_listitembox.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QDebug
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release\listitembox.o ..\MY_MusicPlayer\listitembox.cpp
 
 release/localform.o: ../MY_MusicPlayer/localform.cpp ../MY_MusicPlayer/localform.h \
@@ -2327,6 +2406,30 @@ release/main.o: ../MY_MusicPlayer/main.cpp ../MY_MusicPlayer/musicplayer.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qdir.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qfileinfo.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtWidgets/qdialog.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlayer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplayer.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimediaglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimedia-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmultimedia.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediacontent.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaresource.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkrequest.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetworkglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetwork-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QSharedDataPointer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QString \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVariant \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaenumdebug.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qmetaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qaudio.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkconfiguration.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlaylist \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplaylist.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediabindableinterface.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QModelIndex \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qabstractitemmodel.h \
 		../MY_MusicPlayer/localform.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/QMouseEvent \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QPropertyAnimation \
@@ -2346,7 +2449,6 @@ release/main.o: ../MY_MusicPlayer/main.cpp ../MY_MusicPlayer/musicplayer.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
 		../MY_MusicPlayer/musiclist.h \
 		../MY_MusicPlayer/musicitem.h \
-		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QList \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVector \
 		../MY_MusicPlayer/commonpage.h \
@@ -2643,6 +2745,30 @@ release/musicplayer.o: ../MY_MusicPlayer/musicplayer.cpp ../MY_MusicPlayer/music
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qdir.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qfileinfo.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtWidgets/qdialog.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlayer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplayer.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimediaglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qtmultimedia-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmultimedia.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediacontent.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaresource.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkrequest.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetworkglobal.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qtnetwork-config.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QSharedDataPointer \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QString \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVariant \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaenumdebug.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qmetaobject.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qaudio.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtNetwork/qnetworkconfiguration.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/QMediaPlaylist \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediaplaylist.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtMultimedia/qmediabindableinterface.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QModelIndex \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qabstractitemmodel.h \
 		../MY_MusicPlayer/localform.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/QMouseEvent \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QPropertyAnimation \
@@ -2662,7 +2788,6 @@ release/musicplayer.o: ../MY_MusicPlayer/musicplayer.cpp ../MY_MusicPlayer/music
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
 		../MY_MusicPlayer/musiclist.h \
 		../MY_MusicPlayer/musicitem.h \
-		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QUrl \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QList \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QVector \
 		../MY_MusicPlayer/commonpage.h \
@@ -2785,6 +2910,7 @@ release/musicslider.o: ../MY_MusicPlayer/musicslider.cpp ../MY_MusicPlayer/music
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qfiledevice.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qvector2d.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/QMouseEvent \
 		ui_musicslider.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release\musicslider.o ..\MY_MusicPlayer\musicslider.cpp
 
@@ -3007,8 +3133,7 @@ release/recbox.o: ../MY_MusicPlayer/recbox.cpp ../MY_MusicPlayer/recbox.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qjsonvalue.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QJsonObject \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/qjsonobject.h \
-		ui_recbox.h \
-		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QDebug
+		ui_recbox.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o release\recbox.o ..\MY_MusicPlayer\recbox.cpp
 
 release/recboxitem.o: ../MY_MusicPlayer/recboxitem.cpp ../MY_MusicPlayer/recboxitem.h \
@@ -3225,6 +3350,7 @@ release/volumetool.o: ../MY_MusicPlayer/volumetool.cpp ../MY_MusicPlayer/volumet
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qvector2d.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/qtouchdevice.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtCore/QEvent \
+		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtGui/QMouseEvent \
 		ui_volumetool.h \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtWidgets/QGraphicsDropShadowEffect \
 		C:/Qt/Qt5.14.2/5.14.2/mingw73_64/include/QtWidgets/qgraphicseffect.h \

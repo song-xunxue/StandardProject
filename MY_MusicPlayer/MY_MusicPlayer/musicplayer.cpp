@@ -55,6 +55,12 @@ void MusicPlayer::ConnectSignalWithSlot()
 
     //设置音量大小
     connect(volumetool,&VolumeTool::MusicVolumeChange,this,&MusicPlayer::onMusicVolumeChange);
+
+    //响应拖拽进度条
+    connect(ui->musicSlider,&MusicSlider::setMusicSliderPosition,this ,&MusicPlayer::onSetMusicSliderPosition);
+
+    //同步控制栏的歌手 图片 专辑 有效歌曲文件切换信号
+//    connect(player,&QMediaPlayer::metaDataAvailableChanged,this,&MusicPlayer::onMetaDataAvailableChanged);
 }
 
 void MusicPlayer::InitUI()
@@ -100,8 +106,12 @@ void MusicPlayer::InitPlayer()
     //设置默认的音量
     player->setVolume(20);
     connect(player,&QMediaPlayer::stateChanged,this,&MusicPlayer::onPalyerStateChanged);
-    //最近播放
+    //最近播放  以及 控制栏的信息更新
     connect(playList, &QMediaPlaylist::currentIndexChanged, this, &MusicPlayer::onCurrentIndexChanged);
+    //总时间更新
+    connect(player,&QMediaPlayer::durationChanged,this,&MusicPlayer::onDurationChanged);
+    //播放时间更新
+    connect(player,&QMediaPlayer::positionChanged,this,&MusicPlayer::onPositionChanged);
 }
 
 //protected:
@@ -381,22 +391,86 @@ void MusicPlayer::onMusicItemdoubleClicked(CommonPage *page, const QModelIndex &
     PlayByIndex(page,index.row());
 }
 
+//在此处添加控制栏的信息更新
 void MusicPlayer::onCurrentIndexChanged(int index)
 {
     const QString& musicID=currentPage->GetMusicIDByIndex(index);
+//    this->currentIndex=index;
     auto it = musiclist.findMusicByID(musicID);
-
+    QString musicName("未知歌曲"),musicSinger("未知歌手"),musicAlbum("未知专辑");
     if(it!=musiclist.end())
     {
         it->setIsHistory(true);
+        musicName=it->GetMusicName();
+        musicSinger=it->GetMusicSinger();
+        musicAlbum=it->GetMusicAlbum();
     }
     ui->recentPage->reFresh(musiclist);
+    ui->musicName->setText(musicName);
+    ui->musicSinger->setText(musicSinger);
+    QVariant Image=player->metaData("ThumbnailImage");
+    if(Image.isValid())
+    {
+        QImage image=Image.value<QImage>();
+        ui->musicImgLabel->setPixmap(QPixmap::fromImage(image));
+        ui->musicImgLabel->setScaledContents(true);
+        currentPage->setImage(QPixmap::fromImage(image));
+    }
+    else
+    {
+//        ":/images/localbg.png"
+        ui->musicImgLabel->setPixmap(QPixmap(":/images/localbg.png"));
+        ui->musicImgLabel->setScaledContents(true);
+        qDebug()<<"歌曲无封面图";
+    }
+
 }
 
 void MusicPlayer::onMusicVolumeChange(int volumnRadio)
 {
     player->setVolume(volumnRadio);
 }
+
+void MusicPlayer::onDurationChanged(qint64 duration)
+{
+    //.arg(数值, 宽度, 进制, 填充字符)
+    ui->totalTime->setText(QString("%1:%2").arg(duration/1000/60,2,10,QChar('0'))
+                           .arg(duration/1000%60,2,10,QChar('0')));
+    currentDuration=duration;
+}
+
+void MusicPlayer::onPositionChanged(qint64 position)
+{
+    //当前时间
+    ui->currentTime->setText(QString("%1:%2").arg(position/1000/60,2,10,QChar('0'))
+                             .arg(position/1000%60,2,10,QChar('0')));
+    //同步进度条
+    ui->musicSlider->setMusicSliderByRatio(position/(float)currentDuration);
+}
+
+void MusicPlayer::onSetMusicSliderPosition(float Ratio)
+{
+    qint64 position =(qint64)currentDuration * Ratio;
+    ui->currentTime->setText(QString("%1:%2").arg(position/1000/60,2,10,QChar('0'))
+                             .arg(position/1000%60,2,10,QChar('0')));
+    player->setPosition(position);
+}
+
+//void MusicPlayer::onMetaDataAvailableChanged(bool)
+//{
+//    //通过onCurrentIndexChanged（）记录当前的音乐index
+//    const QString& musicID=currentPage->GetMusicIDByIndex(currentIndex);
+//    auto it = musiclist.findMusicByID(musicID);
+//    QString musicName("未知歌曲"),musicSinger("未知歌手"),musicAlbum("未知专辑");
+//    if(it!=musiclist.end())
+//    {
+//        musicName=it->GetMusicName();
+//        musicSinger=it->GetMusicSinger();
+//        musicAlbum=it->GetMusicAlbum();
+//    }
+//    ui->
+
+//}
 
 
 

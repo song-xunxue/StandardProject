@@ -26,10 +26,10 @@ public:
     {
         if (MusicSlider->objectName().isEmpty())
             MusicSlider->setObjectName(QString::fromUtf8("MusicSlider"));
-        MusicSlider->resize(800, 20);
+        MusicSlider->resize(830, 20);
         inLine = new QFrame(MusicSlider);
         inLine->setObjectName(QString::fromUtf8("inLine"));
-        inLine->setGeometry(QRect(0, 8, 800, 4));
+        inLine->setGeometry(QRect(0, 8, 830, 4));
         inLine->setStyleSheet(QString::fromUtf8("background-color:#EBEEF5;"));
         inLine->setFrameShape(QFrame::StyledPanel);
         inLine->setFrameShadow(QFrame::Raised);

@@ -17,7 +17,7 @@ public:
     qint64 GetMusicDuration();
     QUrl GetMusicUrl();
     QString GetMusicID();
-
+    QString GetLrcFilePath();
     void setIsLike(bool like);
     void setIsHistory(bool like);
 

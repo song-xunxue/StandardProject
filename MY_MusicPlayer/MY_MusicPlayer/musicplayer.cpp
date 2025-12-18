@@ -15,12 +15,11 @@ MusicPlayer::MusicPlayer(QWidget *parent)
     , ui(new Ui::MusicPlayer)
 {
     ui->setupUi(this);
-
-    ConnectSignalWithSlot();
     InitUI();
     InitPlayer();
-
     InitPageMusic();
+    ConnectSignalWithSlot();
+
 }
 
 MusicPlayer::~MusicPlayer()
@@ -53,14 +52,13 @@ void MusicPlayer::ConnectSignalWithSlot()
     connect(ui->localPage,&CommonPage::MusicItemdoubleClicked,this,&MusicPlayer::onMusicItemdoubleClicked);
     connect(ui->likePage,&CommonPage::MusicItemdoubleClicked,this,&MusicPlayer::onMusicItemdoubleClicked);
 
-    //设置音量大小
-    connect(volumetool,&VolumeTool::MusicVolumeChange,this,&MusicPlayer::onMusicVolumeChange);
-
     //响应拖拽进度条
     connect(ui->musicSlider,&MusicSlider::setMusicSliderPosition,this ,&MusicPlayer::onSetMusicSliderPosition);
 
+    //设置音量大小
+    connect(volumetool,&VolumeTool::MusicVolumeChange,this,&MusicPlayer::onMusicVolumeChange);
     //同步控制栏的歌手 图片 专辑 有效歌曲文件切换信号
-//    connect(player,&QMediaPlayer::metaDataAvailableChanged,this,&MusicPlayer::onMetaDataAvailableChanged);
+    connect(player,&QMediaPlayer::metaDataAvailableChanged,this,&MusicPlayer::onMetaDataAvailableChanged);
 }
 
 void MusicPlayer::InitUI()
@@ -75,23 +73,40 @@ void MusicPlayer::InitUI()
     //设置透明度
     this->setAttribute(Qt::WA_TranslucentBackground);
     //设置阴影
-    QGraphicsDropShadowEffect * dropshadoweffect=new QGraphicsDropShadowEffect(this);
-    dropshadoweffect->setOffset(0,0);
-    dropshadoweffect->setColor("#000000");
-    dropshadoweffect->setBlurRadius(10);
-    this->setGraphicsEffect(dropshadoweffect);
+//    QGraphicsDropShadowEffect * dropshadoweffect=new QGraphicsDropShadowEffect(this);
+//    dropshadoweffect->setOffset(0,0);
+//    dropshadoweffect->setColor("#000000");
+//    dropshadoweffect->setBlurRadius(10);
+//    this->setGraphicsEffect(dropshadoweffect);
+    //这个一注释，动画效果的错误全部解决
+//    QGraphicsDropShadowEffect 的实现依赖 Qt 的图形视图框架，
+//    而 WA_TranslucentBackground+FramelessWindowHint 是直接调用 Windows 的分层窗口接口，两者同时用会导致：
+//    阴影效果强行扩展了窗口的 “脏区域”（dirty 参数），超出了 Windows 允许的范围；
+//    分层窗口的渲染参数被阴影效果篡改，出现负数 / 超大值，触发 “参数错误”。
+
     InitOnlineMusicUI();
     InitLocalMusicUI();
+
      srand(time(NULL));//随机化种子
     ui->recmusicBox->InitRecBox(RandomPiction(),1);
     ui->supplymusicBox->InitRecBox(RandomPiction(),2);
 
+    //实例化音量调节窗口
     volumetool=new VolumeTool(this);
     ui->play->setIcon(QIcon(":/images/play_2.png"));
     ui->playMode->setIcon(QIcon(":/images/list_play.png"));
     ui->playMode->setToolTip("随机播放");
-
     ui->stackedWidget->setCurrentIndex(0);
+    //实例化歌词界面
+    lrcpage=new LrcPage(this);
+    lrcpage->setFixedSize(1040,700);
+    lrcpage->hide();
+    lrcAnimation=new QPropertyAnimation(lrcpage,"geometry",this);
+    lrcAnimation->setDuration(250);
+    lrcAnimation->setStartValue(QRect(0, 10+this->height(), lrcpage->width(), lrcpage->height()));
+    lrcAnimation->setEndValue(QRect(0,0,lrcpage->width(), lrcpage->height()));
+//    qDebug()<<this->geometry();
+//    qDebug()<<lrcpage->geometry();
 }
 
 void MusicPlayer::InitPlayer()
@@ -245,6 +260,15 @@ void MusicPlayer::on_volumn_clicked()
     });
 }
 
+void MusicPlayer::on_lrcword_clicked()
+{
+    qDebug()<<"lrcpage 显示";
+    lrcpage->show();
+    lrcAnimation->start();
+//    repaint();
+    //还是卡顿
+}
+
 void MusicPlayer::on_addlocal_clicked()
 {
     //添加本地音乐
@@ -338,7 +362,7 @@ void MusicPlayer::onPalyerStateChanged()
 //这里通过信号来改变播放图标，因为还有播放全部按钮需要改变
 void MusicPlayer::on_playMode_clicked()
 {
-    qDebug()<<"调整播放模式"<<playList->playbackMode();
+//    qDebug()<<"调整播放模式"<<playList->playbackMode();
 
     if(playList->playbackMode()==QMediaPlaylist::Loop)//循环播放
     {
@@ -395,34 +419,34 @@ void MusicPlayer::onMusicItemdoubleClicked(CommonPage *page, const QModelIndex &
 void MusicPlayer::onCurrentIndexChanged(int index)
 {
     const QString& musicID=currentPage->GetMusicIDByIndex(index);
-//    this->currentIndex=index;
+    this->currentIndex=index;
     auto it = musiclist.findMusicByID(musicID);
-    QString musicName("未知歌曲"),musicSinger("未知歌手"),musicAlbum("未知专辑");
+//    QString musicName("未知歌曲"),musicSinger("未知歌手"),musicAlbum("未知专辑");
     if(it!=musiclist.end())
     {
         it->setIsHistory(true);
-        musicName=it->GetMusicName();
-        musicSinger=it->GetMusicSinger();
-        musicAlbum=it->GetMusicAlbum();
+//        musicName=it->GetMusicName();
+//        musicSinger=it->GetMusicSinger();
+//        musicAlbum=it->GetMusicAlbum();
     }
     ui->recentPage->reFresh(musiclist);
-    ui->musicName->setText(musicName);
-    ui->musicSinger->setText(musicSinger);
-    QVariant Image=player->metaData("ThumbnailImage");
-    if(Image.isValid())
-    {
-        QImage image=Image.value<QImage>();
-        ui->musicImgLabel->setPixmap(QPixmap::fromImage(image));
-        ui->musicImgLabel->setScaledContents(true);
-        currentPage->setImage(QPixmap::fromImage(image));
-    }
-    else
-    {
-//        ":/images/localbg.png"
-        ui->musicImgLabel->setPixmap(QPixmap(":/images/localbg.png"));
-        ui->musicImgLabel->setScaledContents(true);
-        qDebug()<<"歌曲无封面图";
-    }
+//    ui->musicName->setText(musicName);
+//    ui->musicSinger->setText(musicSinger);
+//    QVariant Image=player->metaData("ThumbnailImage");
+//    if(Image.isValid())
+//    {
+//        QImage image=Image.value<QImage>();
+//        ui->musicImgLabel->setPixmap(QPixmap::fromImage(image));
+//        ui->musicImgLabel->setScaledContents(true);
+//        currentPage->setImage(QPixmap::fromImage(image));
+//    }
+//    else
+//    {
+////        ":/images/localbg.png"
+//        ui->musicImgLabel->setPixmap(QPixmap(":/images/localbg.png"));
+//        ui->musicImgLabel->setScaledContents(true);
+//        qDebug()<<"歌曲无封面图";
+//    }
 
 }
 
@@ -446,6 +470,9 @@ void MusicPlayer::onPositionChanged(qint64 position)
                              .arg(position/1000%60,2,10,QChar('0')));
     //同步进度条
     ui->musicSlider->setMusicSliderByRatio(position/(float)currentDuration);
+
+    //同步lrcPage歌词
+    lrcpage->setWordLine(position);
 }
 
 void MusicPlayer::onSetMusicSliderPosition(float Ratio)
@@ -456,21 +483,48 @@ void MusicPlayer::onSetMusicSliderPosition(float Ratio)
     player->setPosition(position);
 }
 
-//void MusicPlayer::onMetaDataAvailableChanged(bool)
-//{
-//    //通过onCurrentIndexChanged（）记录当前的音乐index
-//    const QString& musicID=currentPage->GetMusicIDByIndex(currentIndex);
-//    auto it = musiclist.findMusicByID(musicID);
-//    QString musicName("未知歌曲"),musicSinger("未知歌手"),musicAlbum("未知专辑");
-//    if(it!=musiclist.end())
-//    {
-//        musicName=it->GetMusicName();
-//        musicSinger=it->GetMusicSinger();
-//        musicAlbum=it->GetMusicAlbum();
-//    }
-//    ui->
+void MusicPlayer::onMetaDataAvailableChanged(bool)
+{
+    //通过onCurrentIndexChanged（）记录当前的音乐index
+    const QString& musicID=currentPage->GetMusicIDByIndex(currentIndex);
+    auto it = musiclist.findMusicByID(musicID);
+    QString musicName("未知歌曲"),musicSinger("未知歌手"),musicAlbum("未知专辑");
+    if(it!=musiclist.end())
+    {
+        musicName=it->GetMusicName();
+        musicSinger=it->GetMusicSinger();
+        musicAlbum=it->GetMusicAlbum();
+    }
+    ui->musicName->setText(musicName);
+    ui->musicSinger->setText(musicSinger);
+    QVariant Image=player->metaData("ThumbnailImage");
+    if(Image.isValid())
+    {
+        QImage image=Image.value<QImage>();
+        ui->musicImgLabel->setPixmap(QPixmap::fromImage(image));
+        ui->musicImgLabel->setScaledContents(true);
+        currentPage->setImage(QPixmap::fromImage(image));
+    }
+    else
+    {
+//        ":/images/localbg.png"
+        ui->musicImgLabel->setPixmap(QPixmap(":/images/localbg.png"));
+        ui->musicImgLabel->setScaledContents(true);
+//        qDebug()<<"歌曲无封面图";
+    }
 
-//}
+    //解析歌词数据
+    if(!lrcpage->LrcProcess(it->GetLrcFilePath()))
+    {
+        qDebug()<<"歌词获取失败";
+        return;
+    }
+    lrcpage->setMusicName(it->GetMusicName());
+    lrcpage->setMusicSinger(it->GetMusicSinger());
+
+
+
+}
 
 
 

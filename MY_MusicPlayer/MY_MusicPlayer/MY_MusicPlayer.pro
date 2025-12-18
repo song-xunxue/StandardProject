@@ -23,6 +23,7 @@ SOURCES += \
     commonpage.cpp \
     listitembox.cpp \
     localform.cpp \
+    lrcpage.cpp \
     main.cpp \
     musicitem.cpp \
     musiclist.cpp \
@@ -37,6 +38,7 @@ HEADERS += \
     commonpage.h \
     listitembox.h \
     localform.h \
+    lrcpage.h \
     musicitem.h \
     musiclist.h \
     musicplayer.h \
@@ -50,6 +52,7 @@ FORMS += \
     commonpage.ui \
     listitembox.ui \
     localform.ui \
+    lrcpage.ui \
     musicplayer.ui \
     musicslider.ui \
     onlineform.ui \

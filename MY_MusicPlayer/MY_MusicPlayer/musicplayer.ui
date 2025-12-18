@@ -38,7 +38,12 @@
    <item>
     <widget class="QWidget" name="Background" native="true">
      <property name="styleSheet">
-      <string notr="true"/>
+      <string notr="true">MusicPlayer {
+        background-color: rgba(30, 30, 30, 0.95);
+        border-radius: 10px;
+        /* 样式表阴影（兼容透明+无边框） */
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    }</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
       <property name="spacing">
@@ -1087,7 +1092,7 @@ QPushButton:hover
                 <widget class="QWidget" name="play1" native="true">
                  <property name="maximumSize">
                   <size>
-                   <width>16777215</width>
+                   <width>277</width>
                    <height>16777215</height>
                   </size>
                  </property>
@@ -1102,6 +1107,13 @@ QPushButton:hover
                     </property>
                    </widget>
                   </item>
+                  <item row="1" column="1">
+                   <widget class="QLabel" name="musicSinger">
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </widget>
+                  </item>
                   <item row="0" column="0" rowspan="2">
                    <widget class="QLabel" name="musicImgLabel">
                     <property name="maximumSize">
@@ -1110,13 +1122,6 @@ QPushButton:hover
                       <height>40</height>
                      </size>
                     </property>
-                    <property name="text">
-                     <string/>
-                    </property>
-                   </widget>
-                  </item>
-                  <item row="1" column="1">
-                   <widget class="QLabel" name="musicSinger">
                     <property name="text">
                      <string/>
                     </property>

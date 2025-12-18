@@ -1,6 +1,7 @@
 debug/commonpage.o
 debug/listitembox.o
 debug/localform.o
+debug/lrcpage.o
 debug/main.o
 debug/musicitem.o
 debug/musiclist.o
@@ -14,6 +15,7 @@ debug/qrc_Resources.o
 debug/moc_commonpage.o
 debug/moc_listitembox.o
 debug/moc_localform.o
+debug/moc_lrcpage.o
 debug/moc_musicplayer.o
 debug/moc_musicslider.o
 debug/moc_onlineform.o

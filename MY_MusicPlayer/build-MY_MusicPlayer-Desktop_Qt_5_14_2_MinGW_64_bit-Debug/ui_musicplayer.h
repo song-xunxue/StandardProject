@@ -107,8 +107,8 @@ public:
     QWidget *play1;
     QGridLayout *gridLayout;
     QLabel *musicName;
-    QLabel *musicImgLabel;
     QLabel *musicSinger;
+    QLabel *musicImgLabel;
     QWidget *play2;
     QHBoxLayout *horizontalLayout_11;
     QPushButton *playMode;
@@ -138,7 +138,12 @@ public:
         verticalLayout->setContentsMargins(5, 5, 5, 5);
         Background = new QWidget(MusicPlayer);
         Background->setObjectName(QString::fromUtf8("Background"));
-        Background->setStyleSheet(QString::fromUtf8(""));
+        Background->setStyleSheet(QString::fromUtf8("MusicPlayer {\n"
+"        background-color: rgba(30, 30, 30, 0.95);\n"
+"        border-radius: 10px;\n"
+"        /* \346\240\267\345\274\217\350\241\250\351\230\264\345\275\261\357\274\210\345\205\274\345\256\271\351\200\217\346\230\216+\346\227\240\350\276\271\346\241\206\357\274\211 */\n"
+"        box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);\n"
+"    }"));
         verticalLayout_2 = new QVBoxLayout(Background);
         verticalLayout_2->setSpacing(0);
         verticalLayout_2->setObjectName(QString::fromUtf8("verticalLayout_2"));
@@ -603,7 +608,7 @@ public:
         horizontalLayout_9->setContentsMargins(0, 0, 0, 0);
         play1 = new QWidget(control);
         play1->setObjectName(QString::fromUtf8("play1"));
-        play1->setMaximumSize(QSize(16777215, 16777215));
+        play1->setMaximumSize(QSize(277, 16777215));
         play1->setStyleSheet(QString::fromUtf8(""));
         gridLayout = new QGridLayout(play1);
         gridLayout->setObjectName(QString::fromUtf8("gridLayout"));
@@ -612,16 +617,16 @@ public:
 
         gridLayout->addWidget(musicName, 0, 1, 1, 1);
 
+        musicSinger = new QLabel(play1);
+        musicSinger->setObjectName(QString::fromUtf8("musicSinger"));
+
+        gridLayout->addWidget(musicSinger, 1, 1, 1, 1);
+
         musicImgLabel = new QLabel(play1);
         musicImgLabel->setObjectName(QString::fromUtf8("musicImgLabel"));
         musicImgLabel->setMaximumSize(QSize(40, 40));
 
         gridLayout->addWidget(musicImgLabel, 0, 0, 2, 1);
-
-        musicSinger = new QLabel(play1);
-        musicSinger->setObjectName(QString::fromUtf8("musicSinger"));
-
-        gridLayout->addWidget(musicSinger, 1, 1, 1, 1);
 
 
         horizontalLayout_9->addWidget(play1);
@@ -806,8 +811,8 @@ public:
         recText->setText(QCoreApplication::translate("MusicPlayer", "\344\273\212\346\227\245\346\216\250\350\215\220", nullptr));
         suppText->setText(QCoreApplication::translate("MusicPlayer", "\344\275\240\347\232\204\346\255\214\346\233\262\350\241\245\347\273\231\347\253\231", nullptr));
         musicName->setText(QString());
-        musicImgLabel->setText(QString());
         musicSinger->setText(QString());
+        musicImgLabel->setText(QString());
         playMode->setText(QString());
         playUp->setText(QString());
         play->setText(QString());

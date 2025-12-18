@@ -60,6 +60,15 @@ QString MusicItem::GetMusicID()
     return musicId;
 }
 
+QString MusicItem::GetLrcFilePath()
+{
+    QString filepath=musicUrl.toLocalFile();
+    filepath.replace(".mp3",".lrc");
+    filepath.replace(".mpga",".lrc");
+    filepath.replace(".flac",".lrc");
+    return filepath;
+}
+
 void MusicItem::setIsLike(bool like)
 {
     isLike=like;

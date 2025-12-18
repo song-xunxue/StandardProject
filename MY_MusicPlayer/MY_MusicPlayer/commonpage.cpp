@@ -70,7 +70,7 @@ void CommonPage::reFresh(MusicList &musiclist)
     addMusicToMusicPage(musiclist);//更新界面的musicOfPage
     if(musicIdOfPage.isEmpty())
     {
-        qDebug()<< pageType<<"musicIdOfpag 为空";
+//        qDebug()<< pageType<<"musicIdOfpag 为空";
         return ;
     }
 //    qDebug()<< "开始添加"<<musicIdOfPage.size()<<"个box";

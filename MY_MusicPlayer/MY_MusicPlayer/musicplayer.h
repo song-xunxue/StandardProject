@@ -5,6 +5,7 @@
 #include <QFileDialog>
 #include <QMediaPlayer>
 #include <QMediaPlaylist>
+#include<QPropertyAnimation>
 
 #include <QModelIndex>
 
@@ -12,6 +13,7 @@
 #include "onlineform.h"
 #include "recbox.h"
 #include "volumetool.h"
+#include "lrcpage.h"
 #include "musiclist.h"
 #include  "commonpage.h"
 
@@ -46,7 +48,7 @@ private slots:
     void onLeftFormClick(size_t pageID);
 
     void on_volumn_clicked();
-
+    void on_lrcword_clicked();
     void on_addlocal_clicked();
 
     void onrefreshLikeMusic();
@@ -69,12 +71,14 @@ private slots:
     void onDurationChanged(qint64 duration);
     void onPositionChanged(qint64 position);
     void onSetMusicSliderPosition(float Radio);
-//    void onMetaDataAvailableChanged(bool); //未知错误，引入currenIndex导致程序异常终止  已解决 并优化
+    void onMetaDataAvailableChanged(bool); //未知错误，引入currenIndex导致程序异常终止  已解决
+
 
 private:
     Ui::MusicPlayer *ui;
     QPoint dragPosition ;
     VolumeTool* volumetool;
+    LrcPage* lrcpage;
     MusicList musiclist;
 
     QMediaPlayer* player;//播放器
@@ -83,5 +87,6 @@ private:
     int currentIndex; //捕获当前播放的音乐的index   这一行添加了之后异常终止
 //    原因是栈溢出，main.cpp中musicplayer是栈上定义的 改为new 之后就没有问题了
     qint64 currentDuration;
+    QPropertyAnimation* lrcAnimation;
 };
 #endif // MUSICPLAYER_H

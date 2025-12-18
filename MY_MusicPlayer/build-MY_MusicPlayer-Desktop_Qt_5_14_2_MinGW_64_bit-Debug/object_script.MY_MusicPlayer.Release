@@ -1,6 +1,7 @@
 release/commonpage.o
 release/listitembox.o
 release/localform.o
+release/lrcpage.o
 release/main.o
 release/musicitem.o
 release/musiclist.o
@@ -14,6 +15,7 @@ release/qrc_Resources.o
 release/moc_commonpage.o
 release/moc_listitembox.o
 release/moc_localform.o
+release/moc_lrcpage.o
 release/moc_musicplayer.o
 release/moc_musicslider.o
 release/moc_onlineform.o

@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QVector>
 #include <QJsonObject>
+#include <QMessageBox>
 
 MusicPlayer::MusicPlayer(QWidget *parent)
     : QWidget(parent)
@@ -18,6 +19,8 @@ MusicPlayer::MusicPlayer(QWidget *parent)
     InitUI();
     InitPlayer();
     InitPageMusic();
+    InitMusicDB();
+    InitMusicList();
     ConnectSignalWithSlot();
 
 }
@@ -68,7 +71,7 @@ void MusicPlayer::InitUI()
     //1.无法移动窗口
     //2.无法关闭
     //重写鼠标单击和移动事件
-
+    setWindowIcon(QIcon(":/images/tubiao.png"));
 
     //设置透明度
     this->setAttribute(Qt::WA_TranslucentBackground);
@@ -90,6 +93,8 @@ void MusicPlayer::InitUI()
      srand(time(NULL));//随机化种子
     ui->recmusicBox->InitRecBox(RandomPiction(),1);
     ui->supplymusicBox->InitRecBox(RandomPiction(),2);
+
+    ui->musicImgLabel->setPixmap(QPixmap(":/images/default_cover.png"));
 
     //实例化音量调节窗口
     volumetool=new VolumeTool(this);
@@ -161,9 +166,50 @@ void MusicPlayer::InitPageMusic()
     ui->localPage->addMusicToPlayList(musiclist,playList);//直接添加local到播放列表中
 }
 
+void MusicPlayer::InitMusicDB()
+{
+    musicdb=QSqlDatabase::addDatabase("QSQLITE");
+    musicdb.setDatabaseName("QQmusic.db");//设置数据库名称
+    if(!musicdb.open())
+    {
+        QMessageBox::critical(this, "打开QQMusicDB失败", musicdb.lastError().text());
+        return;
+    }
+    qDebug()<<"数据库链接成功";
+    //创建MusicInfo
+    QString sql="CREATE TABLE IF NOT EXISTS MusicInfo(\
+            id INTEGER PRIMARY KEY AUTOINCREMENT,\
+            musicId varchar(200) UNIQUE,\
+            musicName varchar(50) ,\
+            musicSinger varchar(50) ,\
+            musicAlbum varchar(50),\
+            duration BIGINT,\
+            musicUrl varchar(256),\
+            isLike INTEGER,\
+            isHistory INTEGER)";
+    QSqlQuery query;
+    if(!query.exec(sql))
+    {
+        QMessageBox::critical(this, "创建MusicInfo失败", query.lastError().text());
+        return;
+    }
+    qDebug()<<"创建MusicInfo成功";
+
+}
+
+void MusicPlayer::InitMusicList()
+{
+    //从数据库加载数据到MusicList
+    musiclist.ReadFromDB();
+
+    onrefreshLikeMusic();//三个页面的刷新
+
+
+}
+
 void MusicPlayer::mouseMoveEvent(QMouseEvent *event)
 {
-    if(event->buttons()==Qt::LeftButton)
+    if(event->buttons()==Qt::LeftButton && drag)
     {
         //移动窗口的左上角
         move(event->globalPos()-dragPosition);
@@ -177,6 +223,7 @@ void MusicPlayer::mousePressEvent(QMouseEvent *event)
 {
     if(event->button()==Qt::LeftButton)
     {
+        drag=true;
         //记录相对坐标
         //鼠标相对屏幕的坐标减去窗口左上角相对屏幕的坐标
 //       dragPosition = event->globalPos()-frameGeometry().topLeft();
@@ -221,12 +268,17 @@ void MusicPlayer::PlayByIndex(CommonPage *page,int index)
 
 void MusicPlayer::on_quit_clicked()
 {
+    //关闭之前把数据更新到数据库中
+    musiclist.WriteToDB();
+    //关闭数据库连接
+    musicdb.close();
     //关闭按钮
     close();
 }
 
 void MusicPlayer::onLeftFormClick(size_t pageID)
 {
+    drag=false;
     ui->stackedWidget->setCurrentIndex(pageID);
     QList<LocalForm*>  list=this->findChildren<LocalForm*>();
     QList<OnlineForm*> list2=this->findChildren<OnlineForm*>();
@@ -262,11 +314,11 @@ void MusicPlayer::on_volumn_clicked()
 
 void MusicPlayer::on_lrcword_clicked()
 {
-    qDebug()<<"lrcpage 显示";
+//    qDebug()<<"lrcpage 显示";
     lrcpage->show();
     lrcAnimation->start();
 //    repaint();
-    //还是卡顿
+    //还是卡顿 已解决
 }
 
 void MusicPlayer::on_addlocal_clicked()
@@ -324,7 +376,7 @@ void MusicPlayer::onrefreshLikeMusic()
 
 void MusicPlayer::on_play_clicked()
 {
-    qDebug()<<"点击播放";
+//    qDebug()<<"点击播放";
     if(playList->isEmpty())
     {
         qDebug()<<"播放列表为空";
@@ -526,5 +578,20 @@ void MusicPlayer::onMetaDataAvailableChanged(bool)
 
 }
 
+void MusicPlayer::on_min_clicked()
+{
+    showMinimized();
+}
 
+void MusicPlayer::on_max_clicked()
+{
+//    由于一些窗口设置了最大尺寸，无法实现自动缩放尺寸
+//    因此这个最大化功能取消
+//    showMaximized();
+    QMessageBox::information(this, "温馨提示", "最大化功能正在紧急维护中...");
+}
 
+void MusicPlayer::on_skin_clicked()
+{
+    QMessageBox::information(this, "温馨提示", "换肤功能正在紧急维护中...");
+}

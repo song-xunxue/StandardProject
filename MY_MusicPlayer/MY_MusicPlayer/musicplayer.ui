@@ -307,31 +307,6 @@ QPushButton:hover
                 </widget>
                </item>
                <item>
-                <widget class="QPushButton" name="max">
-                 <property name="minimumSize">
-                  <size>
-                   <width>30</width>
-                   <height>30</height>
-                  </size>
-                 </property>
-                 <property name="maximumSize">
-                  <size>
-                   <width>30</width>
-                   <height>30</height>
-                  </size>
-                 </property>
-                 <property name="styleSheet">
-                  <string notr="true">#max
-{
-	background-image:url(&quot;:/images/max.png&quot;);
-}</string>
-                 </property>
-                 <property name="text">
-                  <string/>
-                 </property>
-                </widget>
-               </item>
-               <item>
                 <widget class="QPushButton" name="min">
                  <property name="minimumSize">
                   <size>
@@ -349,6 +324,31 @@ QPushButton:hover
                   <string notr="true">#min
 {
 	background-image:url(&quot;:/images/min.png&quot;);
+}</string>
+                 </property>
+                 <property name="text">
+                  <string/>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="max">
+                 <property name="minimumSize">
+                  <size>
+                   <width>30</width>
+                   <height>30</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>30</width>
+                   <height>30</height>
+                  </size>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">#max
+{
+	background-image:url(&quot;:/images/max.png&quot;);
 }</string>
                  </property>
                  <property name="text">

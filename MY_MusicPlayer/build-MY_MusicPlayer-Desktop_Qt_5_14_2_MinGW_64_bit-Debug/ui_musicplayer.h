@@ -49,8 +49,8 @@ public:
     QHBoxLayout *horizontalLayout_5;
     QSpacerItem *horizontalSpacer;
     QPushButton *skin;
-    QPushButton *max;
     QPushButton *min;
+    QPushButton *max;
     QPushButton *quit;
     QWidget *Body;
     QHBoxLayout *horizontalLayout_6;
@@ -256,17 +256,6 @@ public:
 
         horizontalLayout_5->addWidget(skin);
 
-        max = new QPushButton(SettingBox);
-        max->setObjectName(QString::fromUtf8("max"));
-        max->setMinimumSize(QSize(30, 30));
-        max->setMaximumSize(QSize(30, 30));
-        max->setStyleSheet(QString::fromUtf8("#max\n"
-"{\n"
-"	background-image:url(\":/images/max.png\");\n"
-"}"));
-
-        horizontalLayout_5->addWidget(max);
-
         min = new QPushButton(SettingBox);
         min->setObjectName(QString::fromUtf8("min"));
         min->setMinimumSize(QSize(30, 30));
@@ -277,6 +266,17 @@ public:
 "}"));
 
         horizontalLayout_5->addWidget(min);
+
+        max = new QPushButton(SettingBox);
+        max->setObjectName(QString::fromUtf8("max"));
+        max->setMinimumSize(QSize(30, 30));
+        max->setMaximumSize(QSize(30, 30));
+        max->setStyleSheet(QString::fromUtf8("#max\n"
+"{\n"
+"	background-image:url(\":/images/max.png\");\n"
+"}"));
+
+        horizontalLayout_5->addWidget(max);
 
         quit = new QPushButton(SettingBox);
         quit->setObjectName(QString::fromUtf8("quit"));
@@ -800,8 +800,8 @@ public:
         Logo->setText(QString());
         SearchlineEdit->setText(QString());
         skin->setText(QString());
-        max->setText(QString());
         min->setText(QString());
+        max->setText(QString());
         quit->setText(QString());
         LoclText->setText(QCoreApplication::translate("MusicPlayer", "\346\210\221\347\232\204\351\237\263\344\271\220", nullptr));
         self->setText(QCoreApplication::translate("MusicPlayer", "\350\207\252\345\273\272\346\255\214\345\215\225", nullptr));

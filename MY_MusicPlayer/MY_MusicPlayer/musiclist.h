@@ -18,6 +18,8 @@ public:
     iterator end();
     iterator findMusicByID(const QString& musicId);
 
+    void WriteToDB();
+    void ReadFromDB();
 private:
     QVector<MusicItem> musicList;
 };

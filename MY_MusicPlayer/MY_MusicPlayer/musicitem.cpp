@@ -10,9 +10,9 @@ MusicItem::MusicItem()
 }
 
 MusicItem::MusicItem(const QUrl &url)
-    :isLike(false),
-      isHistory(false),
-    musicUrl(url)
+    :musicUrl(url),
+     isLike(false),
+     isHistory(false)
 {
     musicId = QUuid::createUuid().toString();
     //解析数据
@@ -30,6 +30,11 @@ bool MusicItem::GetisHistory()
     return isHistory;
 }
 
+QString MusicItem::GetMusicID()
+{
+    return musicId;
+}
+
 QString MusicItem::GetMusicName()
 {
     return musicName;
@@ -45,6 +50,15 @@ QString MusicItem::GetMusicAlbum()
     return musicAlbum;
 }
 
+QString MusicItem::GetLrcFilePath()
+{
+    QString filepath=musicUrl.toLocalFile();
+    filepath.replace(".mp3",".lrc");
+    filepath.replace(".mpga",".lrc");
+    filepath.replace(".flac",".lrc");
+    return filepath;
+}
+
 qint64 MusicItem::GetMusicDuration()
 {
     return duration;
@@ -53,20 +67,6 @@ qint64 MusicItem::GetMusicDuration()
 QUrl MusicItem::GetMusicUrl()
 {
     return musicUrl;
-}
-
-QString MusicItem::GetMusicID()
-{
-    return musicId;
-}
-
-QString MusicItem::GetLrcFilePath()
-{
-    QString filepath=musicUrl.toLocalFile();
-    filepath.replace(".mp3",".lrc");
-    filepath.replace(".mpga",".lrc");
-    filepath.replace(".flac",".lrc");
-    return filepath;
 }
 
 void MusicItem::setIsLike(bool like)
@@ -132,7 +132,90 @@ void MusicItem::parseMediaMetaData()
             musicAlbum="专辑未知";
         }
     }
-    qDebug()<<"此歌曲信息"<<musicName<<"  "<<musicSinger<<" "<<musicAlbum;
+    qDebug()<<"此歌曲信息"<<musicName<<"  "<<musicSinger<<" "<<musicAlbum<<" "<<musicUrl.toLocalFile();
 }
+
+void MusicItem::InsertToDB()
+{
+//    首先确认数据库存在
+    QSqlQuery query;
+    query.prepare("SELECT EXISTS(SELECT 1 FROM MusicInfo WHERE musicId =? )");
+    query.addBindValue(musicId);
+    if(!query.exec())
+    {
+        qDebug()<<"查询失败："<<query.lastError().text();
+        return;
+    }
+    if(query.next())
+    {
+        bool isExists = query.value(0).toBool();
+        if(isExists)
+        {
+            //如果数据存在 就更新数据
+            query.prepare("UPDATE MusicInfo SET isLike = ?, isHistory= ? WHERE musicId= ?");
+            query.addBindValue(isLike ? 1:0);
+            query.addBindValue(isHistory? 1:0);
+            query.addBindValue(musicId);
+            if(!query.exec())
+            {
+                qDebug()<<"更新数据失败"<<query.lastError().text();
+            }
+            qDebug()<<"更新成功";
+        }
+        else
+        {
+            //如果数据不存在 就插入数据
+            query.prepare("INSERT INTO MusicInfo(musicId,musicName,musicSinger,musicAlbum,\
+                                duration,musicUrl,isLike,isHistory)\
+                        VALUES(?,?,?,?,?,?,?,?)");
+            query.addBindValue(musicId);
+            query.addBindValue(musicName);
+            query.addBindValue(musicSinger);
+            query.addBindValue(musicAlbum);
+            query.addBindValue(duration);
+            query.addBindValue(musicUrl.toLocalFile());
+            query.addBindValue(isLike ? 1:0);
+            query.addBindValue(isHistory? 1:0);
+            if(!query.exec())
+            {
+                qDebug()<<"插入数据失败"<<query.lastError().text();
+            }
+
+            qDebug()<<"插入数据："<<musicName<<"-"<<musicId;
+        }
+    }
+}
+
+void MusicItem::setMusicID(const QString &s)
+{
+    musicId=s;
+}
+
+void MusicItem::setMusicName(const QString &s)
+{
+    musicName=s;
+}
+
+void MusicItem::setMusicSinger(const QString &s)
+{
+    musicSinger=s;
+}
+
+void MusicItem::setMusicAlbum(const QString &s)
+{
+    musicAlbum=s;
+}
+
+void MusicItem::setMusicDuration(qint64 time)
+{
+    duration=time;
+}
+
+void MusicItem::setMusicUrl(const QString &s)
+{
+    musicUrl=s;
+}
+
+
 
 

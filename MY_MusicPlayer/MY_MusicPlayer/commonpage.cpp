@@ -154,7 +154,7 @@ QString CommonPage::GetMusicIDByIndex(int index)
 
 void CommonPage::setImage(QPixmap p)
 {
-    qDebug()<<"设置当前页面的图片";
+//    qDebug()<<"设置当前页面的图片";
     ui->musicImageLabel->setPixmap(p);
 }
 

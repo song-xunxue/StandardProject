@@ -3,9 +3,14 @@
 
 #include <QWidget>
 #include <QFileDialog>
+
 #include <QMediaPlayer>
 #include <QMediaPlaylist>
 #include<QPropertyAnimation>
+
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QSqlError>
 
 #include <QModelIndex>
 
@@ -38,6 +43,8 @@ protected:
     void InitOnlineMusicUI();//在线音乐栏初始化
     void InitLocalMusicUI();//本地音乐栏初始化
     void InitPageMusic();//音乐页面初始化
+    void InitMusicDB(); //初始化数据库
+    void InitMusicList();//从数据库初始化musiclist
     void mouseMoveEvent(QMouseEvent *event) ;
     void mousePressEvent(QMouseEvent *event) ;
     QJsonArray  RandomPiction();
@@ -74,6 +81,12 @@ private slots:
     void onMetaDataAvailableChanged(bool); //未知错误，引入currenIndex导致程序异常终止  已解决
 
 
+    void on_min_clicked();
+
+    void on_max_clicked();
+
+    void on_skin_clicked();
+
 private:
     Ui::MusicPlayer *ui;
     QPoint dragPosition ;
@@ -88,5 +101,8 @@ private:
 //    原因是栈溢出，main.cpp中musicplayer是栈上定义的 改为new 之后就没有问题了
     qint64 currentDuration;
     QPropertyAnimation* lrcAnimation;
+
+    bool drag;//解决拖拽问题
+    QSqlDatabase musicdb;
 };
 #endif // MUSICPLAYER_H

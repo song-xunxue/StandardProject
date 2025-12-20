@@ -12,6 +12,9 @@
 #include <QSqlQuery>
 #include <QSqlError>
 
+#include <QSystemTrayIcon>
+#include <QMenu>
+
 #include <QModelIndex>
 
 #include "localform.h"
@@ -80,13 +83,11 @@ private slots:
     void onSetMusicSliderPosition(float Radio);
     void onMetaDataAvailableChanged(bool); //未知错误，引入currenIndex导致程序异常终止  已解决
 
-
     void on_min_clicked();
-
     void on_max_clicked();
-
     void on_skin_clicked();
-
+    void onTrayIconActivate(QSystemTrayIcon::ActivationReason reason);
+    void quitMusic();
 private:
     Ui::MusicPlayer *ui;
     QPoint dragPosition ;
@@ -104,5 +105,6 @@ private:
 
     bool drag;//解决拖拽问题
     QSqlDatabase musicdb;
+    QSystemTrayIcon * trayIcon;//系统托盘
 };
 #endif // MUSICPLAYER_H

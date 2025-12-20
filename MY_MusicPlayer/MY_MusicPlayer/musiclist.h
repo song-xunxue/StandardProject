@@ -5,6 +5,8 @@
 #include <QList>
 #include <QVector>
 #include <QUrl>
+#include <QSet>
+
 
 typedef QVector<MusicItem>::iterator iterator;
 
@@ -22,6 +24,7 @@ public:
     void ReadFromDB();
 private:
     QVector<MusicItem> musicList;
+    QSet<QString> musicUrls;
 };
 
 #endif // MUSICLIST_H

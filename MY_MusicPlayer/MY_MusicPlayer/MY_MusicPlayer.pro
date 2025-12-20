@@ -4,10 +4,23 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG += c++11
 
-CONFIG += debug
-CONFIG -= release
+#CONFIG += debug
+#CONFIG -= release
 QMAKE_CXXFLAGS_DEBUG += -O0
 
+
+# 自动区分Debug/Release模式，设置输出目录
+CONFIG(debug, debug|release) {
+    # Debug模式：输出到debug文件夹
+    DESTDIR = debug
+    # 启用调试信息
+    QMAKE_CXXFLAGS += -g
+} else {
+    # Release模式：输出到release文件夹
+    DESTDIR = release
+    # 启用优化
+    QMAKE_CXXFLAGS += -O2
+}
 # The following define makes your compiler emit warnings if you use
 # any Qt feature that has been marked deprecated (the exact warnings
 # depend on your compiler). Please consult the documentation of the

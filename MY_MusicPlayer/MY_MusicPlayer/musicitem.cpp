@@ -159,6 +159,7 @@ void MusicItem::InsertToDB()
             if(!query.exec())
             {
                 qDebug()<<"更新数据失败"<<query.lastError().text();
+                return;
             }
             qDebug()<<"更新成功";
         }

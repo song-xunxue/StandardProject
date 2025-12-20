@@ -11,6 +11,8 @@
 #include <QJsonObject>
 #include <QMessageBox>
 
+
+
 MusicPlayer::MusicPlayer(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::MusicPlayer)
@@ -62,10 +64,21 @@ void MusicPlayer::ConnectSignalWithSlot()
     connect(volumetool,&VolumeTool::MusicVolumeChange,this,&MusicPlayer::onMusicVolumeChange);
     //同步控制栏的歌手 图片 专辑 有效歌曲文件切换信号
     connect(player,&QMediaPlayer::metaDataAvailableChanged,this,&MusicPlayer::onMetaDataAvailableChanged);
+
+    //系统托盘双击显示
+    connect(trayIcon,&QSystemTrayIcon::activated,this,&MusicPlayer::onTrayIconActivate);
 }
 
 void MusicPlayer::InitUI()
 {
+    //添加到系统托盘
+    trayIcon=new QSystemTrayIcon(this);
+    trayIcon->setIcon(QIcon(":/images/tubiao.png"));
+    QMenu* trayMenu=new QMenu(this);
+    trayMenu->addAction("退出",this,&MusicPlayer::quitMusic);
+    trayIcon->setContextMenu(trayMenu);
+    trayIcon->show();
+
     this->setWindowFlag(Qt::FramelessWindowHint);//设置无边框
     //无边框有两个问题
     //1.无法移动窗口
@@ -193,7 +206,7 @@ void MusicPlayer::InitMusicDB()
         QMessageBox::critical(this, "创建MusicInfo失败", query.lastError().text());
         return;
     }
-    qDebug()<<"创建MusicInfo成功";
+    qDebug()<<"打开MusicInfo成功";
 
 }
 
@@ -201,9 +214,7 @@ void MusicPlayer::InitMusicList()
 {
     //从数据库加载数据到MusicList
     musiclist.ReadFromDB();
-
     onrefreshLikeMusic();//三个页面的刷新
-
 
 }
 
@@ -268,12 +279,7 @@ void MusicPlayer::PlayByIndex(CommonPage *page,int index)
 
 void MusicPlayer::on_quit_clicked()
 {
-    //关闭之前把数据更新到数据库中
-    musiclist.WriteToDB();
-    //关闭数据库连接
-    musicdb.close();
-    //关闭按钮
-    close();
+    hide();
 }
 
 void MusicPlayer::onLeftFormClick(size_t pageID)
@@ -594,4 +600,35 @@ void MusicPlayer::on_max_clicked()
 void MusicPlayer::on_skin_clicked()
 {
     QMessageBox::information(this, "温馨提示", "换肤功能正在紧急维护中...");
+}
+
+void MusicPlayer::onTrayIconActivate(QSystemTrayIcon::ActivationReason reason)
+{
+    if(reason ==QSystemTrayIcon::DoubleClick)
+    {
+        this->show();
+        this->raise();//顶制窗口
+        if (this->isMinimized()) {
+            this->showNormal();
+        }
+        return;
+    }
+//    单击切换显示还是不显示
+//    if(reason ==QSystemTrayIcon::Trigger)
+//    {
+//        if(this->isHidden())
+//            this->show();
+//        else
+//            this->hide();
+//    }
+}
+
+void MusicPlayer::quitMusic()
+{
+    //关闭之前把数据更新到数据库中
+    musiclist.WriteToDB();
+    //关闭数据库连接
+    musicdb.close();
+    //关闭按钮
+    close();
 }

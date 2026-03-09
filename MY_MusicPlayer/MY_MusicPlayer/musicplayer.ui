@@ -874,7 +874,7 @@ QPushButton:hover
             <item>
              <widget class="QStackedWidget" name="stackedWidget">
               <property name="currentIndex">
-               <number>3</number>
+               <number>0</number>
               </property>
               <widget class="QWidget" name="recPage">
                <layout class="QHBoxLayout" name="horizontalLayout_12">
@@ -909,8 +909,8 @@ QPushButton:hover
                     <rect>
                      <x>0</x>
                      <y>0</y>
-                     <width>157</width>
-                     <height>125</height>
+                     <width>818</width>
+                     <height>498</height>
                     </rect>
                    </property>
                    <property name="maximumSize">

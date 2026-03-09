@@ -519,7 +519,7 @@ public:
         scrollArea->setWidgetResizable(true);
         scrollAreaWidgetContents = new QWidget();
         scrollAreaWidgetContents->setObjectName(QString::fromUtf8("scrollAreaWidgetContents"));
-        scrollAreaWidgetContents->setGeometry(QRect(0, 0, 157, 125));
+        scrollAreaWidgetContents->setGeometry(QRect(0, 0, 818, 498));
         scrollAreaWidgetContents->setMaximumSize(QSize(16777215, 16777215));
         verticalLayout_9 = new QVBoxLayout(scrollAreaWidgetContents);
         verticalLayout_9->setSpacing(5);
@@ -788,7 +788,7 @@ public:
 
         retranslateUi(MusicPlayer);
 
-        stackedWidget->setCurrentIndex(3);
+        stackedWidget->setCurrentIndex(0);
 
 
         QMetaObject::connectSlotsByName(MusicPlayer);

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能 NLP 文献解析助手</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1> 智能 NLP 解析助手</h1>
+            <p class="subtitle">第一版：PDF解析与大模型智能分词提取</p>
+        </header>
+
+        <!-- 输入操作区 -->
+        <div class="input-section">
+            <div class="tabs">
+                <button class="tab-btn active" id="tab-text" onclick="switchTab('text')">📝 输入文本</button>
+                <button class="tab-btn" id="tab-pdf" onclick="switchTab('pdf')">📄 上传 PDF</button>
+            </div>
+
+            <!-- 文本输入面板 -->
+            <div id="panel-text" class="panel active">
+                <textarea id="user-text" placeholder="请输入需要进行分词和分析的文本..."></textarea>
+                <button id="btn-text" class="submit-btn" onclick="analyzeText()">开始分析</button>
+            </div>
+
+            <!-- PDF上传面板 -->
+            <div id="panel-pdf" class="panel">
+                <div class="file-upload-box">
+                    <input type="file" id="pdf-file" accept=".pdf">
+                    <p class="hint">请选择 PDF 论文或文献 (暂仅解析前两页以供演示)</p>
+                </div>
+                <button id="btn-pdf" class="submit-btn" onclick="analyzePDF()">提取并分析</button>
+            </div>
+
+            <div id="message-box" class="message"></div>
+        </div>
+
+        <!-- 结果展示区 -->
+        <div class="result-section">
+            <h3> NLP 解析结果</h3>
+            <div class="result-box" id="result-box">
+                <div class="placeholder-text">等待分析结果...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 配置后端API地址
+        const API_BASE_URL = 'http://127.0.0.1:5000/api';
+
+        // DOM 元素
+        const resultBox = document.getElementById('result-box');
+        const messageBox = document.getElementById('message-box');
+
+        // 切换面板 (纯UI交互)
+        function switchTab(type) {
+            document.getElementById('tab-text').classList.remove('active');
+            document.getElementById('tab-pdf').classList.remove('active');
+            document.getElementById('panel-text').classList.remove('active');
+            document.getElementById('panel-pdf').classList.remove('active');
+
+            document.getElementById(`tab-${type}`).classList.add('active');
+            document.getElementById(`panel-${type}`).classList.add('active');
+        }
+
+        // 显示提示信息
+        function showMessage(msg, type) {
+            messageBox.innerText = msg;
+            messageBox.className = `message ${type}`;
+        }
+
+        // 更新结果显示区
+        function renderResult(content) {
+            // 将换行符转为 HTML 的 <br> 标签以保持格式
+            const formattedContent = content.replace(/\n/g, '<br>');
+            resultBox.innerHTML = `<div class="analysis-content">${formattedContent}</div>`;
+        }
+
+        // 处理纯文本分析
+        async function analyzeText() {
+            const text = document.getElementById('user-text').value.trim();
+            if (!text) {
+                showMessage('请输入文本内容！', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-text');
+            btn.disabled = true;
+            btn.innerText = 'AI 努力分词中...';
+            showMessage('正在调用大模型，请稍候...', 'normal');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/analyze_text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('分析完成！', 'success');
+                    renderResult(data.result);
+                } else {
+                    showMessage(data.error || '分析失败', 'error');
+                }
+            } catch (error) {
+                showMessage('请求失败，请检查后端服务是否启动。', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '开始分析';
+            }
+        }
+
+        // 处理 PDF 上传与分析
+        async function analyzePDF() {
+            const fileInput = document.getElementById('pdf-file');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showMessage('请先选择一个 PDF 文件！', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btn-pdf');
+            btn.disabled = true;
+            btn.innerText = '解析PDF并提交AI...';
+            showMessage('正在提取 PDF 文本并调用大模型...', 'normal');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                // fetch 上传文件不需要设 Content-Type，浏览器会自动处理边界 boundary
+                const response = await fetch(`${API_BASE_URL}/analyze_pdf`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('PDF 提取与分析完成！', 'success');
+                    renderResult(data.result);
+                } else {
+                    showMessage(data.error || '解析失败', 'error');
+                }
+            } catch (error) {
+                showMessage('请求失败，请检查后端服务。', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '提取并分析';
+            }
+        }
+    </script>
+</body>
+</html>

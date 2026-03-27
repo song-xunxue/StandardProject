@@ -160,6 +160,7 @@ class IdiomGame:
                 )
                 sdk_response = None
                 for message in messages:
+                    print(message,end="\n")
                     if(hasattr(message,"role") and message.role=="assistant"):
                         sdk_response = message.content.strip() #移除首尾空白
                         sdk_response = "".join(filter(lambda x: '\u4e00' <= x <= '\u9fff', sdk_response)) #只保留中文

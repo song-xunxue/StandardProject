@@ -1,0 +1,203 @@
+/* 全局样式 */
+:root {
+    --primary-color: #2c3e50;
+    --secondary-color: #c0392b; /* 中国红 */
+    --bg-color: #f4f1ea; /* 宣纸白 */
+    --card-bg: #ffffff;
+    --text-color: #333333;
+    --border-radius: 12px;
+}
+
+body {
+    font-family: 'PingFang SC', 'Microsoft YaHei', serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+/* 游戏主容器 */
+.game-container {
+    background: var(--card-bg);
+    width: 100%;
+    max-width: 500px;
+    padding: 30px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e8e6df;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    color: var(--secondary-color);
+    margin: 0 0 10px 0;
+    font-size: 28px;
+    letter-spacing: 2px;
+}
+
+.subtitle {
+    color: #7f8c8d;
+    font-size: 14px;
+    margin: 0;
+}
+
+/* 当前成语展示区 */
+.current-stage {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #fdfbf7;
+    border: 2px dashed #dcdacb;
+    border-radius: var(--border-radius);
+}
+
+.current-stage .label {
+    display: block;
+    font-size: 14px;
+    color: #95a5a6;
+    margin-bottom: 10px;
+}
+
+.idiom-display {
+    font-size: 42px;
+    font-weight: bold;
+    color: var(--secondary-color);
+    letter-spacing: 5px;
+}
+
+/* 控制面板区 */
+.control-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+input[type="text"] {
+    width: 100%;
+    padding: 15px;
+    font-size: 18px;
+    border: 2px solid #ecf0f1;
+    border-radius: 8px;
+    box-sizing: border-box;
+    text-align: center;
+    letter-spacing: 2px;
+    transition: border-color 0.3s;
+}
+
+input[type="text"]:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+}
+
+button {
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+    background-color: #3498db;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.1s;
+}
+
+button:hover:not(:disabled) {
+    background-color: #2980b9;
+}
+
+button:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.danger-btn {
+    background-color: #e74c3c;
+}
+
+.danger-btn:hover {
+    background-color: #c0392b;
+}
+
+.message {
+    text-align: center;
+    font-size: 14px;
+    height: 20px;
+}
+
+.message.success { color: #27ae60; }
+.message.error { color: #e74c3c; }
+.message.normal { color: #f39c12; }
+
+/* 历史记录区 */
+.history-section {
+    margin-top: 30px;
+    border-top: 1px solid #ecf0f1;
+    padding-top: 20px;
+}
+
+.history-section h3 {
+    margin-top: 0;
+    font-size: 16px;
+    color: var(--primary-color);
+}
+
+.history-list {
+    max-height: 250px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 5px;
+}
+
+/* 自定义滚动条 */
+.history-list::-webkit-scrollbar { width: 6px; }
+.history-list::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+.history-list::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 3px; }
+
+.history-item {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    border-left: 4px solid #3498db;
+}
+
+.history-item .time {
+    font-size: 12px;
+    color: #95a5a6;
+    margin-bottom: 5px;
+}
+
+.history-item .dialogue {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-tag, .ai-tag {
+    font-weight: bold;
+}
+
+.user-tag { color: #2c3e50; }
+.ai-tag { color: var(--secondary-color); }
+.word { font-weight: normal; }
+.arrow { color: #bdc3c7; }

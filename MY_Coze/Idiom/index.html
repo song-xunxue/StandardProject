@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 智能成语接龙</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <!-- 头部标题 -->
+        <header>
+            <h1>📜 智能成语接龙</h1>
+            <p class="subtitle">与 AI 进行一场词汇较量吧！</p>
+        </header>
+
+        <!-- 当前成语展示区 -->
+        <div class="current-stage">
+            <span class="label">当前需接成语</span>
+            <div id="current-idiom" class="idiom-display">加载中...</div>
+        </div>
+
+        <!-- 游戏操作区 -->
+        <div class="control-panel">
+            <input type="text" id="user-input" maxlength="4" placeholder="请输入四字成语..." autocomplete="off">
+            <div class="btn-group">
+                <button id="submit-btn" onclick="playIdiom()">发送 (Enter)</button>
+                <button id="restart-btn" class="danger-btn" onclick="restartGame()">认输 / 换一个</button>
+            </div>
+            <div id="message-box" class="message"></div>
+        </div>
+
+        <!-- 历史记录展示区 -->
+        <div class="history-section">
+            <h3>📖 对战记录</h3>
+            <div class="history-list" id="history-list">
+                <!-- 记录将通过 JS 动态生成在这里 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 配置后端API地址 (注意与你的 Flask 端口保持一致)
+        const API_BASE_URL = 'http://127.0.0.1:5000/api';
+
+        // DOM 元素
+        const currentIdiomEl = document.getElementById('current-idiom');
+        const userInputEl = document.getElementById('user-input');
+        const historyListEl = document.getElementById('history-list');
+        const messageBoxEl = document.getElementById('message-box');
+        const submitBtn = document.getElementById('submit-btn');
+
+        // 初始化游戏 异步函数
+        async function initGame() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/init`);
+                const data = await response.json();
+                updateUI(data.current_idiom, data.history);
+                showMessage('游戏初始化成功，请开始接龙！', 'success');
+            } catch (error) {
+                showMessage('无法连接到服务器，请检查后端是否运行。', 'error');
+            }
+        }
+
+        // 发送成语 (玩游戏)
+        async function playIdiom() {
+            const idiom = userInputEl.value.trim();
+
+            if (idiom.length !== 4) {
+                showMessage('请输入正确的四字成语！', 'error');
+                return;
+            }
+
+            // UI 加载状态
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'AI 思考中...';
+            showMessage('等待 AI 回复...', 'normal');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/play`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idiom: idiom })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateUI(data.current_idiom, data.history);
+                    userInputEl.value = '';
+                    showMessage('接龙成功！轮到你了。', 'success');
+                } else {
+                    showMessage(data.error || '接龙失败', 'error');
+                }
+            } catch (error) {
+                showMessage('请求失败，请稍后再试。', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = '发送 (Enter)';
+                userInputEl.focus();
+            }
+        }
+
+        // 认输 / 重新开始
+        async function restartGame() {
+            if (!confirm("确定要认输并重新开始吗？")) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/restart`, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    updateUI(data.current_idiom, data.history);
+                    userInputEl.value = '';
+                    showMessage('已重新开始新一局！', 'success');
+                } else {
+                    showMessage(data.error || '重置失败', 'error');
+                }
+            } catch (error) {
+                showMessage('请求失败，请稍后再试。', 'error');
+            }
+        }
+
+        // 更新界面数据
+        function updateUI(currentIdiom, history) {
+            if (currentIdiom) {
+                currentIdiomEl.innerText = currentIdiom;
+            }
+
+            if (history && Array.isArray(history)) {
+                historyListEl.innerHTML = '';
+                // 历史记录数组是按最新在前排列的，将其渲染出来
+                history.forEach(item => {
+                    // 注意：后端 app.py 中保存 user 时 key 多了一个冒号 "user:
+                    const userWord = item["user:"] || item["user"] || "未知";
+                    const aiWord = item["ai"] || "未知";
+                    const time = item["time"] || "";
+
+                    const historyCard = document.createElement('div');
+                    historyCard.className = 'history-item';
+                    historyCard.innerHTML = `
+                        <div class="time">${time}</div>
+                        <div class="dialogue">
+                            <span class="user-tag">你: <span class="word">${userWord}</span></span>
+                            <span class="arrow">➔</span>
+                            <span class="ai-tag">AI: <span class="word">${aiWord}</span></span>
+                        </div>
+                    `;
+                    historyListEl.appendChild(historyCard);
+                });
+            }
+        }
+
+        // 显示提示信息
+        function showMessage(msg, type) {
+            messageBoxEl.innerText = msg;
+            messageBoxEl.className = `message ${type}`;
+            setTimeout(() => { messageBoxEl.innerText = ''; }, 3000);
+        }
+
+        // 监听回车键提交
+        userInputEl.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                playIdiom();
+            }
+        });
+
+        // 页面加载完毕后初始化
+        window.onload = initGame;
+    </script>
+</body>
+</html>

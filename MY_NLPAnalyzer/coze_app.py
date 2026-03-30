@@ -76,7 +76,7 @@ class NLPAgent:
             #             return {'success': True, 'result': ai_response}
             #     return {'success': False, 'error': '未找到 AI 的回复内容'}
 
-            # 对其他语言的支持
+            # 对其他语言的处理支持 但是智能体暂不支持
             if chat.status == ChatStatus.COMPLETED:
                 # 1. 从 chat_poll 中获取消息
                 messages = self.coze.chat.messages.list(

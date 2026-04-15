@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - NLP 文献解析助手</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="login-body">
+    <div class="login-wrapper">
+        <div class="login-card">
+            <!-- Logo 区域 -->
+            <div class="login-header">
+                <div class="login-logo">
+                    <span class="login-logo-icon">N</span>
+                </div>
+                <h1 class="login-title">NLP 文献解析助手</h1>
+                <p class="login-subtitle">智能分词与关键词提取</p>
+            </div>
+
+            <!-- 登录/注册 标签切换 -->
+            <div class="login-tabs">
+                <button class="login-tab active" id="tab-login" onclick="switchAuthTab('login')">登录</button>
+                <button class="login-tab" id="tab-register" onclick="switchAuthTab('register')">注册</button>
+            </div>
+
+            <!-- 登录表单 -->
+            <form id="form-login" class="login-form active" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label">邮箱</label>
+                    <input type="email" id="login-email" class="form-input" placeholder="请输入邮箱地址" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">密码</label>
+                    <input type="password" id="login-password" class="form-input" placeholder="请输入密码" required>
+                </div>
+                <button type="submit" class="login-btn" id="btn-login">
+                    <span class="btn-text">登录</span>
+                </button>
+            </form>
+
+            <!-- 注册表单 -->
+            <form id="form-register" class="login-form" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label class="form-label">邮箱</label>
+                    <input type="email" id="reg-email" class="form-input" placeholder="请输入邮箱地址" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">昵称（可选）</label>
+                    <input type="text" id="reg-nickname" class="form-input" placeholder="给自己取个名字吧">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">密码</label>
+                    <input type="password" id="reg-password" class="form-input" placeholder="请输入密码（至少6位）" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">确认密码</label>
+                    <input type="password" id="reg-confirm" class="form-input" placeholder="再次输入密码" required>
+                </div>
+                <button type="submit" class="login-btn" id="btn-register">
+                    <span class="btn-text">注册</span>
+                </button>
+            </form>
+
+            <!-- 提示消息 -->
+            <div id="auth-message" class="auth-message"></div>
+        </div>
+
+        <!-- 底部装饰 -->
+        <p class="login-footer">MY_NLPAnalyzer &copy; 2026</p>
+    </div>
+
+    <script>
+        /**
+         * 登录/注册页面交互
+         *
+         * 作者: 李文煜
+         * 日期: 2026-04-15
+         *
+         * 2026-04-15
+         * 变更说明：
+         *   1. 新建登录/注册页面
+         *   2. Phase 2.1 为 mock 模式，Phase 2.2 对接真实 JWT 接口
+         */
+
+        const API_BASE_URL = 'http://127.0.0.1:5001/api';
+        // Phase 2.2: 使用真实 JWT 认证
+        const MOCK_AUTH = false;
+
+        // 切换登录/注册标签
+        function switchAuthTab(tab) {
+            document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+            document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+            document.getElementById('form-login').classList.toggle('active', tab === 'login');
+            document.getElementById('form-register').classList.toggle('active', tab === 'register');
+            clearAuthMessage();
+        }
+
+        // 显示提示消息
+        function showAuthMessage(msg, type) {
+            const el = document.getElementById('auth-message');
+            el.textContent = msg;
+            el.className = `auth-message ${type}`;
+        }
+
+        function clearAuthMessage() {
+            const el = document.getElementById('auth-message');
+            el.textContent = '';
+            el.className = 'auth-message';
+        }
+
+        // 设置按钮加载状态
+        function setBtnLoading(btnId, loading) {
+            const btn = document.getElementById(btnId);
+            const text = btn.querySelector('.btn-text');
+            if (loading) {
+                btn.disabled = true;
+                text.textContent = '处理中...';
+            } else {
+                btn.disabled = false;
+                text.textContent = btnId === 'btn-login' ? '登录' : '注册';
+            }
+        }
+
+        // 登录处理
+        async function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+
+            if (!email || !password) {
+                showAuthMessage('请填写邮箱和密码', 'error');
+                return;
+            }
+
+            if (MOCK_AUTH) {
+                // Phase 2.1: mock 模式，直接跳转
+                setBtnLoading('btn-login', true);
+                showAuthMessage('登录成功，正在跳转...', 'success');
+                localStorage.setItem('mock_user', JSON.stringify({
+                    email: email,
+                    nickname: email.split('@')[0]
+                }));
+                setTimeout(() => { window.location.href = '/'; }, 600);
+                return;
+            }
+
+            // Phase 2.2: 真实认证
+            setBtnLoading('btn-login', true);
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    localStorage.setItem('token', data.data.token);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                    showAuthMessage('登录成功，正在跳转...', 'success');
+                    setTimeout(() => { window.location.href = '/'; }, 600);
+                } else {
+                    showAuthMessage(data.error || '登录失败', 'error');
+                }
+            } catch (err) {
+                showAuthMessage('网络错误，请检查后端服务是否启动', 'error');
+            } finally {
+                setBtnLoading('btn-login', false);
+            }
+        }
+
+        // 注册处理
+        async function handleRegister(event) {
+            event.preventDefault();
+            const email = document.getElementById('reg-email').value.trim();
+            const nickname = document.getElementById('reg-nickname').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const confirm = document.getElementById('reg-confirm').value;
+
+            if (!email || !password) {
+                showAuthMessage('请填写邮箱和密码', 'error');
+                return;
+            }
+            if (password.length < 6) {
+                showAuthMessage('密码至少6位', 'error');
+                return;
+            }
+            if (password !== confirm) {
+                showAuthMessage('两次输入的密码不一致', 'error');
+                return;
+            }
+
+            if (MOCK_AUTH) {
+                // Phase 2.1: mock 模式，直接跳转
+                setBtnLoading('btn-register', true);
+                showAuthMessage('注册成功，正在跳转...', 'success');
+                localStorage.setItem('mock_user', JSON.stringify({
+                    email: email,
+                    nickname: nickname || email.split('@')[0]
+                }));
+                setTimeout(() => { window.location.href = '/'; }, 600);
+                return;
+            }
+
+            // Phase 2.2: 真实认证
+            setBtnLoading('btn-register', true);
+            try {
+                const response = await fetch(`${API_BASE_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, nickname: nickname || undefined })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    localStorage.setItem('token', data.data.token);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                    showAuthMessage('注册成功，正在跳转...', 'success');
+                    setTimeout(() => { window.location.href = '/'; }, 600);
+                } else {
+                    showAuthMessage(data.error || '注册失败', 'error');
+                }
+            } catch (err) {
+                showAuthMessage('网络错误，请检查后端服务是否启动', 'error');
+            } finally {
+                setBtnLoading('btn-register', false);
+            }
+        }
+
+        // 已登录用户直接跳转主页
+        (function checkAuth() {
+            const token = localStorage.getItem('token') || localStorage.getItem('mock_user');
+            if (token) {
+                window.location.href = '/';
+            }
+        })();
+    </script>
+</body>
+</html>

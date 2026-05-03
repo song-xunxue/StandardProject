@@ -8,6 +8,10 @@
 变更说明：
   1. 新建配置模块，从 .env 读取所有环境变量
   2. 定义支持的模型提供商配置
+
+2026-04-28
+变更说明：
+  1. 新增 Redis 连接配置（REDIS_URL），用于 Phase 2.3 缓存层
 """
 
 import os
@@ -32,6 +36,9 @@ class Config:
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'change-this-secret-in-production')
     JWT_ALGORITHM = 'HS256'
     JWT_EXPIRE_HOURS = 24
+
+    # Redis 配置
+    REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 
     # 文件上传
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'uploads')

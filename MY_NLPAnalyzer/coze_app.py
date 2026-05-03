@@ -25,8 +25,8 @@ if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5001))
     print(f"""
     ╔══════════════════════════════════════════╗
-    ║   NLP 文献解析助手 启动成功              ║
-    ║   地址: http://127.0.0.1:{port}            ║
+    ║   NLP 文献解析助手 启动成功                  ║
+    ║   地址: http://127.0.0.1:{port}           ║
     ╚══════════════════════════════════════════╝
     """)
     app.run(debug=True, port=port, use_reloader=False)

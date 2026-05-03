@@ -7,6 +7,10 @@
 2026-04-15
 变更说明：
   1. 新建认证路由蓝图，支持注册/登录/获取用户信息
+
+2026-04-28
+变更说明：
+  1. 新增 /api/auth/logout 登出接口，将 JWT 加入黑名单
 """
 
 from flask import Blueprint, request, g
@@ -108,3 +112,14 @@ def delete_key(provider):
     if not ok:
         return error_response('未找到该提供商的 API Key', 404)
     return success_response(message='API Key 已删除')
+
+
+@auth_bp.route('/logout', methods=['POST'])
+@login_required
+def logout():
+    """登出（将当前 JWT 加入黑名单）"""
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.replace('Bearer ', '') if auth_header.startswith('Bearer ') else ''
+    if token and auth_service.blacklist_token(token):
+        return success_response(message='登出成功')
+    return success_response(message='登出成功')

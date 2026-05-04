@@ -11,6 +11,10 @@
  *   3. 模型配置从右栏移至左栏底部设置面板
  *   4. 支持提供商配置保存/加载（localStorage）
  *   5. 保留粉色系配色方案
+ *
+ * 2026-05-04
+ * 变更说明：
+ *   1. Phase 3: 新增知识库文档管理样式（文档列表、chunks 卡片、状态指示器）
  */
 
 /* ========== 设计令牌 ========== */
@@ -1278,4 +1282,187 @@ textarea::placeholder { color: var(--text-light); }
     }
 
     .feature-card { min-width: 80px; padding: 10px 12px; }
+}
+
+/* ========== 知识库文档管理（Phase 3） ========== */
+
+.kb-item-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.kb-upload-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    opacity: 0.5;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.kb-upload-btn:hover {
+    opacity: 1;
+    background: var(--border-color);
+}
+
+.kb-docs-panel {
+    margin: 4px 0 4px 24px;
+    border-left: 2px solid var(--border-color);
+    padding-left: 8px;
+}
+
+.kb-docs-empty, .kb-docs-loading {
+    color: var(--text-light);
+    font-size: 11px;
+    padding: 4px 0;
+}
+
+.doc-item {
+    margin: 4px 0;
+}
+
+.doc-item-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    padding: 3px 4px;
+    border-radius: 6px;
+    transition: var(--transition);
+}
+
+.doc-item-header:hover {
+    background: var(--border-color);
+}
+
+.doc-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.doc-status-dot.uploaded { background: #ffd700; }
+.doc-status-dot.processing { background: #4fc3f7; animation: pulse 1.5s infinite; }
+.doc-status-dot.processed { background: #81c784; }
+.doc-status-dot.failed { background: #ef5350; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.doc-name {
+    font-size: 12px;
+    color: var(--text-dark);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100px;
+}
+
+.doc-info {
+    font-size: 10px;
+    color: var(--text-light);
+    margin-left: auto;
+}
+
+.doc-delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-light);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.doc-item-header:hover .doc-delete-btn {
+    opacity: 1;
+}
+
+.doc-delete-btn:hover {
+    color: #ef5350;
+    background: #ffe0e0;
+}
+
+.doc-meta {
+    font-size: 10px;
+    color: var(--text-light);
+    padding: 0 4px 2px 20px;
+}
+
+.doc-error {
+    font-size: 10px;
+    color: #ef5350;
+    padding: 0 4px 2px 20px;
+}
+
+/* Chunks 可视化 */
+.doc-chunks-panel {
+    margin: 2px 0 2px 20px;
+}
+
+.chunks-header {
+    font-size: 10px;
+    color: var(--text-light);
+    padding: 2px 0 4px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 4px;
+}
+
+.chunk-card {
+    background: var(--bg-color);
+    border-radius: 6px;
+    padding: 5px 8px;
+    margin: 3px 0;
+    border-left: 3px solid var(--primary-light);
+}
+
+.chunk-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+
+.chunk-index {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--primary-dark);
+}
+
+.chunk-page {
+    font-size: 10px;
+    color: var(--text-light);
+    background: var(--border-color);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.chunk-size {
+    font-size: 10px;
+    color: var(--text-light);
+    margin-left: auto;
+}
+
+.chunk-content {
+    font-size: 11px;
+    color: var(--text-color);
+    line-height: 1.4;
+    word-break: break-all;
+}
+
+.chunk-empty {
+    font-size: 10px;
+    color: var(--text-light);
+    padding: 4px 0;
 }

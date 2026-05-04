@@ -12,6 +12,11 @@
 2026-04-28
 变更说明：
   1. 新增 Redis 连接配置（REDIS_URL），用于 Phase 2.3 缓存层
+
+2026-05-04
+变更说明：
+  1. 新增 SQLAlchemy/SQLite 配置，用于 Phase 2.4 持久化
+  2. 新增 Fernet 加密密钥配置，用于 API Key 加密存储
 """
 
 import os
@@ -37,8 +42,19 @@ class Config:
     JWT_ALGORITHM = 'HS256'
     JWT_EXPIRE_HOURS = 24
 
-    # Redis 配置
+    # Redis 配置（JWT 黑名单仍在 Redis）
     REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+
+    # SQLAlchemy / SQLite 配置
+    _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        'DATABASE_URL',
+        'sqlite:///' + os.path.join(_DATA_DIR, 'nlp.db')
+    )
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Fernet 对称加密密钥（32 字节 Base64 编码字符串）
+    FERNET_KEY = os.environ.get('FERNET_KEY', '')
 
     # 文件上传
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'uploads')

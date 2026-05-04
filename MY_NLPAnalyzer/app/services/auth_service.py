@@ -1,5 +1,5 @@
 """
-JWT 认证服务（Redis 版本）
+JWT 认证服务（SQLAlchemy 版本）
 
 作者: 李文煜
 日期: 2026-04-15
@@ -15,6 +15,11 @@ JWT 认证服务（Redis 版本）
   1. 用户存储从内存字典迁移到 Redis Hash
   2. 新增 JWT Token 黑名单机制（支持主动登出/令牌吊销）
   3. 启动时自动预置默认管理员账户
+
+2026-05-04
+变更说明：
+  1. 用户存储从 Redis Hash 迁移到 SQLAlchemy ORM
+  2. JWT Token 黑名单仍使用 Redis（需要 TTL 自动过期）
 """
 
 import bcrypt
@@ -22,32 +27,32 @@ import jwt
 from datetime import datetime, timedelta, timezone
 
 from app.config import Config
+from app.extensions import db
+from app.models.user import User
 from app.services import redis_service as redis
 
 
 # ========== Key 前缀 ==========
 
-PREFIX_USER = 'nlp:user:'
-PREFIX_USER_INDEX = 'nlp:user_emails'  # Set: 所有已注册邮箱
-PREFIX_JWT_BLACKLIST = 'nlp:jwt_bl:'   # JWT 黑名单，TTL = token 剩余有效期
+PREFIX_JWT_BLACKLIST = 'nlp:jwt_bl:'   # JWT 黑名单，TTL = token 剩余有效期（仍用 Redis）
 
 
 def _seed_default_users():
-    """预置默认用户（管理员账户），仅在 Redis 中不存在时创建"""
+    """预置默认用户（管理员账户），仅在数据库中不存在时创建"""
     admin_email = 'root@root'
-    if redis.exists(PREFIX_USER + admin_email):
+    existing = User.query.filter_by(email=admin_email).first()
+    if existing:
         return
     admin_password = 'root'
     admin_hash = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    user_data = {
-        'email': admin_email,
-        'password_hash': admin_hash,
-        'nickname': '管理员',
-        'role': 'admin',
-        'created_at': datetime.now(timezone.utc).isoformat()
-    }
-    redis.hset_dict(PREFIX_USER + admin_email, user_data)
-    redis.sadd(PREFIX_USER_INDEX, admin_email)
+    admin = User(
+        email=admin_email,
+        password_hash=admin_hash,
+        nickname='管理员',
+        role='admin',
+    )
+    db.session.add(admin)
+    db.session.commit()
 
 
 def init_default_users():
@@ -71,7 +76,7 @@ def register(email, password, nickname=None):
         return False, '邮箱和密码不能为空', None
 
     # 检查邮箱是否已注册
-    if redis.exists(PREFIX_USER + email):
+    if User.query.filter_by(email=email).first():
         return False, '该邮箱已被注册', None
 
     if len(password) < 6:
@@ -80,20 +85,17 @@ def register(email, password, nickname=None):
     # bcrypt 哈希密码
     password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-    user = {
-        'email': email,
-        'password_hash': password_hash,
-        'nickname': nickname or email.split('@')[0],
-        'created_at': datetime.now(timezone.utc).isoformat()
-    }
-
-    # 存储到 Redis
-    redis.hset_dict(PREFIX_USER + email, user)
-    redis.sadd(PREFIX_USER_INDEX, email)
+    user = User(
+        email=email,
+        password_hash=password_hash,
+        nickname=nickname or email.split('@')[0],
+    )
+    db.session.add(user)
+    db.session.commit()
 
     return True, '注册成功', {
-        'email': user['email'],
-        'nickname': user['nickname']
+        'email': user.email,
+        'nickname': user.nickname,
     }
 
 
@@ -111,21 +113,21 @@ def login(email, password):
     if not email or not password:
         return False, '邮箱和密码不能为空', None
 
-    user = redis.hget_dict(PREFIX_USER + email)
+    user = User.query.filter_by(email=email).first()
     if not user:
         return False, '邮箱或密码错误', None
 
-    if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+    if not bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
         return False, '邮箱或密码错误', None
 
     # 生成 JWT Token
-    token = _create_token(email, user['nickname'])
+    token = _create_token(user.email, user.nickname)
 
     return True, '登录成功', {
         'token': token,
         'user': {
-            'email': user['email'],
-            'nickname': user['nickname']
+            'email': user.email,
+            'nickname': user.nickname,
         }
     }
 
@@ -141,7 +143,7 @@ def verify_token(token):
         验证成功返回用户信息字典，失败返回 None
     """
     try:
-        # 先检查黑名单
+        # 先检查黑名单（Redis）
         if redis.exists(PREFIX_JWT_BLACKLIST + token):
             return None
 
@@ -150,13 +152,13 @@ def verify_token(token):
         if not email:
             return None
 
-        user = redis.hget_dict(PREFIX_USER + email)
+        user = User.query.filter_by(email=email).first()
         if not user:
             return None
 
         return {
-            'email': user['email'],
-            'nickname': user['nickname']
+            'email': user.email,
+            'nickname': user.nickname,
         }
     except jwt.ExpiredSignatureError:
         return None
@@ -166,7 +168,7 @@ def verify_token(token):
 
 def blacklist_token(token):
     """
-    将 Token 加入黑名单（用于登出）
+    将 Token 加入黑名单（用于登出，仍使用 Redis TTL）
 
     参数：
         token: JWT Token 字符串
@@ -192,13 +194,13 @@ def blacklist_token(token):
 
 def get_user(email):
     """获取用户信息（不含密码）"""
-    user = redis.hget_dict(PREFIX_USER + email)
+    user = User.query.filter_by(email=email).first()
     if not user:
         return None
     return {
-        'email': user['email'],
-        'nickname': user['nickname'],
-        'created_at': user['created_at']
+        'email': user.email,
+        'nickname': user.nickname,
+        'created_at': user.created_at.isoformat() if user.created_at else None,
     }
 
 

@@ -10,6 +10,10 @@
  *   2. 新增认证、知识库管理、模型配置、参数管理模块
  *   3. 支持三栏布局交互（折叠/展开/切换）
  *   4. Phase 2.2 对接真实 JWT 认证 API
+ *
+ * 2026-05-04
+ * 变更说明：
+ *   1. Phase 3: 知识库文档管理（上传、列表、chunks 可视化）
  */
 
 // ========== 配置 ==========
@@ -221,6 +225,8 @@ function switchKB(kbId) {
         if (el) el.classList.add('active');
         const kb = knowledgeBases.find(k => k.id === kbId);
         document.getElementById('current-kb-label').textContent = kb ? kb.name : kbId;
+        // 加载文档列表
+        loadKBDocuments(kbId);
     }
 
     // 清空消息
@@ -236,10 +242,17 @@ function renderKBList() {
     }
 
     list.innerHTML = knowledgeBases.map(kb => `
-        <div class="kb-item ${currentKB === kb.id ? 'active' : ''}" data-kb-id="${kb.id}" onclick="switchKB('${kb.id}')">
-            <span class="kb-icon">&#128218;</span>
-            <span class="kb-name">${kb.name}</span>
-            <button class="kb-delete-btn" onclick="deleteKnowledgeBase('${kb.id}', event)" title="删除">&#10005;</button>
+        <div class="kb-item ${currentKB === kb.id ? 'active' : ''}" data-kb-id="${kb.id}">
+            <div class="kb-item-header" onclick="switchKB('${kb.id}')">
+                <span class="kb-icon">&#128218;</span>
+                <span class="kb-name">${kb.name}</span>
+                <button class="kb-upload-btn" onclick="triggerKBUpload('${kb.id}', event)" title="上传文档">&#128206;</button>
+                <button class="kb-delete-btn" onclick="deleteKnowledgeBase('${kb.id}', event)" title="删除">&#10005;</button>
+            </div>
+            <div class="kb-docs-panel" id="kb-docs-${kb.id}" style="display:none;">
+                <div class="kb-docs-loading">加载中...</div>
+            </div>
+            <input type="file" id="kb-file-${kb.id}" accept=".pdf" style="display:none;" onchange="handleKBUpload('${kb.id}', this)">
         </div>
     `).join('');
 }
@@ -627,4 +640,171 @@ function updateStatusBar() {
     document.getElementById('status-kb').textContent = `知识库: ${kbName}`;
     document.getElementById('status-model').textContent = `模型: ${config.model || 'Coze 智能体'}`;
     document.getElementById('status-provider').textContent = `提供商: ${providerInfo.name}`;
+}
+
+// ========== 文档管理模块（Phase 3） ==========
+
+/**
+ * 触发知识库文件上传
+ */
+function triggerKBUpload(kbId, event) {
+    event.stopPropagation();
+    document.getElementById(`kb-file-${kbId}`).click();
+}
+
+/**
+ * 处理知识库文件上传
+ */
+async function handleKBUpload(kbId, input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showStatusMessage('仅支持 PDF 格式', 'error');
+        return;
+    }
+
+    // 获取切分参数
+    const chunkSize = document.getElementById('slider-chunk-size')?.value || 500;
+    const chunkOverlap = document.getElementById('slider-chunk-overlap')?.value || 50;
+
+    showStatusMessage(`正在上传并处理 ${file.name}...`, 'loading');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('chunk_size', chunkSize);
+    formData.append('chunk_overlap', chunkOverlap);
+
+    try {
+        const response = await authFetch(`${API_BASE_URL}/kb/${kbId}/docs`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            const doc = data.data;
+            if (doc.status === 'processed') {
+                showStatusMessage(`${file.name} 处理完成：${doc.page_count} 页，${doc.chunk_count || 0} 个文本块`, 'success');
+            } else {
+                showStatusMessage(`${file.name} 已上传但处理失败：${doc.error_message || '未知错误'}`, 'error');
+            }
+            loadKBDocuments(kbId);
+        } else {
+            showStatusMessage(data.error || '上传失败', 'error');
+        }
+    } catch (error) {
+        showStatusMessage('上传失败，请检查后端服务', 'error');
+    }
+
+    // 重置 input 以便重复上传
+    input.value = '';
+}
+
+/**
+ * 加载知识库文档列表
+ */
+async function loadKBDocuments(kbId) {
+    const panel = document.getElementById(`kb-docs-${kbId}`);
+    if (!panel) return;
+
+    panel.style.display = 'block';
+    panel.innerHTML = '<div class="kb-docs-loading">加载中...</div>';
+
+    try {
+        const response = await authFetch(`${API_BASE_URL}/kb/${kbId}/docs`);
+        const data = await response.json();
+
+        if (data.success && data.data.length > 0) {
+            panel.innerHTML = data.data.map(doc => `
+                <div class="doc-item" data-doc-id="${doc.id}">
+                    <div class="doc-item-header" onclick="toggleDocChunks('${doc.id}', '${kbId}')">
+                        <span class="doc-status-dot ${doc.status}"></span>
+                        <span class="doc-name" title="${doc.filename}">${doc.filename}</span>
+                        <span class="doc-info">${doc.chunk_count || 0} 块</span>
+                        <button class="doc-delete-btn" onclick="deleteDoc('${doc.id}', '${kbId}', event)" title="删除">&times;</button>
+                    </div>
+                    ${doc.status === 'processed' ? `
+                    <div class="doc-meta">
+                        ${doc.page_count ? doc.page_count + ' 页' : ''}
+                        ${doc.total_chars ? ' · ' + (doc.total_chars / 1000).toFixed(1) + 'k 字' : ''}
+                    </div>` : ''}
+                    ${doc.status === 'failed' && doc.error_message ? `
+                    <div class="doc-error">${doc.error_message}</div>` : ''}
+                    <div class="doc-chunks-panel" id="doc-chunks-${doc.id}" style="display:none;"></div>
+                </div>
+            `).join('');
+        } else {
+            panel.innerHTML = '<div class="kb-docs-empty">暂无文档，点击 &#128206; 上传</div>';
+        }
+    } catch (error) {
+        panel.innerHTML = '<div class="kb-docs-empty">加载失败</div>';
+    }
+}
+
+/**
+ * 展开/收起文档的 chunks 列表
+ */
+async function toggleDocChunks(docId, kbId) {
+    const panel = document.getElementById(`doc-chunks-${docId}`);
+    if (!panel) return;
+
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        panel.innerHTML = '<div class="kb-docs-loading">加载中...</div>';
+
+        try {
+            const response = await authFetch(`${API_BASE_URL}/docs/${docId}/chunks?per_page=10`);
+            const data = await response.json();
+
+            if (data.success) {
+                const chunks = data.data.chunks;
+                const total = data.data.total;
+                if (chunks.length === 0) {
+                    panel.innerHTML = '<div class="chunk-empty">暂无文本块</div>';
+                } else {
+                    panel.innerHTML = `
+                        <div class="chunks-header">
+                            共 ${total} 个文本块${total > 10 ? '（显示前 10 个）' : ''}
+                        </div>
+                        ${chunks.map(c => `
+                            <div class="chunk-card">
+                                <div class="chunk-header">
+                                    <span class="chunk-index">#${c.chunk_index}</span>
+                                    ${c.page_start !== null ? `<span class="chunk-page">第 ${c.page_start + 1} 页</span>` : ''}
+                                    <span class="chunk-size">${c.char_count} 字</span>
+                                </div>
+                                <div class="chunk-content">${escapeHtml(c.content.substring(0, 120))}${c.content.length > 120 ? '...' : ''}</div>
+                            </div>
+                        `).join('')}
+                    `;
+                }
+            }
+        } catch (error) {
+            panel.innerHTML = '<div class="chunk-empty">加载失败</div>';
+        }
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+/**
+ * 删除文档
+ */
+async function deleteDoc(docId, kbId, event) {
+    event.stopPropagation();
+    if (!confirm('确定删除该文档？')) return;
+
+    try {
+        const response = await authFetch(`${API_BASE_URL}/docs/${docId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            showStatusMessage('文档已删除', 'success');
+            loadKBDocuments(kbId);
+        } else {
+            showStatusMessage(data.error || '删除失败', 'error');
+        }
+    } catch (error) {
+        showStatusMessage('删除失败', 'error');
+    }
 }

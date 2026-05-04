@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MY_NLPAnalyzer is a Chinese NLP Analysis Assistant providing intelligent text segmentation and keyword extraction. Flask backend (modular) + vanilla JS frontend (three-column layout), supporting multi-model providers (DeepSeek, OpenAI, Ollama, Coze) via Langchain `init_chat_model`, with JWT authentication and Redis-backed data storage.
+MY_NLPAnalyzer is a Chinese NLP Analysis Assistant providing intelligent text segmentation and keyword extraction. Flask backend (modular) + vanilla JS frontend (three-column layout), supporting multi-model providers (DeepSeek, OpenAI, Ollama, Coze) via Langchain `init_chat_model`, with JWT authentication, SQLAlchemy/SQLite persistent storage, and Redis-backed JWT blacklist.
 
 ## Running the Application
 
 ```bash
-# Use coze_env conda environment
-# Dependencies: flask, flask-cors, cozepy, langchain, langchain-community, langchain-openai, python-dotenv, bcrypt, PyJWT, redis
+# Use langchain conda environment
+# Dependencies: flask, flask-cors, cozepy, langchain, langchain-community, langchain-openai, python-dotenv, bcrypt, PyJWT, redis, flask-sqlalchemy, cryptography
 python coze_app.py
 ```
 
@@ -19,14 +19,18 @@ Server starts at `http://127.0.0.1:5001`. Login page at `/login`. No test suite;
 ## Architecture
 
 **Backend** (`app/` package, entry via `coze_app.py`):
-- `app/__init__.py` — Flask app factory (`create_app()`)
+- `app/__init__.py` — Flask app factory (`create_app()`), initializes SQLAlchemy + Redis
+- `app/extensions.py` — Flask extension instances (`db = SQLAlchemy()`)
 - `app/config.py` — Environment config, `SUPPORTED_PROVIDERS` dict
-- `app/routes/` — Blueprint-based API routes (auth, analyze, models, kb, chat, params)
-- `app/services/auth_service.py` — JWT + bcrypt authentication (Redis-backed user store + token blacklist)
+- `app/models/` — SQLAlchemy ORM models (User, KnowledgeBase, Conversation, Message, ApiKey, ParamPreset, Document, Chunk)
+- `app/routes/` — Blueprint-based API routes (auth, analyze, models, kb, chat, params, doc)
+- `app/services/auth_service.py` — JWT + bcrypt authentication (SQLAlchemy user store + Redis token blacklist)
 - `app/services/llm_service.py` — Multi-model service via Langchain `init_chat_model` + Coze SDK
-- `app/services/pdf_parser.py` — PDF parsing via Langchain PyPDFLoader
-- `app/services/redis_service.py` — Redis connection pool and JSON serialization helpers
-- `app/services/memory_store.py` — Redis-backed data store (knowledge bases, conversations, API keys, presets)
+- `app/services/pdf_parser.py` — PDF parsing via Langchain PyPDFLoader (page-limited + full-page modes)
+- `app/services/doc_service.py` — Document processing service (PDF full parse + RecursiveCharacterTextSplitter chunking)
+- `app/services/redis_service.py` — Redis connection pool (JWT blacklist only)
+- `app/services/memory_store.py` — SQLAlchemy-backed data store (knowledge bases, documents, chunks, conversations, API keys, presets)
+- `app/services/crypto_service.py` — Fernet symmetric encryption for API keys
 - `app/middleware/auth_guard.py` — `@login_required` JWT decorator
 
 **Frontend** (`login.html` + `index.html` + `style.css` + `app.js`):
@@ -54,6 +58,10 @@ Server starts at `http://127.0.0.1:5001`. Login page at `/login`. No test suite;
 | `/api/kb` | GET/POST | Yes | Knowledge base CRUD |
 | `/api/params/default` | GET | No | Default parameters |
 | `/api/params/presets` | GET/POST/DELETE | Yes | Parameter presets |
+| `/api/kb/<id>/docs` | POST | Yes | Upload PDF to knowledge base (parse + chunk) |
+| `/api/docs/<id>` | GET/DELETE | Yes | Document detail / delete |
+| `/api/docs/<id>/chunks` | GET | Yes | Document chunks (paginated) |
+| `/api/docs/<id>/rechunk` | POST | Yes | Re-chunk with new parameters |
 
 ## Multi-Model Service
 
@@ -69,8 +77,10 @@ Frontend sends `params` dict with provider, api_key, model, base_url, and model 
 `.env` file (required, not committed):
 - `COZE_API_TOKEN`, `BOT_ID`, `USER_ID` — Coze SDK (required)
 - `JWT_SECRET_KEY` — JWT token signing (required)
-- `REDIS_URL` — Redis connection URL (required, e.g. `redis://host:port/db`)
+- `REDIS_URL` — Redis connection URL (required for JWT blacklist)
+- `FERNET_KEY` — Fernet encryption key for API keys (required, generate via `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`)
 - `PORT` — optional, defaults to 5001
+- `DATABASE_URL` — optional, defaults to `sqlite:///data/nlp.db`
 - `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` — used by langchain scripts
 
 ## Code Conventions

@@ -8,6 +8,11 @@
 变更说明：
   1. 新建文档处理服务，包含 PDF 解析、RecursiveCharacterTextSplitter 切分、存储
   2. 支持重新切分（参数变更时从 full_text 重新切分）
+
+2026-05-07
+变更说明：
+  1. 文档处理完成后自动触发 FAISS 向量化（Phase 4.2）
+  2. 重新切分后触发增量向量化
 """
 
 import os
@@ -75,6 +80,9 @@ def process_document(doc_id, chunk_size=500, chunk_overlap=50):
         doc_dict = memory_store.get_document(doc_id).to_dict()
         doc_dict['chunk_count'] = chunk_count
 
+        # Phase 4.2: 文档处理完成后自动触发向量化
+        _auto_embed_doc(doc_id)
+
         return True, doc_dict
 
     except Exception as e:
@@ -122,6 +130,9 @@ def rechunk_document(doc_id, chunk_size=500, chunk_overlap=50):
         # 存储新 chunks
         chunk_count = memory_store.create_chunks(doc_id, chunk_data_list)
 
+        # Phase 4.2: 重新切分后触发增量向量化
+        _auto_embed_doc(doc_id)
+
         return True, {
             'doc_id': doc_id,
             'chunk_count': chunk_count,
@@ -166,3 +177,46 @@ def _split_documents(lc_documents, chunk_size, chunk_overlap):
         })
 
     return chunk_data_list
+
+
+def _auto_embed_doc(doc_id):
+    """
+    自动触发文档向量化（处理/重新切分完成后调用）
+
+    获取知识库的 embedding_config，如果已配置则自动向量化。
+    向量化失败不影响文档处理状态。
+
+    参数：
+        doc_id: 文档 ID
+    """
+    try:
+        import json
+        from app.services import faiss_service, embedding_service
+
+        doc = memory_store.get_document(doc_id)
+        if not doc or not doc.kb_id:
+            return
+
+        # 获取知识库的 embedding_config
+        from app.models.knowledge_base import KnowledgeBase
+        kb = KnowledgeBase.query.filter_by(id=doc.kb_id).first()
+        if not kb:
+            return
+
+        emb_config = kb.embedding_config
+        if isinstance(emb_config, str):
+            emb_config = json.loads(emb_config) if emb_config else {}
+
+        # 如果知识库未配置 embedding，使用默认配置
+        if not emb_config or not emb_config.get('provider'):
+            emb_config = embedding_service.get_default_embedding_config()
+
+        success, result = faiss_service.incremental_embed_doc(doc_id, emb_config)
+        if success:
+            print(f"[FAISS] 文档 {doc_id} 向量化成功: {result}")
+        else:
+            print(f"[FAISS] 文档 {doc_id} 向量化失败: {result}")
+
+    except Exception as e:
+        # 向量化失败不影响文档处理
+        print(f"[FAISS] 文档 {doc_id} 自动向量化异常: {e}")

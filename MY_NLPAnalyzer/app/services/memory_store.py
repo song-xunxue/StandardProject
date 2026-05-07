@@ -22,6 +22,11 @@
   3. 保持与 Redis 版本完全相同的 API 接口
   4. 新增 add_doc_to_kb() 修复文档上传持久化问题
   5. 新增 Document 和 Chunk 的 CRUD 操作（Phase 3）
+
+2026-05-07
+变更说明：
+  1. 新增 update_chunk_vector_id / get_kb_chunks_for_embedding 辅助函数（Phase 4.2）
+  2. 新增 update_kb_embedding_config 函数
 """
 
 import json
@@ -78,6 +83,22 @@ def update_kb(kb_id, user_email, **kwargs):
     for key in ('name', 'description', 'mode'):
         if key in kwargs:
             setattr(kb, key, kwargs[key])
+    db.session.commit()
+    return kb.to_dict()
+
+
+def update_kb_embedding_config(kb_id, embedding_config):
+    """
+    更新知识库的 Embedding 配置
+
+    参数：
+        kb_id: 知识库 ID
+        embedding_config: dict 配置字典
+    """
+    kb = KnowledgeBase.query.filter_by(id=kb_id).first()
+    if not kb:
+        return None
+    kb.embedding_config = json.dumps(embedding_config, ensure_ascii=False)
     db.session.commit()
     return kb.to_dict()
 
@@ -383,3 +404,43 @@ def get_chunks_by_doc(doc_id, page=1, per_page=50):
         'page': page,
         'per_page': per_page,
     }
+
+
+# ========== Phase 4.2 向量化辅助函数 ==========
+
+def update_chunk_vector_id(chunk_id, vector_id, status='embedded'):
+    """
+    更新 chunk 的向量化信息
+
+    参数：
+        chunk_id: Chunk ID
+        vector_id: FAISS 索引行号
+        status: embedding 状态
+    """
+    chunk = Chunk.query.filter_by(id=chunk_id).first()
+    if not chunk:
+        return None
+    chunk.vector_id = vector_id
+    chunk.embedding_status = status
+    db.session.commit()
+    return chunk.to_dict()
+
+
+def get_kb_chunks_for_embedding(kb_id):
+    """
+    获取知识库下所有需要向量化的 chunks
+
+    参数：
+        kb_id: 知识库 ID
+
+    返回：
+        Chunk 对象列表
+    """
+    docs = Document.query.filter_by(kb_id=kb_id, status='processed').all()
+    doc_ids = [doc.id for doc in docs]
+    if not doc_ids:
+        return []
+    return Chunk.query.filter(
+        Chunk.doc_id.in_(doc_ids),
+        Chunk.embedding_status == 'pending',
+    ).all()

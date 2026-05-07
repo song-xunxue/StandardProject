@@ -14,6 +14,11 @@
   2. upload_doc 重写：保存文件到磁盘 + 创建 Document + 触发切分处理
   3. list_docs 改为查询 Document 表
   4. delete_kb 增加磁盘文件清理
+
+2026-05-07
+变更说明：
+  1. 新增 /<kb_id>/build_index、/<kb_id>/index_status、/<kb_id>/embedding_config 接口（Phase 4.2）
+  2. delete_kb 增加 FAISS 索引目录清理
 """
 
 import os
@@ -104,6 +109,11 @@ def delete_kb(kb_id):
 
     # 数据库级联删除（KnowledgeBase → Document → Chunk）
     memory_store.delete_kb(kb_id, g.user['email'])
+
+    # Phase 4.2: 清理 FAISS 索引目录
+    from app.services import faiss_service
+    faiss_service.delete_kb_index(kb_id)
+
     return success_response(message='知识库已删除')
 
 
@@ -178,3 +188,76 @@ def upload_doc(kb_id):
         # 处理失败，但文件已保存，返回文档信息含错误
         doc_dict = doc.to_dict()
         return success_response(doc_dict, f'文档已上传但处理失败: {result}')
+
+
+# ========== Phase 4.2: FAISS 索引管理接口 ==========
+
+@kb_bp.route('/<kb_id>/build_index', methods=['POST'])
+@login_required
+def build_index(kb_id):
+    """手动构建/重建知识库的 FAISS 索引"""
+    kb = memory_store.get_kb(kb_id, g.user['email'])
+    if not kb:
+        return error_response('知识库不存在', 404)
+
+    data = request.get_json() or {}
+    embedding_config = data.get('embedding_config')
+
+    # 如果没有传入配置，使用知识库已保存的或默认配置
+    if not embedding_config:
+        from app.services import embedding_service
+        import json
+        saved = kb.get('embedding_config', {})
+        if isinstance(saved, str):
+            saved = json.loads(saved) if saved else {}
+        if saved and saved.get('provider'):
+            embedding_config = saved
+        else:
+            embedding_config = embedding_service.get_default_embedding_config()
+
+    from app.services import faiss_service
+    success, result = faiss_service.build_kb_index(kb_id, embedding_config)
+
+    if success:
+        return success_response(result, '索引构建成功')
+    else:
+        return error_response(result)
+
+
+@kb_bp.route('/<kb_id>/index_status', methods=['GET'])
+@login_required
+def index_status(kb_id):
+    """获取知识库索引状态"""
+    kb = memory_store.get_kb(kb_id, g.user['email'])
+    if not kb:
+        return error_response('知识库不存在', 404)
+
+    from app.services import faiss_service
+    status = faiss_service.get_index_status(kb_id)
+    return success_response(status)
+
+
+@kb_bp.route('/<kb_id>/embedding_config', methods=['GET'])
+@login_required
+def get_embedding_config(kb_id):
+    """获取知识库的 Embedding 配置"""
+    kb = memory_store.get_kb(kb_id, g.user['email'])
+    if not kb:
+        return error_response('知识库不存在', 404)
+    return success_response(kb.get('embedding_config', {}))
+
+
+@kb_bp.route('/<kb_id>/embedding_config', methods=['PUT'])
+@login_required
+def set_embedding_config(kb_id):
+    """设置知识库的 Embedding 配置"""
+    kb = memory_store.get_kb(kb_id, g.user['email'])
+    if not kb:
+        return error_response('知识库不存在', 404)
+
+    data = request.get_json()
+    if not data:
+        return error_response('请求数据为空')
+
+    result = memory_store.update_kb_embedding_config(kb_id, data)
+    return success_response(result, 'Embedding 配置已更新')

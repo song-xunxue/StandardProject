@@ -8,6 +8,11 @@
 变更说明：
   1. 新建 Chunk ORM 模型，对应 chunks 表
   2. Phase 4 预留 vector_id 字段用于 FAISS 向量关联
+
+2026-05-07
+变更说明：
+  1. 启用 vector_id 字段（Integer，对应 FAISS 索引行号）
+  2. 新增 embedding_status 字段（pending/embedded/failed）
 """
 
 from datetime import datetime, timezone
@@ -34,8 +39,9 @@ class Chunk(db.Model):
         default=lambda: datetime.now(timezone.utc)
     )
 
-    # Phase 4 预留：FAISS 向量关联
-    # vector_id = db.Column(db.String(100), nullable=True)
+    # FAISS 向量关联（Phase 4.1）
+    vector_id = db.Column(db.Integer, nullable=True)  # FAISS 索引行号
+    embedding_status = db.Column(db.String(20), nullable=False, default='pending')  # pending/embedded/failed
 
     def to_dict(self):
         """转为字典"""
@@ -47,4 +53,6 @@ class Chunk(db.Model):
             'char_count': self.char_count,
             'page_start': self.page_start,
             'page_end': self.page_end,
+            'vector_id': self.vector_id,
+            'embedding_status': self.embedding_status,
         }

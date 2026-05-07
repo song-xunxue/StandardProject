@@ -7,6 +7,10 @@
 2026-05-04
 变更说明：
   1. 新建 KnowledgeBase ORM 模型，对应 knowledge_bases 表
+
+2026-05-07
+变更说明：
+  1. 新增 embedding_config 字段，存储知识库的 Embedding 模型配置（Phase 4.2）
 """
 
 from datetime import datetime, timezone
@@ -27,6 +31,7 @@ class KnowledgeBase(db.Model):
     description = db.Column(db.Text, nullable=False, default='')
     mode = db.Column(db.String(20), nullable=False, default='multi_doc')
     docs = db.Column(db.Text, nullable=False, default='[]')  # JSON 数组字符串
+    embedding_config = db.Column(db.Text, nullable=False, default='{}')  # Embedding 模型配置（JSON）
     created_at = db.Column(
         db.DateTime, nullable=False,
         default=lambda: datetime.now(timezone.utc)
@@ -51,5 +56,6 @@ class KnowledgeBase(db.Model):
             'description': self.description,
             'mode': self.mode,
             'docs': json.loads(self.docs) if isinstance(self.docs, str) else (self.docs or []),
+            'embedding_config': json.loads(self.embedding_config) if isinstance(self.embedding_config, str) else (self.embedding_config or {}),
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }

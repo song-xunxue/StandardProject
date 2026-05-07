@@ -7,6 +7,11 @@
 2026-05-04
 变更说明：
   1. 新建文档管理蓝图，支持文档详情、chunks 列表、重新切分、删除
+
+2026-05-07
+变更说明：
+  1. 新增 /<doc_id>/embed、/<doc_id>/embed_status 接口（Phase 4.2）
+  2. 删除文档时清理 FAISS 向量
 """
 
 import os
@@ -100,6 +105,10 @@ def delete_doc(doc_id):
     if not success:
         return error_response('删除失败')
 
+    # Phase 4.2: 清理 FAISS 向量
+    from app.services import faiss_service
+    faiss_service.delete_doc_vectors(doc_id)
+
     # 删除磁盘文件
     if file_path:
         full_path = os.path.join(Config.UPLOAD_FOLDER, file_path)
@@ -107,3 +116,71 @@ def delete_doc(doc_id):
             os.remove(full_path)
 
     return success_response(message='文档已删除')
+
+
+# ========== Phase 4.2: 向量化管理接口 ==========
+
+@doc_bp.route('/<doc_id>/embed', methods=['POST'])
+@login_required
+def embed_doc(doc_id):
+    """手动触发文档向量化"""
+    doc = memory_store.get_document(doc_id)
+    if not doc:
+        return error_response('文档不存在', 404)
+
+    # 权限验证
+    kb = memory_store.get_kb(doc.kb_id, g.user['email'])
+    if not kb:
+        return error_response('无权操作该文档', 403)
+
+    data = request.get_json() or {}
+    embedding_config = data.get('embedding_config')
+
+    # 如果没有传入配置，使用知识库已保存的或默认配置
+    if not embedding_config:
+        import json
+        from app.services import embedding_service
+        saved = kb.get('embedding_config', {})
+        if isinstance(saved, str):
+            saved = json.loads(saved) if saved else {}
+        if saved and saved.get('provider'):
+            embedding_config = saved
+        else:
+            embedding_config = embedding_service.get_default_embedding_config()
+
+    from app.services import faiss_service
+    success, result = faiss_service.incremental_embed_doc(doc_id, embedding_config)
+
+    if success:
+        return success_response(result, '向量化成功')
+    else:
+        return error_response(result)
+
+
+@doc_bp.route('/<doc_id>/embed_status', methods=['GET'])
+@login_required
+def embed_status(doc_id):
+    """查询文档向量化状态"""
+    doc = memory_store.get_document(doc_id)
+    if not doc:
+        return error_response('文档不存在', 404)
+
+    # 权限验证
+    kb = memory_store.get_kb(doc.kb_id, g.user['email'])
+    if not kb:
+        return error_response('无权访问该文档', 403)
+
+    # 查询文档 chunks 的向量化状态
+    from app.models.chunk import Chunk
+    total = Chunk.query.filter_by(doc_id=doc_id).count()
+    embedded = Chunk.query.filter_by(doc_id=doc_id, embedding_status='embedded').count()
+    pending = Chunk.query.filter_by(doc_id=doc_id, embedding_status='pending').count()
+    failed = Chunk.query.filter_by(doc_id=doc_id, embedding_status='failed').count()
+
+    return success_response({
+        'doc_id': doc_id,
+        'total_chunks': total,
+        'embedded_chunks': embedded,
+        'pending_chunks': pending,
+        'failed_chunks': failed,
+    })

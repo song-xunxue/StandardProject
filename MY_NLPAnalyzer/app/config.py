@@ -17,6 +17,12 @@
 变更说明：
   1. 新增 SQLAlchemy/SQLite 配置，用于 Phase 2.4 持久化
   2. 新增 Fernet 加密密钥配置，用于 API Key 加密存储
+
+2026-05-07
+变更说明：
+  1. 新增 FAISS 索引目录配置（Phase 4.1）
+  2. 新增默认 Embedding 模型配置
+  3. SUPPORTED_PROVIDERS 新增 embedding_models 和 embedding_dimension
 """
 
 import os
@@ -56,6 +62,14 @@ class Config:
     # Fernet 对称加密密钥（32 字节 Base64 编码字符串）
     FERNET_KEY = os.environ.get('FERNET_KEY', '')
 
+    # FAISS 索引存储目录（Phase 4.1）
+    FAISS_INDEX_DIR = os.path.join(_DATA_DIR, 'faiss_indexes')
+
+    # 默认 Embedding 模型配置（Phase 4.1）
+    DEFAULT_EMBEDDING_PROVIDER = 'openai'
+    DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small'
+    DEFAULT_EMBEDDING_DIMENSION = 1536
+
     # 文件上传
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'uploads')
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
@@ -75,6 +89,8 @@ SUPPORTED_PROVIDERS = {
         'need_bot_id': False,
         'default_base': 'https://api.deepseek.com/v1',
         'langchain_provider': 'openai',  # DeepSeek 兼容 OpenAI 接口
+        'embedding_models': ['text-embedding-3-small'],  # 兼容 OpenAI embedding
+        'embedding_dimension': 1536,
     },
     'openai': {
         'name': 'OpenAI',
@@ -83,6 +99,8 @@ SUPPORTED_PROVIDERS = {
         'need_bot_id': False,
         'default_base': 'https://api.openai.com/v1',
         'langchain_provider': 'openai',
+        'embedding_models': ['text-embedding-3-small', 'text-embedding-3-large'],
+        'embedding_dimension': 1536,
     },
     'ollama': {
         'name': 'Ollama',
@@ -91,6 +109,8 @@ SUPPORTED_PROVIDERS = {
         'need_bot_id': False,
         'default_base': 'http://localhost:11434',
         'langchain_provider': 'ollama',
+        'embedding_models': ['nomic-embed-text', 'bge-m3'],
+        'embedding_dimension': 768,
     },
     'coze': {
         'name': 'Coze 智能体',
@@ -99,5 +119,7 @@ SUPPORTED_PROVIDERS = {
         'need_bot_id': True,
         'default_base': '',
         'langchain_provider': None,  # Coze 走独立 SDK 路径
+        'embedding_models': [],
+        'embedding_dimension': 0,
     },
 }

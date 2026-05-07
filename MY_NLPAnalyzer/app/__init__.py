@@ -18,6 +18,10 @@ Flask 应用工厂
 变更说明：
   1. 集成 SQLAlchemy 初始化（Phase 2.4 持久化）
   2. 启动时自动创建数据库表
+
+2026-05-07
+变更说明：
+  1. 启动时确保 FAISS 索引目录存在（Phase 4.1）
 """
 
 import os
@@ -44,6 +48,8 @@ def create_app():
 
     # 确保 data 目录存在
     os.makedirs(Config._DATA_DIR, exist_ok=True)
+    # 确保 FAISS 索引目录存在（Phase 4.1）
+    os.makedirs(Config.FAISS_INDEX_DIR, exist_ok=True)
 
     # 初始化 SQLAlchemy
     db.init_app(app)

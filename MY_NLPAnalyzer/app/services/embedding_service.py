@@ -14,7 +14,16 @@
 变更说明：
   1. 新增 detect_available_embedding_config() 自动检测可用的 API Key
   2. 给 OpenAIEmbeddings 增加请求超时（60s）防止挂死
+  3. 新增智谱 GLM embedding-3 支持（通过 OpenAI 兼容接口）
 """
+
+# 智谱 GLM Embedding 配置
+ZHIPU_EMBEDDING_CONFIG = {
+    'provider': 'zhipu',
+    'model': 'embedding-3',
+    'base_url': 'https://open.bigmodel.cn/api/paas/v4',
+    'dimension': 2048,
+}
 
 from app.config import Config, SUPPORTED_PROVIDERS
 
@@ -25,7 +34,7 @@ def get_embeddings(embedding_config):
 
     参数：
         embedding_config: {
-            'provider': 'openai' | 'deepseek' | 'ollama',
+            'provider': 'openai' | 'deepseek' | 'ollama' | 'zhipu',
             'api_key': '...',
             'model': 'text-embedding-3-small',
             'base_url': 'https://...',
@@ -39,32 +48,33 @@ def get_embeddings(embedding_config):
     api_key = embedding_config.get('api_key', '')
     base_url = embedding_config.get('base_url', '')
 
-    provider_info = SUPPORTED_PROVIDERS.get(provider)
-    if not provider_info:
-        raise ValueError(f'不支持的 Embedding 提供商: {provider}')
-
-    if provider in ('openai', 'deepseek'):
-        # OpenAI / DeepSeek 使用 OpenAIEmbeddings（DeepSeek 兼容 OpenAI 接口）
+    if provider in ('openai', 'deepseek', 'zhipu'):
+        # OpenAI / DeepSeek / 智谱 均使用 OpenAIEmbeddings（兼容 OpenAI 接口）
         from langchain_openai import OpenAIEmbeddings
 
         kwargs = {
             'model': model_name,
-            'request_timeout': 60,  # 60 秒超时，防止挂死
+            'request_timeout': 60,
         }
         if api_key:
             kwargs['api_key'] = api_key
-        # base_url：优先用传入值，否则用提供商默认值
-        effective_url = base_url or provider_info.get('default_base', '')
+        # base_url：优先用传入值
+        effective_url = base_url
+        if not effective_url:
+            if provider == 'zhipu':
+                effective_url = ZHIPU_EMBEDDING_CONFIG['base_url']
+            else:
+                provider_info = SUPPORTED_PROVIDERS.get(provider, {})
+                effective_url = provider_info.get('default_base', '')
         if effective_url:
             kwargs['base_url'] = effective_url
         return OpenAIEmbeddings(**kwargs)
 
     elif provider == 'ollama':
-        # Ollama 使用 OllamaEmbeddings
         from langchain_ollama import OllamaEmbeddings
 
         kwargs = {'model': model_name}
-        effective_url = base_url or provider_info.get('default_base', 'http://localhost:11434')
+        effective_url = base_url or 'http://localhost:11434'
         kwargs['base_url'] = effective_url
         return OllamaEmbeddings(**kwargs)
 
@@ -143,18 +153,28 @@ def detect_available_embedding_config():
     """
     自动检测可用的 Embedding 配置
 
-    检查环境变量中的 API Key，仅使用支持 embedding 的提供商：
-    1. OPENAI_API_KEY → OpenAI embedding
-    2. 无可用 Key → 返回默认配置（向量化可能失败，但不影响文档处理）
-
-    注意：DeepSeek 不提供 embedding API，故不作为 embedding 提供商。
+    按优先级检查环境变量中的 API Key：
+    1. GLM_API_KEY → 智谱 embedding-3（国内直连，推荐）
+    2. OPENAI_API_KEY → OpenAI embedding（需梯子）
+    3. 无可用 Key → 返回 None（跳过向量化）
 
     返回：
-        dict Embedding 配置
+        dict | None Embedding 配置，无可用 Key 时返回 None
     """
     import os
 
-    # 使用 OpenAI（唯一支持 embedding 的云端提供商）
+    # 优先使用智谱 GLM（国内直连，免费额度）
+    glm_key = os.environ.get('GLM_API_KEY', '')
+    if glm_key:
+        return {
+            'provider': 'zhipu',
+            'model': ZHIPU_EMBEDDING_CONFIG['model'],
+            'api_key': glm_key,
+            'base_url': ZHIPU_EMBEDDING_CONFIG['base_url'],
+            'dimension': ZHIPU_EMBEDDING_CONFIG['dimension'],
+        }
+
+    # 其次使用 OpenAI（需梯子）
     openai_key = os.environ.get('OPENAI_API_KEY', '')
     if openai_key:
         return {
@@ -162,8 +182,9 @@ def detect_available_embedding_config():
             'model': Config.DEFAULT_EMBEDDING_MODEL,
             'api_key': openai_key,
             'base_url': 'https://api.openai.com/v1',
+            'dimension': 1536,
         }
 
     # 无可用 Key
-    print("[Embedding] 未检测到 OPENAI_API_KEY，跳过向量化（不影响文档处理和对话功能）")
+    print("[Embedding] 未检测到 GLM_API_KEY 或 OPENAI_API_KEY，跳过向量化")
     return None

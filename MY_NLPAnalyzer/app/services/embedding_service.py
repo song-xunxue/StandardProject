@@ -143,28 +143,18 @@ def detect_available_embedding_config():
     """
     自动检测可用的 Embedding 配置
 
-    按优先级检查环境变量中的 API Key：
-    1. DEEPSEEK_API_KEY → DeepSeek 兼容 OpenAI embedding
-    2. OPENAI_API_KEY → OpenAI embedding
-    3. 无可用 Key → 返回默认配置（向量化可能失败）
+    检查环境变量中的 API Key，仅使用支持 embedding 的提供商：
+    1. OPENAI_API_KEY → OpenAI embedding
+    2. 无可用 Key → 返回默认配置（向量化可能失败，但不影响文档处理）
+
+    注意：DeepSeek 不提供 embedding API，故不作为 embedding 提供商。
 
     返回：
         dict Embedding 配置
     """
     import os
 
-    # 优先使用 DeepSeek（国内访问更稳定）
-    deepseek_key = os.environ.get('DEEPSEEK_API_KEY', '')
-    if deepseek_key:
-        deepseek_info = SUPPORTED_PROVIDERS.get('deepseek', {})
-        return {
-            'provider': 'deepseek',
-            'model': deepseek_info.get('embedding_models', ['text-embedding-3-small'])[0],
-            'api_key': deepseek_key,
-            'base_url': deepseek_info.get('default_base', 'https://api.deepseek.com/v1'),
-        }
-
-    # 其次使用 OpenAI
+    # 使用 OpenAI（唯一支持 embedding 的云端提供商）
     openai_key = os.environ.get('OPENAI_API_KEY', '')
     if openai_key:
         return {
@@ -174,6 +164,6 @@ def detect_available_embedding_config():
             'base_url': 'https://api.openai.com/v1',
         }
 
-    # 无可用 Key，返回默认配置（向量化会失败，但不影响文档处理）
-    print("[Embedding] 未检测到 DEEPSEEK_API_KEY 或 OPENAI_API_KEY，向量化可能失败")
-    return get_default_embedding_config()
+    # 无可用 Key
+    print("[Embedding] 未检测到 OPENAI_API_KEY，跳过向量化（不影响文档处理和对话功能）")
+    return None

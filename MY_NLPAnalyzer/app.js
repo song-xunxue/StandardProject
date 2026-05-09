@@ -252,7 +252,7 @@ function deleteKnowledgeBase(kbId, event) {
     }
 }
 
-function switchKB(kbId) {
+async function switchKB(kbId) {
     currentKB = kbId;
     currentConvId = null;  // 重置当前对话
 
@@ -263,9 +263,9 @@ function switchKB(kbId) {
     const kb = knowledgeBases.find(k => k.id === kbId);
     document.getElementById('current-kb-label').textContent = kb ? kb.name : kbId;
 
-    // 加载文档列表和对话列表
+    // 加载文档列表和对话列表（等待完成）
     loadKBDocuments(kbId);
-    loadKBConversations(kbId);
+    await loadKBConversations(kbId);
 
     // 清空消息
     clearChat();

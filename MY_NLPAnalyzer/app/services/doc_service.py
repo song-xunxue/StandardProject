@@ -212,6 +212,11 @@ def _auto_embed_doc(doc_id):
         if not emb_config or not emb_config.get('provider') or not emb_config.get('api_key'):
             emb_config = embedding_service.detect_available_embedding_config()
 
+        # 没有可用的 embedding 提供商，跳过向量化
+        if not emb_config:
+            print(f"[FAISS] 文档 {doc_id} 跳过向量化（无可用 Embedding 提供商，可在 .env 中配置 OPENAI_API_KEY）")
+            return
+
         success, result = faiss_service.incremental_embed_doc(doc_id, emb_config)
         if success:
             print(f"[FAISS] 文档 {doc_id} 向量化成功: {result}")

@@ -89,8 +89,8 @@ SUPPORTED_PROVIDERS = {
         'need_bot_id': False,
         'default_base': 'https://api.deepseek.com/v1',
         'langchain_provider': 'openai',  # DeepSeek 兼容 OpenAI 接口
-        'embedding_models': ['text-embedding-3-small'],  # 兼容 OpenAI embedding
-        'embedding_dimension': 1536,
+        'embedding_models': [],  # DeepSeek 不提供 embedding API
+        'embedding_dimension': 0,
     },
     'openai': {
         'name': 'OpenAI',

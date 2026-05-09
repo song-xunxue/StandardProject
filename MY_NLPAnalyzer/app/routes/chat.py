@@ -233,14 +233,17 @@ def _sync_rag_response(conv_id, query, kb_id, embedding_config,
 
 def _fill_model_config(model_config, user_email):
     """
-    补全模型配置：如果前端没有传 API Key，从 DB 加载已保存的 Key
+    补全模型配置：如果前端没有传 API Key，从 DB 或环境变量加载
 
     参数：
         model_config: 模型配置字典（会被原地修改）
         user_email: 用户邮箱
     """
+    import os
     provider = model_config.get('provider', '')
+
     if not model_config.get('api_key'):
+        # 优先从 DB 加载用户保存的 Key
         saved_key = memory_store.get_api_key(user_email, provider)
         if saved_key:
             model_config['api_key'] = saved_key['api_key']
@@ -248,3 +251,21 @@ def _fill_model_config(model_config, user_email):
                 model_config['base_url'] = saved_key['base_url']
             if not model_config.get('model') and saved_key.get('model_name'):
                 model_config['model'] = saved_key['model_name']
+        else:
+            # 回退：从 .env 环境变量加载（各提供商默认 Key）
+            env_key_map = {
+                'glm': 'GLM_API_KEY',
+                'deepseek': 'DEEPSEEK_API_KEY',
+                'openai': 'OPENAI_API_KEY',
+            }
+            env_var = env_key_map.get(provider, '')
+            if env_var:
+                env_val = os.environ.get(env_var, '')
+                if env_val:
+                    model_config['api_key'] = env_val
+                    # 同时补全 base_url
+                    if not model_config.get('base_url'):
+                        from app.config import SUPPORTED_PROVIDERS
+                        p_info = SUPPORTED_PROVIDERS.get(provider, {})
+                        if p_info.get('default_base'):
+                            model_config['base_url'] = p_info['default_base']

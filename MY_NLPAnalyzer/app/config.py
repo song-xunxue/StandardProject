@@ -122,4 +122,14 @@ SUPPORTED_PROVIDERS = {
         'embedding_models': [],
         'embedding_dimension': 0,
     },
+    'glm': {
+        'name': '智谱 GLM',
+        'models': ['glm-4-flash', 'glm-4-plus', 'glm-4'],
+        'need_key': True,
+        'need_bot_id': False,
+        'default_base': 'https://open.bigmodel.cn/api/paas/v4',
+        'langchain_provider': 'openai',  # 智谱兼容 OpenAI 接口
+        'embedding_models': ['embedding-3'],
+        'embedding_dimension': 2048,
+    },
 }

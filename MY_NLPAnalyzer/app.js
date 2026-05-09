@@ -56,6 +56,13 @@ const PROVIDER_CONFIG = {
         needBotId: false,
         defaultBase: 'http://localhost:11434'
     },
+    glm: {
+        name: '智谱 GLM',
+        models: ['glm-4-flash', 'glm-4-plus', 'glm-4'],
+        needKey: true,
+        needBotId: false,
+        defaultBase: 'https://open.bigmodel.cn/api/paas/v4'
+    },
     coze: {
         name: 'Coze 智能体',
         models: [],

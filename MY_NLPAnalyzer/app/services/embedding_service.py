@@ -9,6 +9,11 @@
   1. 新建 Embedding 服务，支持 OpenAI/DeepSeek/Ollama 三个提供商
   2. OpenAI/DeepSeek 使用 langchain_openai.OpenAIEmbeddings
   3. Ollama 使用 langchain_ollama.OllamaEmbeddings
+
+2026-05-09
+变更说明：
+  1. 新增 detect_available_embedding_config() 自动检测可用的 API Key
+  2. 给 OpenAIEmbeddings 增加请求超时（60s）防止挂死
 """
 
 from app.config import Config, SUPPORTED_PROVIDERS
@@ -42,7 +47,10 @@ def get_embeddings(embedding_config):
         # OpenAI / DeepSeek 使用 OpenAIEmbeddings（DeepSeek 兼容 OpenAI 接口）
         from langchain_openai import OpenAIEmbeddings
 
-        kwargs = {'model': model_name}
+        kwargs = {
+            'model': model_name,
+            'request_timeout': 60,  # 60 秒超时，防止挂死
+        }
         if api_key:
             kwargs['api_key'] = api_key
         # base_url：优先用传入值，否则用提供商默认值
@@ -129,3 +137,43 @@ def get_embedding_providers():
             'need_key': info['need_key'],
         })
     return result
+
+
+def detect_available_embedding_config():
+    """
+    自动检测可用的 Embedding 配置
+
+    按优先级检查环境变量中的 API Key：
+    1. DEEPSEEK_API_KEY → DeepSeek 兼容 OpenAI embedding
+    2. OPENAI_API_KEY → OpenAI embedding
+    3. 无可用 Key → 返回默认配置（向量化可能失败）
+
+    返回：
+        dict Embedding 配置
+    """
+    import os
+
+    # 优先使用 DeepSeek（国内访问更稳定）
+    deepseek_key = os.environ.get('DEEPSEEK_API_KEY', '')
+    if deepseek_key:
+        deepseek_info = SUPPORTED_PROVIDERS.get('deepseek', {})
+        return {
+            'provider': 'deepseek',
+            'model': deepseek_info.get('embedding_models', ['text-embedding-3-small'])[0],
+            'api_key': deepseek_key,
+            'base_url': deepseek_info.get('default_base', 'https://api.deepseek.com/v1'),
+        }
+
+    # 其次使用 OpenAI
+    openai_key = os.environ.get('OPENAI_API_KEY', '')
+    if openai_key:
+        return {
+            'provider': 'openai',
+            'model': Config.DEFAULT_EMBEDDING_MODEL,
+            'api_key': openai_key,
+            'base_url': 'https://api.openai.com/v1',
+        }
+
+    # 无可用 Key，返回默认配置（向量化会失败，但不影响文档处理）
+    print("[Embedding] 未检测到 DEEPSEEK_API_KEY 或 OPENAI_API_KEY，向量化可能失败")
+    return get_default_embedding_config()

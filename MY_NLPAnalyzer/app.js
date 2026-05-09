@@ -295,7 +295,7 @@ function renderKBList() {
         <div class="kb-item ${currentKB === kb.id ? 'active' : ''}" data-kb-id="${kb.id}">
             <div class="kb-item-header" onclick="switchKB('${kb.id}')">
                 <span class="kb-icon">&#128218;</span>
-                <span class="kb-name">${kb.name}</span>
+                <span class="kb-name" title="${kb.name}">${kb.name}</span>
                 <button class="kb-upload-btn" onclick="triggerKBUpload('${kb.id}', event)" title="上传文档">&#128206;</button>
                 <button class="kb-delete-btn" onclick="deleteKnowledgeBase('${kb.id}', event)" title="删除">&#10005;</button>
             </div>

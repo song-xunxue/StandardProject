@@ -184,6 +184,7 @@ def _auto_embed_doc(doc_id):
     自动触发文档向量化（处理/重新切分完成后调用）
 
     获取知识库的 embedding_config，如果已配置则自动向量化。
+    自动检测可用的 API Key，优先使用有 Key 的提供商。
     向量化失败不影响文档处理状态。
 
     参数：
@@ -207,13 +208,17 @@ def _auto_embed_doc(doc_id):
         if isinstance(emb_config, str):
             emb_config = json.loads(emb_config) if emb_config else {}
 
-        # 如果知识库未配置 embedding，使用默认配置
-        if not emb_config or not emb_config.get('provider'):
-            emb_config = embedding_service.get_default_embedding_config()
+        # 如果知识库未配置 embedding，自动检测可用提供商
+        if not emb_config or not emb_config.get('provider') or not emb_config.get('api_key'):
+            emb_config = embedding_service.detect_available_embedding_config()
 
         success, result = faiss_service.incremental_embed_doc(doc_id, emb_config)
         if success:
             print(f"[FAISS] 文档 {doc_id} 向量化成功: {result}")
+            # 成功后保存配置到知识库
+            if kb:
+                kb.embedding_config = json.dumps(emb_config, ensure_ascii=False)
+                db.session.commit()
         else:
             print(f"[FAISS] 文档 {doc_id} 向量化失败: {result}")
 

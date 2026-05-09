@@ -22,6 +22,10 @@ Flask 应用工厂
 2026-05-07
 变更说明：
   1. 启动时确保 FAISS 索引目录存在（Phase 4.1）
+
+2026-05-09
+变更说明：
+  1. 关闭 LangSmith 遥测（国内网络无法访问，避免噪音日志）
 """
 
 import os
@@ -32,6 +36,10 @@ from app.extensions import db
 
 # 项目根目录（app/__init__.py 的上级目录）
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# 关闭 LangSmith 遥测（国内网络无法访问，避免噪音日志）
+os.environ.setdefault('LANGCHAIN_TRACING_V2', 'false')
+os.environ.setdefault('LANGCHAIN_API_KEY', '')
 
 
 def create_app():

@@ -165,8 +165,8 @@ body {
 
 /* ========== 左栏：知识库管理 ========== */
 .left-panel {
-    width: 260px;
-    min-width: 260px;
+    width: 300px;
+    min-width: 300px;
     background: var(--sidebar-bg);
     border-right: 1px solid var(--border-color);
     display: flex;
@@ -1258,7 +1258,7 @@ textarea::placeholder { color: var(--text-light); }
 /* ========== 响应式 ========== */
 @media (max-width: 1024px) {
     .right-panel { width: 260px; min-width: 260px; }
-    .left-panel { width: 200px; min-width: 200px; }
+    .left-panel { width: 240px; min-width: 240px; }
 }
 
 @media (max-width: 768px) {
@@ -1365,7 +1365,8 @@ textarea::placeholder { color: var(--text-light); }
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 100px;
+    flex: 1;
+    min-width: 0;
 }
 
 .doc-info {

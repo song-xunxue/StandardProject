@@ -184,12 +184,13 @@ body {
 
 /* 左栏可拖拽分隔线 */
 .panel-resizer {
-    width: 6px;
+    width: 8px;
     cursor: col-resize;
     background: transparent;
     position: relative;
     z-index: 10;
     flex-shrink: 0;
+    align-self: stretch;
     transition: background 0.2s;
 }
 
@@ -201,13 +202,13 @@ body {
 .panel-resizer::after {
     content: '';
     position: absolute;
-    top: 50%;
+    top: 0;
     left: 50%;
-    transform: translate(-50%, -50%);
-    width: 2px;
-    height: 30px;
+    transform: translateX(-50%);
+    width: 3px;
+    height: 100%;
     background: var(--border-color);
-    border-radius: 1px;
+    border-radius: 2px;
     transition: background 0.2s;
 }
 

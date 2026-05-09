@@ -14,6 +14,19 @@
  * 2026-05-04
  * 变更说明：
  *   1. Phase 3: 知识库文档管理（上传、列表、chunks 可视化）
+ *
+ * 2026-05-09
+ * 变更说明：
+ *   1. Phase 4.3+4.4: 新增 RAG 聊天功能（SSE 流式、对话管理、引用来源）
+ *   2. 中栏改造为聊天输入框 + 消息流
+ *   3. 左栏新增对话列表
+ *   4. 新增 Markdown 渲染、流式光标、引用卡片
+ *
+ * 2026-05-09
+ * 变更说明：
+ *   1. 修复 showStatusMessage 因 message-box 缺失导致上传文档无反应
+ *   2. 新增文档上传进度遮罩层（4 阶段动画：上传→解析→切分→向量化）
+ *   3. showStatusMessage 增加 null 防护
  */
 
 // ========== 配置 ==========
@@ -66,11 +79,18 @@ const DEFAULT_PARAMS = {
 
 // ========== 应用状态 ==========
 let currentMode = 'text';          // 'text' | 'pdf'
-let currentKB = 'quick';           // 'quick' | kb_id
+let currentKB = null;              // 当前选中的知识库 ID，null 表示未选中
 let knowledgeBases = [];           // 知识库列表
 let messages = [];                 // 消息历史
 let currentUser = null;            // 当前用户
 let activeProvider = '';            // 当前激活的提供商（用于跟踪切换）
+
+// Phase 4.4: 聊天状态
+let currentConvId = null;          // 当前对话 ID
+let conversations = [];            // 当前知识库的对话列表
+let isStreaming = false;           // 是否正在流式接收
+let pendingSources = [];           // 当前回答的引用来源
+let currentStreamContent = '';     // 当前流式累积的内容
 
 // ========== 初始化 ==========
 document.addEventListener('DOMContentLoaded', () => {
@@ -90,6 +110,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 更新底部状态栏
     updateStatusBar();
+
+    // 从服务器加载已有知识库列表
+    loadKBList();
+
+    // Phase 4.4: 聊天输入框事件绑定
+    const chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+        chatInput.addEventListener('input', autoResizeInput);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    }
 });
 
 // ========== 认证模块 ==========
@@ -165,6 +200,7 @@ function createKnowledgeBase() {
         };
         knowledgeBases.push(kb);
         renderKBList();
+        switchKB(kb.id);
         showStatusMessage('知识库创建成功', 'success');
     } else {
         // Phase 2.2: 调用真实 API
@@ -178,6 +214,7 @@ function createKnowledgeBase() {
             if (data.success) {
                 knowledgeBases.push(data.data);
                 renderKBList();
+                switchKB(data.data.id);
                 showStatusMessage('知识库创建成功', 'success');
             } else {
                 showStatusMessage(data.error || '创建失败', 'error');
@@ -194,7 +231,7 @@ function deleteKnowledgeBase(kbId, event) {
 
     if (MOCK_AUTH) {
         knowledgeBases = knowledgeBases.filter(k => k.id !== kbId);
-        if (currentKB === kbId) switchKB('quick');
+        if (currentKB === kbId) _selectFirstKB();
         renderKBList();
     } else {
         authFetch(`${API_BASE_URL}/kb/${kbId}`, { method: 'DELETE' })
@@ -202,7 +239,7 @@ function deleteKnowledgeBase(kbId, event) {
         .then(data => {
             if (data.success) {
                 knowledgeBases = knowledgeBases.filter(k => k.id !== kbId);
-                if (currentKB === kbId) switchKB('quick');
+                if (currentKB === kbId) _selectFirstKB();
                 renderKBList();
             } else {
                 showStatusMessage(data.error || '删除失败', 'error');
@@ -214,24 +251,37 @@ function deleteKnowledgeBase(kbId, event) {
 
 function switchKB(kbId) {
     currentKB = kbId;
+    currentConvId = null;  // 重置当前对话
 
     // 更新 UI 高亮
     document.querySelectorAll('.kb-item').forEach(el => el.classList.remove('active'));
-    if (kbId === 'quick') {
-        document.getElementById('kb-quick').classList.add('active');
-        document.getElementById('current-kb-label').textContent = '快速分析';
-    } else {
-        const el = document.querySelector(`[data-kb-id="${kbId}"]`);
-        if (el) el.classList.add('active');
-        const kb = knowledgeBases.find(k => k.id === kbId);
-        document.getElementById('current-kb-label').textContent = kb ? kb.name : kbId;
-        // 加载文档列表
-        loadKBDocuments(kbId);
-    }
+    const el = document.querySelector(`[data-kb-id="${kbId}"]`);
+    if (el) el.classList.add('active');
+    const kb = knowledgeBases.find(k => k.id === kbId);
+    document.getElementById('current-kb-label').textContent = kb ? kb.name : kbId;
+
+    // 加载文档列表和对话列表
+    loadKBDocuments(kbId);
+    loadKBConversations(kbId);
 
     // 清空消息
-    clearResult();
+    clearChat();
     updateStatusBar();
+}
+
+/**
+ * 选中第一个知识库（删除当前知识库后回退）
+ */
+function _selectFirstKB() {
+    currentKB = null;
+    currentConvId = null;
+    document.getElementById('current-kb-label').textContent = '未选择';
+    if (knowledgeBases.length > 0) {
+        switchKB(knowledgeBases[0].id);
+    } else {
+        clearChat();
+        updateStatusBar();
+    }
 }
 
 function renderKBList() {
@@ -251,6 +301,10 @@ function renderKBList() {
             </div>
             <div class="kb-docs-panel" id="kb-docs-${kb.id}" style="display:none;">
                 <div class="kb-docs-loading">加载中...</div>
+            </div>
+            <div class="kb-conversations-panel" id="kb-convs-${kb.id}" style="display:none;">
+                <div class="kb-convs-header" onclick="loadKBConversations('${kb.id}')">&#128172; 对话记录</div>
+                <div id="kb-convs-list-${kb.id}" class="kb-convs-list"></div>
             </div>
             <input type="file" id="kb-file-${kb.id}" accept=".pdf" style="display:none;" onchange="handleKBUpload('${kb.id}', this)">
         </div>
@@ -279,6 +333,7 @@ function analyze() {
 
 function showStatusMessage(msg, type) {
     const box = document.getElementById('message-box');
+    if (!box) return;
     box.textContent = msg;
     box.className = `status-message ${type}`;
 }
@@ -634,12 +689,35 @@ function updateStatusBar() {
     const config = getModelConfig();
     const providerInfo = PROVIDER_CONFIG[config.provider];
 
-    const kbName = currentKB === 'quick' ? '快速分析' :
-        (knowledgeBases.find(k => k.id === currentKB)?.name || currentKB);
+    const kbName = currentKB
+        ? (knowledgeBases.find(k => k.id === currentKB)?.name || currentKB)
+        : '未选择';
 
     document.getElementById('status-kb').textContent = `知识库: ${kbName}`;
     document.getElementById('status-model').textContent = `模型: ${config.model || 'Coze 智能体'}`;
     document.getElementById('status-provider').textContent = `提供商: ${providerInfo.name}`;
+}
+
+// ========== 知识库列表加载 ==========
+
+/**
+ * 从服务器加载知识库列表并渲染
+ */
+async function loadKBList() {
+    try {
+        const response = await authFetch(`${API_BASE_URL}/kb`);
+        const data = await response.json();
+        if (data.success) {
+            knowledgeBases = data.data || [];
+            renderKBList();
+            // 自动选中第一个知识库
+            if (knowledgeBases.length > 0 && !currentKB) {
+                switchKB(knowledgeBases[0].id);
+            }
+        }
+    } catch (error) {
+        console.error('加载知识库列表失败:', error);
+    }
 }
 
 // ========== 文档管理模块（Phase 3） ==========
@@ -652,8 +730,61 @@ function triggerKBUpload(kbId, event) {
     document.getElementById(`kb-file-${kbId}`).click();
 }
 
+// ========== 上传进度动画控制 ==========
+
 /**
- * 处理知识库文件上传
+ * 显示上传进度遮罩
+ */
+function showUploadProgress(fileName) {
+    const overlay = document.getElementById('upload-overlay');
+    if (!overlay) return;
+    const title = document.getElementById('upload-progress-title');
+    if (title) title.textContent = `正在处理: ${fileName}`;
+    // 重置所有步骤
+    ['upload', 'parse', 'chunk', 'embed'].forEach(s => {
+        const el = document.getElementById(`upload-step-${s}`);
+        if (el) el.className = 'upload-step';
+    });
+    const bar = document.getElementById('upload-progress-bar');
+    if (bar) bar.style.width = '0%';
+    const pct = document.getElementById('upload-progress-pct');
+    if (pct) pct.textContent = '0%';
+    overlay.style.display = 'flex';
+}
+
+/**
+ * 更新上传进度步骤
+ * @param {string} step - 'upload'|'parse'|'chunk'|'embed'
+ * @param {string} status - 'active'|'done'|'error'
+ * @param {number} percent - 0~100
+ */
+function updateUploadStep(step, status, percent) {
+    const el = document.getElementById(`upload-step-${step}`);
+    if (el) {
+        el.className = `upload-step ${status}`;
+        const icon = el.querySelector('.step-icon');
+        if (icon) {
+            if (status === 'active') icon.innerHTML = '&#8987;';      // ⏳ 处理中
+            else if (status === 'done') icon.innerHTML = '&#10004;';  // ✔ 完成
+            else if (status === 'error') icon.innerHTML = '&#10008;'; // ✘ 失败
+        }
+    }
+    const bar = document.getElementById('upload-progress-bar');
+    if (bar) bar.style.width = `${percent}%`;
+    const pct = document.getElementById('upload-progress-pct');
+    if (pct) pct.textContent = `${Math.round(percent)}%`;
+}
+
+/**
+ * 隐藏上传进度遮罩
+ */
+function hideUploadProgress() {
+    const overlay = document.getElementById('upload-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+/**
+ * 处理知识库文件上传（带进度动画）
  */
 async function handleKBUpload(kbId, input) {
     const file = input.files[0];
@@ -668,7 +799,12 @@ async function handleKBUpload(kbId, input) {
     const chunkSize = document.getElementById('slider-chunk-size')?.value || 500;
     const chunkOverlap = document.getElementById('slider-chunk-overlap')?.value || 50;
 
-    showStatusMessage(`正在上传并处理 ${file.name}...`, 'loading');
+    // 显示进度遮罩
+    showUploadProgress(file.name);
+
+    // 阶段 1：上传文件（前端估算 0~30%）
+    updateUploadStep('upload', 'active', 5);
+    showStatusMessage(`正在上传 ${file.name}...`, 'loading');
 
     const formData = new FormData();
     formData.append('file', file);
@@ -676,25 +812,70 @@ async function handleKBUpload(kbId, input) {
     formData.append('chunk_overlap', chunkOverlap);
 
     try {
+        // 模拟上传进度（FormData 无法精确追踪）
+        let uploadTimer = setInterval(() => {
+            const bar = document.getElementById('upload-progress-bar');
+            if (bar) {
+                const cur = parseFloat(bar.style.width) || 0;
+                if (cur < 28) bar.style.width = `${cur + 2}%`;
+            }
+        }, 200);
+
+        updateUploadStep('upload', 'active', 10);
+        // 标记解析阶段准备中
+        updateUploadStep('parse', 'active', 15);
+
         const response = await authFetch(`${API_BASE_URL}/kb/${kbId}/docs`, {
             method: 'POST',
             body: formData
         });
+
+        clearInterval(uploadTimer);
+        updateUploadStep('upload', 'done', 30);
+        updateUploadStep('parse', 'active', 35);
+
         const data = await response.json();
 
         if (data.success) {
             const doc = data.data;
-            if (doc.status === 'processed') {
-                showStatusMessage(`${file.name} 处理完成：${doc.page_count} 页，${doc.chunk_count || 0} 个文本块`, 'success');
-            } else {
-                showStatusMessage(`${file.name} 已上传但处理失败：${doc.error_message || '未知错误'}`, 'error');
-            }
-            loadKBDocuments(kbId);
+            // 后端已同步完成解析+切分+向量化
+            updateUploadStep('parse', 'done', 55);
+            updateUploadStep('chunk', 'active', 60);
+
+            setTimeout(() => {
+                updateUploadStep('chunk', 'done', 80);
+                updateUploadStep('embed', 'active', 85);
+
+                setTimeout(() => {
+                    if (doc.status === 'processed') {
+                        updateUploadStep('embed', 'done', 100);
+                        const title = document.getElementById('upload-progress-title');
+                        if (title) title.textContent = `处理完成: ${doc.page_count} 页, ${doc.chunk_count || 0} 个文本块`;
+                        showStatusMessage(`${file.name} 处理完成：${doc.page_count} 页，${doc.chunk_count || 0} 个文本块`, 'success');
+                    } else {
+                        updateUploadStep('embed', 'error', 80);
+                        const title = document.getElementById('upload-progress-title');
+                        if (title) title.textContent = `处理失败: ${doc.error_message || '未知错误'}`;
+                        showStatusMessage(`${file.name} 已上传但处理失败：${doc.error_message || '未知错误'}`, 'error');
+                    }
+                    loadKBDocuments(kbId);
+                    // 1.5 秒后自动关闭
+                    setTimeout(hideUploadProgress, 1500);
+                }, 400);
+            }, 400);
         } else {
+            updateUploadStep('upload', 'error', 0);
+            const title = document.getElementById('upload-progress-title');
+            if (title) title.textContent = `上传失败: ${data.error || '未知错误'}`;
             showStatusMessage(data.error || '上传失败', 'error');
+            setTimeout(hideUploadProgress, 2000);
         }
     } catch (error) {
+        updateUploadStep('upload', 'error', 0);
+        const title = document.getElementById('upload-progress-title');
+        if (title) title.textContent = `网络错误: ${error.message}`;
         showStatusMessage('上传失败，请检查后端服务', 'error');
+        setTimeout(hideUploadProgress, 2000);
     }
 
     // 重置 input 以便重复上传
@@ -807,4 +988,396 @@ async function deleteDoc(docId, kbId, event) {
     } catch (error) {
         showStatusMessage('删除失败', 'error');
     }
+}
+
+// ========== Phase 4.4: RAG 聊天模块 ==========
+
+/**
+ * 清空聊天界面
+ */
+function clearChat() {
+    document.getElementById('welcome-state').style.display = 'flex';
+    document.getElementById('message-list').style.display = 'none';
+    document.getElementById('message-list').innerHTML = '';
+    document.getElementById('sources-panel').style.display = 'none';
+    messages = [];
+    clearStatusMessage();
+}
+
+/**
+ * 聊天消息发送
+ */
+async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const content = input.value.trim();
+    if (!content || isStreaming) return;
+
+    // 检查是否选中了知识库
+    if (!currentKB) {
+        showStatusMessage('请先选择或创建一个知识库', 'error');
+        return;
+    }
+
+    // 检查是否有对话，没有则自动创建
+    if (!currentConvId) {
+        await createConversation(true);
+        if (!currentConvId) return;
+    }
+
+    // 清空输入框
+    input.value = '';
+    autoResizeInput();
+
+    // 渲染用户消息
+    addUserMessage(content);
+
+    // 显示打字指示器
+    showTypingIndicator(true);
+
+    // 获取模型配置
+    const modelConfig = getModelConfig();
+
+    const body = {
+        content: content,
+        model_config: modelConfig,
+        stream: true,
+    };
+
+    isStreaming = true;
+    pendingSources = [];
+    currentStreamContent = '';
+
+    // 创建 AI 消息占位
+    const aiMsgId = 'ai-msg-' + Date.now();
+    addStreamingBotMessage(aiMsgId);
+
+    try {
+        const response = await authFetch(
+            `${API_BASE_URL}/conversations/${currentConvId}/messages`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            }
+        );
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEventType = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // 保留最后不完整的行
+
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    currentEventType = line.slice(7).trim();
+                } else if (line.startsWith('data: ')) {
+                    const dataStr = line.slice(6);
+                    try {
+                        const data = JSON.parse(dataStr);
+                        if (currentEventType === 'token') {
+                            currentStreamContent += data.content;
+                            updateStreamingMessage(aiMsgId, currentStreamContent);
+                        } else if (currentEventType === 'sources') {
+                            pendingSources = data.sources;
+                            renderSources(data.sources);
+                        } else if (currentEventType === 'done') {
+                            // 完成
+                        } else if (currentEventType === 'error') {
+                            updateStreamingMessage(aiMsgId, '错误: ' + data.error);
+                        }
+                    } catch (e) { /* 忽略解析错误 */ }
+                    currentEventType = '';
+                }
+            }
+        }
+
+    } catch (error) {
+        updateStreamingMessage(aiMsgId, '请求失败，请检查后端服务');
+        showStatusMessage('发送失败: ' + error.message, 'error');
+    } finally {
+        isStreaming = false;
+        showTypingIndicator(false);
+        finalizeStreamingMessage(aiMsgId);
+    }
+}
+
+/**
+ * 创建新对话
+ */
+async function createConversation(silent = false) {
+    if (!currentKB) {
+        if (!silent) showStatusMessage('请先选择或创建一个知识库', 'error');
+        return;
+    }
+
+    try {
+        const response = await authFetch(`${API_BASE_URL}/kb/${currentKB}/conversations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: '' }),
+        });
+        const data = await response.json();
+        if (data.success) {
+            currentConvId = data.data.id;
+            if (!silent) clearChat();
+            loadKBConversations(currentKB);
+        } else if (!silent) {
+            showStatusMessage(data.error || '创建对话失败', 'error');
+        }
+    } catch (error) {
+        if (!silent) showStatusMessage('创建对话失败', 'error');
+    }
+}
+
+/**
+ * 切换到指定对话
+ */
+async function switchConversation(convId) {
+    try {
+        const response = await authFetch(`${API_BASE_URL}/conversations/${convId}`);
+        const data = await response.json();
+        if (data.success) {
+            currentConvId = convId;
+            renderHistoryMessages(data.data.messages || []);
+            renderConversationList(currentKB);
+        }
+    } catch (error) {
+        showStatusMessage('加载对话失败', 'error');
+    }
+}
+
+/**
+ * 删除对话
+ */
+async function deleteConversation(convId, event) {
+    event.stopPropagation();
+    if (!confirm('确定删除该对话？')) return;
+
+    try {
+        const response = await authFetch(`${API_BASE_URL}/conversations/${convId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            if (currentConvId === convId) {
+                currentConvId = null;
+                clearChat();
+            }
+            loadKBConversations(currentKB);
+        } else {
+            showStatusMessage(data.error || '删除失败', 'error');
+        }
+    } catch (error) {
+        showStatusMessage('删除失败', 'error');
+    }
+}
+
+/**
+ * 加载知识库的对话列表
+ */
+async function loadKBConversations(kbId) {
+    const convsPanel = document.getElementById(`kb-convs-${kbId}`);
+    if (!convsPanel) return;
+
+    convsPanel.style.display = 'block';
+
+    try {
+        const response = await authFetch(`${API_BASE_URL}/kb/${kbId}/conversations`);
+        const data = await response.json();
+        if (data.success) {
+            conversations = data.data;
+            renderConversationList(kbId);
+        }
+    } catch (error) { /* 静默失败 */ }
+}
+
+/**
+ * 渲染左栏对话列表
+ */
+function renderConversationList(kbId) {
+    const container = document.getElementById(`kb-convs-list-${kbId}`);
+    if (!container) return;
+
+    if (conversations.length === 0) {
+        container.innerHTML = '<div class="conv-empty">暂无对话</div>';
+        return;
+    }
+
+    container.innerHTML = conversations.map(conv => `
+        <div class="conv-item ${currentConvId === conv.id ? 'active' : ''}"
+             onclick="switchConversation('${conv.id}')">
+            <span class="conv-title">${escapeHtml(conv.title)}</span>
+            <span class="conv-count">${conv.message_count} 条</span>
+            <button class="conv-delete" onclick="deleteConversation('${conv.id}', event)">&times;</button>
+        </div>
+    `).join('');
+}
+
+/**
+ * 渲染历史消息
+ */
+function renderHistoryMessages(msgs) {
+    document.getElementById('welcome-state').style.display = 'none';
+    const list = document.getElementById('message-list');
+    list.style.display = 'flex';
+    list.innerHTML = '';
+
+    msgs.forEach(msg => {
+        if (msg.role === 'user') {
+            list.innerHTML += `<div class="chat-msg user-msg"><div class="msg-content">${escapeHtml(msg.content)}</div></div>`;
+        } else {
+            list.innerHTML += `<div class="chat-msg bot-msg"><div class="msg-content">${renderMarkdown(msg.content)}</div></div>`;
+        }
+    });
+
+    document.getElementById('sources-panel').style.display = 'none';
+    scrollToBottom();
+}
+
+// ========== 流式渲染函数 ==========
+
+/**
+ * 创建 AI 流式消息占位
+ */
+function addStreamingBotMessage(msgId) {
+    document.getElementById('welcome-state').style.display = 'none';
+    const list = document.getElementById('message-list');
+    list.style.display = 'flex';
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-msg bot-msg streaming';
+    msgDiv.id = msgId;
+    msgDiv.innerHTML = '<div class="msg-content"><span class="streaming-cursor">|</span></div>';
+    list.appendChild(msgDiv);
+    scrollToBottom();
+}
+
+/**
+ * 更新流式消息内容
+ */
+function updateStreamingMessage(msgId, content) {
+    const el = document.getElementById(msgId);
+    if (!el) return;
+    const contentEl = el.querySelector('.msg-content');
+    contentEl.innerHTML = renderMarkdown(content) + '<span class="streaming-cursor">|</span>';
+    scrollToBottom();
+}
+
+/**
+ * 完成流式消息
+ */
+function finalizeStreamingMessage(msgId) {
+    const el = document.getElementById(msgId);
+    if (!el) return;
+    el.classList.remove('streaming');
+    const cursor = el.querySelector('.streaming-cursor');
+    if (cursor) cursor.remove();
+
+    // 追加引用来源标签
+    if (pendingSources.length > 0) {
+        const sourcesHtml = buildSourcesHtml(pendingSources);
+        const contentEl = el.querySelector('.msg-content');
+        contentEl.insertAdjacentHTML('beforeend', sourcesHtml);
+    }
+}
+
+// ========== 辅助函数 ==========
+
+/**
+ * 简易 Markdown 渲染
+ */
+function renderMarkdown(text) {
+    if (!text) return '';
+    let html = escapeHtml(text);
+    // 加粗 **text**
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // 行内代码 `code`
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // 标题
+    html = html.replace(/^### (.+)$/gm, '<h4 class="md-h4">$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3 class="md-h3">$1</h3>');
+    // 无序列表
+    html = html.replace(/^- (.+)$/gm, '<li class="md-li">$1</li>');
+    // 有序列表
+    html = html.replace(/^\d+\. (.+)$/gm, '<li class="md-li">$1</li>');
+    // 换行
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+
+/**
+ * 聊天输入框自适应高度
+ */
+function autoResizeInput() {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+}
+
+/**
+ * 显示/隐藏打字指示器
+ */
+function showTypingIndicator(show) {
+    const indicator = document.getElementById('typing-indicator');
+    if (indicator) indicator.style.display = show ? 'flex' : 'none';
+}
+
+/**
+ * 滚动到底部
+ */
+function scrollToBottom() {
+    const area = document.getElementById('result-area');
+    if (area) area.scrollTop = area.scrollHeight;
+}
+
+/**
+ * 渲染引用来源面板
+ */
+function renderSources(sources) {
+    const panel = document.getElementById('sources-panel');
+    const list = document.getElementById('sources-list');
+    if (!sources || sources.length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = 'block';
+    list.innerHTML = sources.map((s, i) => `
+        <div class="source-card">
+            <div class="source-header">
+                <span class="source-index">#${i + 1}</span>
+                <span class="source-filename">${escapeHtml(s.doc_filename)}</span>
+                ${s.page_start ? `<span class="source-page">第 ${s.page_start} 页</span>` : ''}
+                <span class="source-score">相似度: ${s.score}</span>
+            </div>
+            <div class="source-snippet">${escapeHtml(s.snippet)}</div>
+        </div>
+    `).join('');
+}
+
+/**
+ * 切换引用来源面板显隐
+ */
+function toggleSources() {
+    const panel = document.getElementById('sources-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+/**
+ * 消息内引用来源标签 HTML
+ */
+function buildSourcesHtml(sources) {
+    return `
+        <div class="inline-sources">
+            <div class="inline-sources-header">&#128218; 引用来源</div>
+            ${sources.map((s, i) => `
+                <span class="source-badge" title="${escapeHtml(s.doc_filename)} 第${s.page_start || '?'}页">[${i + 1}]</span>
+            `).join(' ')}
+        </div>
+    `;
 }

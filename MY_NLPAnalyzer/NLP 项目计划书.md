@@ -1,5 +1,20 @@
 # NLPAnalyzer 项目开发计划书
 
+<!--
+  作者: 李文煜
+  日期: 2026-05-09
+
+  2026-05-09
+  变更说明：
+    1. Phase 2 标记为 ✅ 已完成，2.1-2.4 子阶段均标记已完成
+    2. Phase 2.1-2.4 精简为交付物总结（移除规划阶段的详细验证标准/代码改动列表）
+    3. Phase 3 标记为已完成
+    4. Phase 4 拆分为 4.1-4.4，4.1/4.2 标记已完成，补充实际实现细节
+    5. 里程碑表格增加"状态"列
+    6. 修正 ENCRYPTION_KEY → FERNET_KEY，Redis 键结构更新为实际使用状态
+    7. 核心依赖新增 faiss-cpu、langchain-ollama
+-->
+
 ## 一、项目名称与简介
 
 - **项目名称**：MY_NLPAnalyzer —— 基于 Langchain 与大模型的智能 NLP 文献研读助手
@@ -26,7 +41,7 @@
 | **关系数据库** | SQLite + SQLAlchemy ORM | 用户、知识库、文档、对话持久化 |
 | **缓存层** | Redis + redis-py | JWT 会话缓存、热数据加速 |
 | **环境管理** | python-dotenv | 环境变量隔离 |
-| **后续扩展** | Langchain TextSplitter, FAISS, LangGraph | 文档切分 / 向量检索 / 智能体编排 |
+| **后续扩展** | Langchain TextSplitter, FAISS, LangGraph | 文档切分 / 向量检索 / 智能体编排（Phase 3-4 已落地） |
 
 ### 核心依赖清单
 
@@ -38,6 +53,7 @@ cozepy
 langchain
 langchain-openai
 langchain-community
+langchain-ollama
 pypdf
 redis
 sqlalchemy
@@ -45,6 +61,7 @@ flask-sqlalchemy
 bcrypt
 PyJWT
 cryptography
+faiss-cpu
 ```
 
 ---
@@ -388,31 +405,21 @@ cryptography
 ### 5.2 API Key 加密方案
 
 ```
-用户输入 API Key
-      ↓
-后端接收明文 Key
-      ↓
-使用 Fernet 对称加密（密钥来自 .env 的 ENCRYPTION_KEY）
-      ↓
-加密后存入 user_api_keys.encrypted_key
-      ↓
-调用模型时：读取加密 Key → Fernet 解密 → 传给 Langchain
+用户输入 API Key → 后端接收明文 → Fernet 对称加密（密钥来自 .env 的 FERNET_KEY）
+→ 加密后存入 user_api_keys.encrypted_key → 调用模型时：读取 → Fernet 解密 → 传给 Langchain
 ```
 
-- 加密密钥 `ENCRYPTION_KEY` 存在 `.env` 中，不入版本库
+- 加密密钥 `FERNET_KEY` 存在 `.env` 中，不入版本库
 - 前端展示 API Key 时仅显示后 4 位（如 `••••••ab3f`）
 - API Key 仅在调用模型时解密，不写入日志
 
-### 5.3 Redis —— 缓存层
+### 5.3 Redis —— JWT 黑名单
+
+> 当前 Redis 仅用于 JWT Token 黑名单，其他缓存场景（会话状态、分析缓存、频率限制）尚未实现。
 
 | 键模式 | 数据类型 | 用途 | TTL |
 |--------|----------|------|-----|
-| `jwt:{token}` | Hash | JWT 会话信息（user_id、角色） | 24h |
-| `session:{user_id}` | Hash | 当前活跃会话状态（知识库、对话、临时参数） | 24h |
-| `params:temp:{session_id}` | Hash | 未保存的临时参数修改 | 2h |
-| `task:{task_id}` | String | 异步任务状态（PDF 处理进度等） | 1h |
-| `cache:analysis:{hash}` | String | 相同文本+参数的分析结果缓存 | 1h |
-| `rate_limit:{user_id}` | Counter | API 调用频率限制 | 1min |
+| `nlp:jwt_bl:{token}` | String | JWT 黑名单（注销时写入） | Token 剩余有效期 |
 
 ---
 
@@ -550,258 +557,66 @@ cryptography
 
 ---
 
-### 🟡 Phase 2：系统架构升级（当前阶段，细分为 4 个子阶段）
+### 🟡 Phase 2：系统架构升级（✅ 已完成）
 
-> **工程思路**：先跑通前端 UI → 再重构后端（多模型 + 新 API，内存存储）→ 引入 Redis（JWT 会话 + 缓存）→ 最后 SQLite 持久化（含用户认证 + API Key 加密）。每一步都可在前一步的基础上独立验证，降低风险。
-
----
-
-#### Phase 2.1：前端三栏布局重构 + 登录页面（纯前端改造，后端不动）
-
-- **核心目标**：将单页面工具重构为 Google AI Studio 风格的三栏界面 + 登录注册页面，所有数据暂存前端 JS 状态。
-
-- **前端改造内容**：
-  1. **登录/注册页面**：
-     - 登录表单：邮箱 + 密码
-     - 注册表单：邮箱 + 密码 + 确认密码 + 昵称（可选）
-     - 登录/注册标签页切换
-     - 暂时跳过实际认证，点登录直接进入主界面（mock 模式）
-  2. **主应用三栏布局**：CSS Grid / Flexbox 实现左（240px）/ 中（自适应）/ 右（300px）三栏，各栏可折叠。
-  3. **左栏 —— 知识库管理面板**：
-     - 新建/重命名/删除知识库（操作仅修改前端 JS 数组）
-     - 支持多文档知识库和单文档快速分析两种模式
-     - 知识库内文档列表展示
-  4. **中栏 —— 对话式工作区**：
-     - 聊天气泡风格展示用户输入和 AI 回复
-     - 保留文本输入框和 PDF 上传按钮
-     - 仍然调用现有的 `/api/analyze_text` 和 `/api/analyze_pdf`
-  5. **右栏 —— 参数调节面板**：
-     - **模型配置区（新增）**：
-       - 提供商下拉：DeepSeek / OpenAI / Ollama / Coze 智能体
-       - API Key 输入框（密码类型 + 显示/隐藏切换）
-       - 模型名称下拉（根据提供商动态切换候选列表）
-       - Base URL 输入框（可选，自定义端点）
-       - Coze 模式额外显示 Bot ID 输入框
-       - Ollama 模式隐藏 API Key 输入框
-     - **模型参数滑块组**：Temperature、Top-P、Top-K、Max Tokens
-     - **NLP 参数滑块组**：Chunk Size、Chunk Overlap、关键词数量、文本截断长度
-     - 「重置默认值」按钮
-  6. **顶部导航栏**：项目名称 + 用户昵称 + 退出按钮
-  7. **底部状态栏**：当前知识库名称、模型信息、文档数。
-
-- **后端改动**：
-  - 仅对现有 `/api/analyze_text` 和 `/api/analyze_pdf` 增加可选 `params` 字段透传（向后兼容）。
-
-- **验证标准**：
-  - 登录页面正常渲染，点击登录可进入主界面
-  - 三栏布局正确渲染，各面板可折叠
-  - 右栏模型配置区切换提供商时，模型列表和输入框动态更新
-  - 文本分析和 PDF 分析功能正常调用原有接口
-  - 参数通过请求体传到后端（后端日志确认收到）
-
-- **技术产出**：`static/login.html`、`static/index.html`、`static/style.css`、`static/app.js`。
+> **工程思路**：前端三栏布局 → 后端模块化 + 多模型 → Redis JWT 黑名单 → SQLite 持久化 + Fernet 加密。
 
 ---
 
-#### Phase 2.2：后端模块化重构 + 多模型支持（内存存储）
+#### Phase 2.1：前端三栏布局重构 + 登录页面（✅ 已完成）
 
-- **核心目标**：将 `coze_app.py` 单文件拆分为模块化项目结构，引入 Langchain `init_chat_model` 多模型支持，新增知识库/对话/参数/模型/认证 API，数据使用 Python 内存字典存储。
-
-- **项目结构重组**：
-  ```
-  MY_NLPAnalyzer/
-  ├── app/
-  │   ├── __init__.py          # Flask 应用工厂（create_app）
-  │   ├── config.py            # 配置管理（读取 .env）
-  │   ├── routes/              # API 路由蓝图
-  │   │   ├── __init__.py
-  │   │   ├── auth.py          # 认证接口（注册/登录/me）
-  │   │   ├── analyze.py       # 分析接口（迁移自 coze_app.py）
-  │   │   ├── kb.py            # 知识库 CRUD 接口
-  │   │   ├── docs.py          # 文档管理接口
-  │   │   ├── chat.py          # 对话管理接口
-  │   │   ├── params.py        # 参数配置接口
-  │   │   └── models.py        # 模型提供商信息接口
-  │   ├── services/            # 业务逻辑层
-  │   │   ├── llm_service.py   # 多模型统一服务（init_chat_model + Coze SDK）
-  │   │   ├── pdf_parser.py    # PDF 解析服务
-  │   │   ├── auth_service.py  # 认证服务（JWT 生成/验证）
-  │   │   └── memory_store.py  # 内存存储服务（临时替代数据库）
-  │   ├── middleware/           # 中间件
-  │   │   └── auth_guard.py    # JWT 鉴权装饰器
-  │   └── utils/               # 工具函数
-  │       └── response.py      # 统一响应格式封装
-  ├── static/                  # 前端静态资源（Phase 2.1 产出）
-  │   ├── login.html
-  │   ├── index.html
-  │   ├── style.css
-  │   └── app.js
-  ├── data/
-  │   └── uploads/             # 上传文档存储目录
-  ├── coze_app.py              # 入口文件（精简为启动脚本）
-  ├── .env
-  └── requirements.txt         # 依赖清单
-  ```
-
-- **多模型服务设计**（`llm_service.py`）：
-
-  ```
-  前端传入 → {provider, api_key, model_name, base_url, params}
-      ↓
-  ┌─────────────────────────────────────┐
-  │           llm_service.py             │
-  │                                     │
-  │  provider == "coze"?                │
-  │    → Coze SDK 路径                  │
-  │      coze.chat.create_and_poll()    │
-  │                                     │
-  │  provider == "ollama"?              │
-  │    → init_chat_model(               │
-  │        model=model_name,            │
-  │        model_provider="ollama",     │
-  │        base_url=base_url)           │
-  │                                     │
-  │  provider in ["deepseek","openai"]? │
-  │    → init_chat_model(               │
-  │        model=model_name,            │
-  │        model_provider=provider,     │
-  │        api_key=api_key)             │
-  │                                     │
-  │  provider == "custom"?              │
-  │    → ChatOpenAI(                    │
-  │        model=model_name,            │
-  │        api_key=api_key,             │
-  │        base_url=base_url)           │
-  └─────────────────────────────────────┘
-  ```
-
-- **认证服务设计**（`auth_service.py`，内存版）：
-  - 注册：邮箱+密码 → bcrypt 哈希 → 存入内存字典
-  - 登录：验证密码 → 生成 JWT Token → 返回给前端
-  - 鉴权装饰器：从请求头提取 Token → 验证 → 注入 `g.user`
-  - **注意**：此阶段用户数据存内存，重启丢失。JWT 无状态验证，重启后旧 Token 仍有效（签名密钥在 .env 中）
-
-- **新增 API 接口**：
-  - 认证：`POST /api/auth/register`、`POST /api/auth/login`、`GET /api/auth/me`
-  - API Key：`GET/POST/DELETE /api/auth/keys`
-  - 模型信息：`GET /api/models/providers`、`GET /api/models/{provider}/models`
-  - 知识库 CRUD：`GET/POST/PUT/DELETE /api/kb`
-  - 文档管理：`POST/DELETE/GET /api/kb/{id}/docs`
-  - 对话管理：`GET/POST /api/kb/{id}/conversations`、`GET/POST /api/conversations/{id}/messages`
-  - 参数配置：`GET /api/params/default`、`GET/POST/DELETE /api/params/presets`
-
-- **前端对接**：
-  - 登录页面调用 `/api/auth/register` 和 `/api/auth/login`
-  - 登录成功后 Token 存 `localStorage`，后续请求带 `Authorization` 头
-  - 右栏模型配置调用 `/api/models/providers` 获取提供商列表
-  - API Key 通过 `/api/auth/keys` 管理和自动填充
-  - 知识库/对话/参数操作全部改为调用真实 API
-
-- **验证标准**：
-  - 前端注册/登录流程正常，JWT Token 正确返回
-  - 切换提供商后调用对应模型成功（DeepSeek / OpenAI 至少验证一个）
-  - Coze 智能体模式仍正常工作
-  - 知识库 CRUD 通过前端界面操作正常
-  - 未登录访问需鉴权的接口返回 401
-
-- **技术产出**：模块化后端、多模型服务、内存存储层、JWT 认证、完整 API 接口。
+- **核心目标**：将单页面工具重构为 Google AI Studio 风格的三栏界面 + 登录注册页面。
+- **交付内容**：
+  - 登录/注册页面（标签页切换，邮箱+密码）
+  - 三栏布局：左栏知识库管理（240px）+ 中栏对话式工作区 + 右栏参数面板（300px）
+  - 右栏三区块：模型配置区（提供商/API Key/模型动态切换）+ 模型参数滑块 + NLP 参数滑块
+  - 后端仅对分析接口增加可选 `params` 字段透传
+- **技术产出**：`static/login.html`、`static/index.html`、`static/style.css`、`static/app.js`
 
 ---
 
-#### Phase 2.3：Redis 缓存层 + JWT 会话管理
+#### Phase 2.2：后端模块化重构 + 多模型支持（✅ 已完成）
 
-- **核心目标**：引入 Redis 管理 JWT 会话和热数据缓存，提升性能和会话可控性。
-
-- **Redis 集成内容**：
-  1. **JWT 会话管理**：Token 黑名单/白名单存 Redis，支持主动注销和踢人
-  2. **会话状态缓存**：用户当前选中的知识库、活跃对话 ID 存入 Redis Hash（TTL 24h）
-  3. **临时参数存储**：右侧面板实时调节但未保存的参数存入 Redis（TTL 2h）
-  4. **分析结果缓存**：相同文本 + 模型 + 参数组合的分析结果缓存（TTL 1h）
-  5. **任务状态追踪**：PDF 处理进度存入 Redis（TTL 1h）
-  6. **频率限制**：API 调用计数（TTL 1min）
-
-- **代码改动**：
-  - 新增 `app/services/cache.py`：Redis 连接管理、缓存读写封装
-  - 修改 `app/services/auth_service.py`：JWT 验证增加 Redis 白名单检查
-  - 修改 `app/services/memory_store.py`：热数据查询优先走 Redis
-  - 修改 `app/routes/` 各路由：分析接口增加缓存判断
-  - `.env` 新增 `REDIS_URL` 配置
-
-- **验证标准**：
-  - Redis 服务运行正常，键值可通过 `redis-cli` 查看
-  - 相同文本重复分析命中缓存，响应加快
-  - JWT 注销后 Token 立即失效（Redis 黑名单）
-  - 服务重启后 Redis 中的会话状态仍可用（TTL 内）
-
-- **技术产出**：Redis 缓存服务层、JWT 会话管理、缓存策略。
+- **核心目标**：`coze_app.py` 单文件拆分为 Flask 工厂模式 + 蓝图路由 + 服务层，引入 Langchain `init_chat_model` 多模型支持。
+- **交付内容**：
+  - 模块化结构：`app/` 包（routes 7 个蓝图 + services 4 个服务 + middleware + models）
+  - 多模型服务（`llm_service.py`）：Coze SDK / Ollama / DeepSeek / OpenAI / 自定义提供商统一路由
+  - JWT 认证服务（`auth_service.py`）：注册/登录/鉴权装饰器
+  - 内存存储（`memory_store.py`）：知识库/对话/参数 CRUD
+  - 完整 API 接口体系（认证、模型、知识库、文档、对话、参数共 20+ 路由）
+- **技术产出**：模块化后端 `app/` 包、多模型服务、JWT 认证、完整 API
 
 ---
 
-#### Phase 2.4：SQLite 持久化 + 用户认证 + API Key 加密
+#### Phase 2.3：Redis JWT 黑名单（✅ 已完成）
 
-- **核心目标**：用 SQLite + SQLAlchemy 替换内存字典，实现数据持久化。新增 users 表和 user_api_keys 表，完成完整的用户认证和 API Key 加密存储。
-
-- **ORM 集成**：
-  - 新增 `app/models/` 目录，定义 SQLAlchemy 模型：
-    - `user.py` → users 表
-    - `user_api_key.py` → user_api_keys 表
-    - `knowledge_base.py` → knowledge_bases 表
-    - `document.py` → documents 表
-    - `conversation.py` → conversations 表
-    - `message.py` → messages 表
-    - `parameter_preset.py` → parameter_presets 表
-  - 新增 `app/extensions.py`：Flask-SQLAlchemy 初始化
-  - 数据库文件存放在 `data/nlp_analyzer.db`
-
-- **代码改动**：
-  - `app/services/memory_store.py` → 重构为 `app/services/db_store.py`：CRUD 改为 SQLAlchemy 查询
-  - 修改 `app/services/auth_service.py`：用户数据从内存迁移到 SQLite
-  - 新增 `app/services/crypto_service.py`：Fernet 加密/解密 API Key
-  - 修改 `app/services/llm_service.py`：从数据库读取用户加密的 API Key → 解密 → 调用模型
-  - 修改各 `routes/` 路由：memory_store 替换为 db_store
-  - `.env` 新增 `ENCRYPTION_KEY` 配置
-
-- **数据分层（最终状态）**：
-
-  ```
-  ┌─────────────────────────────────────────────────┐
-  │                 前端 (static/)                    │
-  │  login.html · index.html · style.css · app.js   │
-  └────────────────────┬────────────────────────────┘
-                       │ HTTP + JWT Bearer Token
-  ┌────────────────────▼────────────────────────────┐
-  │              Flask 路由层 (routes/)               │
-  │  auth · models · analyze · kb · docs · chat     │
-  └────┬───────────┬──────────────┬─────────────────┘
-       │           │              │
-  ┌────▼─────┐ ┌───▼──────┐ ┌───▼──────────┐
-  │ db_store  │ │ cache.py │ │ llm_service  │
-  │ (SQLite) │ │ (Redis)  │ │ (Langchain)  │
-  └────┬─────┘ └───┬──────┘ └──────────────┘
-       │           │
-  ┌────▼─────┐ ┌───▼──────┐
-  │ SQLite   │ │  Redis   │
-  │ (持久化)  │ │ (缓存)   │
-  └──────────┘ └──────────┘
-  ```
-
-  - **SQLite**：用户、API Key（加密）、知识库、文档、对话、消息、参数预设
-  - **Redis**：JWT 会话、临时参数、分析缓存、任务进度
-  - **Langchain**：统一模型调用接口，支持多提供商动态切换
-
-- **验证标准**：
-  - 服务重启后，用户数据、知识库、对话历史完整保留
-  - 用户可用注册的邮箱密码正常登录
-  - API Key 加密存储，数据库中不可见明文
-  - 前端展示 API Key 仅显示后 4 位
-  - Redis 缓存层正常工作
-  - `data/nlp_analyzer.db` 可通过 SQLite 工具查看
-
-- **技术产出**：SQLAlchemy ORM 模型、Fernet 加密服务、用户认证系统、持久化存储。
+- **核心目标**：引入 Redis 管理 JWT Token 黑名单，支持主动注销使 Token 立即失效。
+- **交付内容**：
+  - Redis 连接池服务（`app/services/redis_service.py`）
+  - JWT 注销时将 Token 写入 Redis（TTL = Token 剩余有效期）
+  - 鉴权时检查 Token 是否在黑名单中
+- **Redis 键结构**：`nlp:jwt_bl:{token}` — String，TTL 自动过期
+- **技术产出**：Redis 服务层、JWT 黑名单机制
 
 ---
 
-### 🔵 Phase 3：V3.0 Langchain 文档切分引擎
+#### Phase 2.4：SQLite + SQLAlchemy 持久化 + API Key Fernet 加密（✅ 已完成）
+
+- **核心目标**：Python 内存字典 → SQLite + SQLAlchemy ORM，用户 API Key 使用 Fernet 对称加密存储。
+- **交付内容**：
+  - 8 个 ORM 模型（`app/models/`）：User、KnowledgeBase、Conversation、Message、ApiKey、ParamPreset、Document、Chunk
+  - Fernet 加密服务（`app/services/crypto_service.py`）：API Key 加密存储，调用时解密
+  - `memory_store.py` 重写为 SQLAlchemy 查询
+  - 数据库文件 `data/nlp.db`
+- **数据分层**：
+  - **SQLite**：用户、API Key（加密）、知识库、文档、Chunk、对话、消息、参数预设
+  - **Redis**：仅 JWT 黑名单（TTL 自动过期）
+  - **Langchain**：统一多模型调用接口
+- **技术产出**：SQLAlchemy ORM 模型、Fernet 加密服务、持久化存储
+
+---
+
+### 🔵 Phase 3：V3.0 Langchain 文档切分引擎（✅ 已完成）
 
 - **核心目标**：解决超长 PDF 无法一次性处理的问题，深入应用 NLP 核心概念。
 
@@ -817,32 +632,163 @@ cryptography
 
 ---
 
-### 🔴 Phase 4：V4.0 RAG 知识库与 LangGraph 编排（最终答辩版）
+### 🔴 Phase 4：V4.0 RAG 知识库与 LangGraph 编排（当前阶段，细分为 4 个子阶段）
 
-- **核心目标**：完成真正的"文献研读助手"，引入向量化和智能体工作流。
-
-- **实现功能**：
-  1. **引入向量模型 (Embedding)**：使用开源模型（如 BAAI/bge-large-zh）将 Phase 3 得到的文本块转化为向量，存入本地 **FAISS** 数据库。
-  2. **实现 RAG 检索**：用户在网页输入框提问（例如："这篇论文的主要创新点是什么？"），后端通过 FAISS 检索出最相关的 Top-3 文本块。
-  3. **LangGraph 智能路由**：使用状态图构建工作流。系统自动判断用户输入是"闲聊"还是"文献检索"，如果是文献检索则走 RAG 节点，最后将 Context 喂给大模型生成标准答案。
-  4. **多轮对话记忆**：对话历史持久化到数据库，支持上下文连续追问。
-  5. **多文档联合分析**：知识库内的多篇文档统一向量化，跨文档检索相关信息。
-
-- **最终效果**：用户上传多篇全英文/中文 NLP 顶会论文（总页数达 100 页左右），网页在几秒内完成解析，随后用户可以针对特定论文进行多轮对话和深度研读。
+> **工程思路**：先搭建 Embedding 基础设施 → 再实现 FAISS 向量索引管理 → 然后构建 RAG 检索 + LangGraph 编排 → 最后改造前端聊天界面。逐步叠加能力，每一步可独立验证。
 
 ---
 
-## 八、里程碑与交付物
+#### Phase 4.1：Embedding 服务 + 模型扩展（✅ 已完成）
 
-| 阶段 | 核心交付物 | 关键能力 |
-|------|-----------|----------|
-| Phase 1 ✅ | 单页 Web 工具 | 文本/PDF 输入 → Coze AI 分词 |
-| Phase 2.1 | 三栏前端 + 登录页面 | Google AI Studio 风格布局 + 模型选择器（纯前端） |
-| Phase 2.2 | 模块化后端 + 多模型 | Langchain 多提供商 + 知识库 CRUD + JWT（内存） |
-| Phase 2.3 | Redis 缓存层 | JWT 会话管理 + 结果缓存 + 频率限制 |
-| Phase 2.4 | SQLite + 用户认证 | 数据库持久化 + 邮箱登录 + API Key 加密 |
-| Phase 3 | 文档切分引擎 | 完整 PDF 解析 + 智能分块 + 分块可视化 |
-| Phase 4 | RAG 智能助手 | 向量检索 + 多轮对话 + LangGraph 编排 |
+- **核心目标**：建立文本向量化的基础服务，支持多提供商 Embedding 模型，为后续 FAISS 索引和 RAG 检索奠定基础。
+
+- **实现功能**：
+  1. **多提供商 Embedding 服务**（`app/services/embedding_service.py`）：
+     - 支持 OpenAI、DeepSeek（兼容 OpenAI 接口）、Ollama 三种提供商
+     - 使用 `langchain_openai.OpenAIEmbeddings`（OpenAI/DeepSeek）和 `langchain_ollama.OllamaEmbeddings`（Ollama）
+     - 提供批量文本向量化（`embed_texts`）、单条查询向量化（`embed_query`）接口
+  2. **数据模型扩展**：
+     - Chunk 模型新增 `vector_id`（Integer，FAISS 索引行号）和 `embedding_status`（pending/embedded/failed）字段
+     - KnowledgeBase 模型新增 `embedding_config`（JSON，存储 Embedding 模型配置）
+  3. **配置扩展**（`app/config.py`）：
+     - 新增 `FAISS_INDEX_DIR`、`DEFAULT_EMBEDDING_PROVIDER`、`DEFAULT_EMBEDDING_MODEL`、`DEFAULT_EMBEDDING_DIMENSION`
+     - `SUPPORTED_PROVIDERS` 新增 `embedding_models`（支持的 Embedding 模型列表）和 `embedding_dimension`（向量维度）
+  4. **依赖新增**：`faiss-cpu`、`langchain-ollama`
+
+- **验证标准**：
+  - Embedding 服务可调用 OpenAI/DeepSeek/Ollama 模型生成向量
+  - Chunk 模型新字段可正常读写
+  - 不同提供商的 Embedding 维度配置正确
+
+- **技术产出**：`embedding_service.py`、Chunk/KnowledgeBase 模型扩展、Embedding 配置体系。
+
+---
+
+#### Phase 4.2：FAISS 索引管理 + 向量化流程（✅ 已完成）
+
+- **核心目标**：基于 Phase 4.1 的 Embedding 服务，实现 FAISS 向量索引的全生命周期管理，支持全量构建、增量向量化、检索和删除。
+
+- **实现功能**：
+  1. **FAISS 索引管理服务**（`app/services/faiss_service.py`）：
+     - `build_kb_index(kb_id, embedding_config)` — 全量重建知识库索引
+     - `incremental_embed_doc(doc_id, embedding_config)` — 增量向量化单个文档
+     - `search(kb_id, query, embedding_config, top_k)` — 向量检索
+     - `delete_doc_vectors(doc_id)` — 逻辑删除文档向量（标记为 pending）
+     - `get_index_status(kb_id)` — 获取索引状态统计
+     - `delete_kb_index(kb_id)` — 删除整个知识库索引目录
+  2. **设计特点**：
+     - 每个知识库独立 FAISS 索引，存储在 `data/faiss_indexes/{kb_id}/`
+     - 内存缓存（`_index_cache`）+ 磁盘持久化，避免重复加载
+     - 向量化状态追踪：pending → embedded / failed
+  3. **自动化流程**：
+     - 文档上传处理后自动触发增量向量化（`doc_service._auto_embed_doc`）
+     - 重新切分后自动重新向量化
+  4. **API 接口**：
+     - 知识库路由：`POST /api/kb/<id>/build_index`、`GET /api/kb/<id>/index_status`、`GET/PUT /api/kb/<id>/embedding_config`
+     - 文档路由：`POST /api/docs/<id>/embed`、`GET /api/docs/<id>/embed_status`
+     - 删除知识库/文档时自动清理 FAISS 索引
+
+- **验证标准**：
+  - 上传 PDF 后自动完成切分 → 向量化 → 索引构建全流程
+  - 向量检索返回正确的 Top-K 相关文本块
+  - 删除文档后向量被逻辑标记，不破坏索引结构
+  - 每个知识库的索引相互独立
+
+- **技术产出**：`faiss_service.py`、自动化向量化流程、Embedding 配置与状态管理 API。
+
+---
+
+#### Phase 4.3：RAG 服务 + LangGraph 智能体编排（待开发）
+
+- **核心目标**：基于 FAISS 向量检索构建 RAG 问答服务，引入 LangGraph StateGraph 编排智能体工作流，实现上下文感知的文献问答。
+
+- **实现功能**：
+  1. **RAG 检索服务**（`app/services/rag_service.py`）：
+     - 接收用户提问 → Embedding 向量化 → FAISS Top-K 检索 → 拼装 Prompt Context
+     - 支持跨文档检索（知识库内所有文档统一检索）
+     - 检索结果包含来源文档、Chunk 定位、相似度分数
+     - 可配置检索参数：Top-K、相似度阈值、上下文窗口大小
+  2. **LangGraph 智能体编排**（`app/services/langgraph_service.py`）：
+     - 使用 `StateGraph` 构建工作流状态机
+     - **路由节点**：判断用户输入类型（闲聊 / 文献检索 / 概念解释 / 总结摘要）
+     - **RAG 节点**：调用 rag_service 检索相关 Chunk，组装 Context
+     - **LLM 节点**：将 Context + 用户问题 + 对话历史喂给大模型生成回答
+     - **引用节点**：从检索结果中提取引用来源（文档名、页码、Chunk 位置）
+  3. **对话管理重写**（`app/routes/chat.py`）：
+     - 重写聊天 API，集成 LangGraph 工作流
+     - 支持多轮对话记忆（从数据库加载历史消息）
+     - 流式响应（SSE）支持，逐步返回生成内容
+     - 回答附带引用来源信息
+  4. **Prompt 工程**：
+     - 系统提示词：定义"文献研读助手"角色和回答规范
+     - RAG Prompt 模板：`基于以下文献片段回答问题...\n\n{context}\n\n问题：{question}`
+     - 路由 Prompt：判断用户意图的分类提示词
+
+- **验证标准**：
+  - 用户提问后系统自动检索相关文献片段并生成有依据的回答
+  - 回答附带引用来源（文档名、相关段落）
+  - 多轮对话可连续追问，保持上下文
+  - LangGraph 正确路由不同类型的用户输入
+
+- **技术产出**：`rag_service.py`、`langgraph_service.py`、重写的 `chat.py`、Prompt 模板体系。
+
+---
+
+#### Phase 4.4：前端聊天界面改造（待开发）
+
+- **核心目标**：将中栏工作区改造为完整的聊天界面，支持 RAG 问答交互、引用来源展示和参数调节。
+
+- **实现功能**：
+  1. **聊天输入框改造**：
+     - 中栏底部固定聊天输入框（类似 ChatGPT 风格）
+     - 支持文本输入 + Enter 发送 / Shift+Enter 换行
+     - 输入框自动扩展高度
+  2. **对话消息展示**：
+     - 用户消息和 AI 回复以气泡/卡片形式展示
+     - AI 回复支持 Markdown 渲染（代码块、列表、加粗等）
+     - 流式响应实时更新（打字机效果）
+     - 加载状态指示器
+  3. **引用来源展示**：
+     - AI 回复下方展示"引用来源"折叠区域
+     - 显示引用的文档名、相关片段摘要、相似度分数
+     - 点击引用可展开查看原文 Chunk 内容
+  4. **RAG 参数面板**（右栏新增区块）：
+     - 检索 Top-K 滑块（1-20，默认 5）
+     - 相似度阈值滑块（0.0-1.0，默认 0.5）
+     - Embedding 模型选择（与当前知识库配置联动）
+     - 是否启用 RAG 检索开关（关闭则直接对话大模型）
+  5. **对话管理**：
+     - 对话列表展示（侧边栏或中栏顶部）
+     - 新建对话 / 删除对话
+     - 对话标题自动生成（基于首轮提问）
+  6. **知识库联动**：
+     - 左栏选中知识库时，聊天自动关联该知识库的 FAISS 索引
+     - 切换知识库时提示是否开始新对话
+
+- **验证标准**：
+  - 聊天界面交互流畅，输入发送体验良好
+  - AI 回复正确展示，引用来源可展开查看
+  - 切换知识库后 RAG 检索范围正确切换
+  - 参数调节实时生效
+
+- **技术产出**：改造后的 `index.html`、`app.js`、`style.css`，完整的聊天交互界面。
+
+---
+
+## 八、里程碑
+
+| 阶段 | 状态 | 核心交付物 | 关键能力 |
+|------|------|-----------|----------|
+| Phase 1 | ✅ | 单页 Web 工具 | 文本/PDF 输入 → Coze AI 分词 |
+| Phase 2.1 | ✅ | 三栏前端 + 登录页面 | Google AI Studio 风格布局 + 模型选择器（纯前端） |
+| Phase 2.2 | ✅ | 模块化后端 + 多模型 | Langchain 多提供商 + 知识库 CRUD + JWT（内存） |
+| Phase 2.3 | ✅ | Redis 缓存层 | JWT 会话管理 + 结果缓存 + 频率限制 |
+| Phase 2.4 | ✅ | SQLite + 用户认证 | 数据库持久化 + 邮箱登录 + API Key 加密 |
+| Phase 3 | ✅ | 文档切分引擎 | 完整 PDF 解析 + 智能分块 + 分块可视化 |
+| Phase 4.1 | ✅ | Embedding 服务 | 多提供商向量化 + Chunk 状态追踪 |
+| Phase 4.2 | ✅ | FAISS 索引管理 | 全量/增量向量化 + 向量检索 + 自动化流程 |
+| Phase 4.3 | 🔲 | RAG + LangGraph 编排 | 向量检索问答 + 智能体工作流 + 多轮对话 |
+| Phase 4.4 | 🔲 | 前端聊天界面 | 聊天交互 + 引用来源展示 + RAG 参数面板 |
 
 ---
 
@@ -850,9 +796,12 @@ cryptography
 
 1. **Redis 依赖**：Phase 2.3 起 Redis 必须运行。Phase 2.1 和 2.2 不依赖 Redis。
 2. **模型提供商可用性**：不同提供商的 API 能力有差异（如 Coze 不支持 temperature 透传），`llm_service.py` 需做参数适配。
-3. **API Key 安全**：Fernet 加密密钥 `ENCRYPTION_KEY` 必须妥善保管，泄露等同于所有用户 Key 泄露。密钥丢失则已存储的 Key 不可恢复。
+3. **API Key 安全**：Fernet 加密密钥 `FERNET_KEY` 必须妥善保管，泄露等同于所有用户 Key 泄露。密钥丢失则已存储的 Key 不可恢复。
 4. **文件存储空间**：多文档上传后 `data/uploads/` 目录会增长，需定期清理或设置容量上限。
 5. **并发安全**：SQLite 在高并发写入时有锁竞争，单用户学习项目影响不大，但需注意。
 6. **向后兼容**：每个子阶段完成后，前一个子阶段的功能必须完整保留且正常工作。
-7. **数据迁移**：Phase 2.4 引入 SQLite 时，需考虑从内存字典到数据库的数据格式映射，确保前端无感知。
-8. **Ollama 前置条件**：用户需自行安装 Ollama 并下载模型，项目文档需提供安装指引。
+7. **Ollama 前置条件**：用户需自行安装 Ollama 并下载模型，项目文档需提供安装指引。
+8. **FAISS 索引一致性**：FAISS 索引与数据库 Chunk 记录需保持一致。删除文档时仅做逻辑标记（pending），大量删除后需重建索引以释放空间。
+9. **Embedding 模型切换**：切换 Embedding 模型（如从 OpenAI 换到 Ollama）后，向量维度可能变化，必须重建索引，否则检索结果不可靠。
+10. **LangGraph 依赖**：Phase 4.3 需引入 `langgraph` 库，需确认与现有 Langchain 版本兼容。
+11. **流式响应**：Phase 4.4 前端需支持 SSE（Server-Sent Events）接收流式响应，Flask 原生支持有限，可能需引入 `flask-streaming` 或手动实现 generator 响应。

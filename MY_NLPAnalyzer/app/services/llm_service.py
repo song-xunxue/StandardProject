@@ -9,6 +9,12 @@
   1. 新建多模型服务，支持 DeepSeek/OpenAI/Ollama/Coze 四种提供商
   2. 使用 Langchain init_chat_model 统一接口
   3. 保留 Coze SDK 独立路径
+
+2026-05-09
+变更说明：
+  1. 新增 create_chat_model() — 创建裸 ChatModel 实例（通用，不绑定 Prompt）
+  2. 新增 chat_completion() — 通用非流式对话补全
+  3. 新增 chat_completion_stream() — 流式对话补全（逐 token yield）
 """
 
 import re
@@ -209,3 +215,96 @@ def get_provider_models(provider_id):
     if not info:
         return None
     return info['models']
+
+
+# ========== Phase 4.3：通用对话接口 ==========
+
+def create_chat_model(model_config):
+    """
+    创建 LangChain ChatModel 实例（通用，不绑定特定 Prompt）
+
+    参数：
+        model_config: 模型配置字典（同 analyze_text 的 model_config 格式）
+
+    返回：
+        BaseChatModel LangChain 聊天模型实例
+
+    异常：
+        ValueError Coze 提供商不支持 / 不支持的提供商
+        Exception 模型创建失败
+    """
+    provider = model_config.get('provider', 'coze')
+    if provider == 'coze':
+        raise ValueError('Coze 智能体不支持通用对话模式，请使用 DeepSeek/OpenAI/Ollama')
+
+    from langchain.chat_models import init_chat_model
+
+    provider_info = SUPPORTED_PROVIDERS.get(provider)
+    if not provider_info:
+        raise ValueError(f'不支持的提供商: {provider}')
+
+    model_name = model_config.get('model', provider_info['models'][0])
+    api_key = model_config.get('api_key', '')
+    base_url = model_config.get('base_url', '') or provider_info['default_base']
+    params = model_config.get('params', {})
+
+    temperature = float(params.get('temperature', 0.7))
+    max_tokens = int(params.get('max-tokens', 2048))
+    lc_provider = provider_info['langchain_provider']
+
+    model_kwargs = {
+        'model': model_name,
+        'model_provider': lc_provider,
+        'temperature': temperature,
+        'max_tokens': max_tokens,
+    }
+
+    if provider_info['need_key'] and api_key:
+        model_kwargs['api_key'] = api_key
+
+    if base_url and lc_provider == 'openai':
+        model_kwargs['base_url'] = base_url
+
+    if provider == 'ollama' and base_url:
+        model_kwargs['base_url'] = base_url
+
+    return init_chat_model(**model_kwargs)
+
+
+def chat_completion(messages, model_config):
+    """
+    通用对话补全（非流式）
+
+    参数：
+        messages: list[BaseMessage] LangChain 消息列表
+        model_config: 模型配置字典
+
+    返回：
+        {"success": bool, "result": str} 或 {"success": bool, "error": str}
+    """
+    try:
+        model = create_chat_model(model_config)
+        response = model.invoke(messages)
+        return {"success": True, "result": response.content.strip()}
+    except Exception as e:
+        return {"success": False, "error": f'模型调用失败: {str(e)}'}
+
+
+def chat_completion_stream(messages, model_config):
+    """
+    通用对话补全（流式）
+
+    参数：
+        messages: list[BaseMessage] LangChain 消息列表
+        model_config: 模型配置字典
+
+    返回：
+        generator 逐步生成 token 字符串
+
+    异常：
+        Exception 模型创建或调用失败
+    """
+    model = create_chat_model(model_config)
+    for chunk in model.stream(messages):
+        if chunk.content:
+            yield chunk.content

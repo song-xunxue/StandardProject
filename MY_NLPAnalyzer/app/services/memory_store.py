@@ -27,6 +27,10 @@
 变更说明：
   1. 新增 update_chunk_vector_id / get_kb_chunks_for_embedding 辅助函数（Phase 4.2）
   2. 新增 update_kb_embedding_config 函数
+
+2026-05-09
+变更说明：
+  1. 新增 get_kb_conversations() 函数（Phase 4.3 对话列表）
 """
 
 import json
@@ -159,6 +163,33 @@ def get_conversation(conv_id, user_email):
     if not conv:
         return None
     return conv.to_dict(include_messages=True)
+
+
+def get_kb_conversations(kb_id, user_email):
+    """
+    获取知识库的对话列表（含消息数统计）
+
+    参数：
+        kb_id: 知识库 ID
+        user_email: 用户邮箱
+
+    返回：
+        list[dict] 对话摘要列表
+    """
+    convs = Conversation.query.filter_by(
+        kb_id=kb_id, user_email=user_email
+    ).order_by(Conversation.created_at.desc()).all()
+
+    result = []
+    for conv in convs:
+        result.append({
+            'id': conv.id,
+            'kb_id': conv.kb_id,
+            'title': conv.title,
+            'created_at': conv.created_at.isoformat() if conv.created_at else None,
+            'message_count': conv.messages.count(),
+        })
+    return result
 
 
 def add_message(conv_id, role, content):

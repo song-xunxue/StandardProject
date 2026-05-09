@@ -1,4 +1,15 @@
 <!DOCTYPE html>
+<!--
+  智能NLP文献解析助手 - 主页面
+
+  作者: 李文煜
+  日期: 2026-04-15
+
+  2026-05-09
+  变更说明：
+    1. 新增底部栏 message-box 元素（修复上传文档无反应）
+    2. 新增文档上传进度遮罩层（4 阶段动画）
+-->
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -36,16 +47,7 @@
                 </div>
 
                 <div class="left-panel-body">
-                    <!-- 快速分析入口 -->
-                    <div class="kb-item active" id="kb-quick" onclick="switchKB('quick')">
-                        <span class="kb-icon">&#9889;</span>
-                        <span class="kb-name">快速分析</span>
-                        <span class="kb-badge">单文档</span>
-                    </div>
-
-                    <div class="kb-divider"></div>
-
-                    <!-- 知识库列表（JS 动态渲染） -->
+                    <!-- 知识库列表（JS 动态渲染，含对话列表） -->
                     <div id="kb-list" class="kb-list"></div>
                 </div>
 
@@ -99,72 +101,68 @@
                 <div class="center-header">
                     <div class="center-header-left">
                         <span class="status-dot"></span>
-                        <span class="center-title">解析结果</span>
+                        <span class="center-title">知识库对话</span>
                         <span class="current-kb-label" id="current-kb-label">快速分析</span>
                     </div>
-                    <button class="clear-btn" onclick="clearResult()" title="清空结果">&#128465;</button>
+                    <div class="center-header-actions">
+                        <button class="new-chat-btn" onclick="createConversation()" title="新建对话">+ 新对话</button>
+                        <button class="clear-btn" onclick="clearChat()" title="清空对话">&#128465;</button>
+                    </div>
                 </div>
 
-                <!-- 结果区域 -->
+                <!-- 结果区域（聊天消息流） -->
                 <div class="result-area" id="result-area">
                     <!-- 欢迎页 -->
                     <div class="welcome-state" id="welcome-state">
                         <div class="welcome-icon">&#128214;</div>
                         <h2 class="welcome-title">欢迎使用 NLP 文献解析助手</h2>
-                        <p class="welcome-desc">输入文本或上传 PDF 文件，即可获得智能分词与关键词提取结果</p>
+                        <p class="welcome-desc">在左侧创建知识库并上传 PDF 文档，即可开始基于文档的智能问答对话</p>
                         <div class="feature-cards">
                             <div class="feature-card">
-                                <span class="feature-icon">&#9986;</span>
-                                <span class="feature-label">智能分词</span>
+                                <span class="feature-icon">&#128218;</span>
+                                <span class="feature-label">创建知识库</span>
                             </div>
                             <div class="feature-card">
-                                <span class="feature-icon">&#128273;</span>
-                                <span class="feature-label">关键词提取</span>
+                                <span class="feature-icon">&#128206;</span>
+                                <span class="feature-label">上传文档</span>
                             </div>
                             <div class="feature-card">
-                                <span class="feature-icon">&#128196;</span>
-                                <span class="feature-label">PDF 解析</span>
+                                <span class="feature-icon">&#128172;</span>
+                                <span class="feature-label">智能对话</span>
                             </div>
                         </div>
                     </div>
 
                     <!-- 消息列表（聊天风格） -->
                     <div id="message-list" class="message-list" style="display:none;"></div>
+
+                    <!-- AI 正在输入指示器 -->
+                    <div id="typing-indicator" class="typing-indicator" style="display:none;">
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                    </div>
                 </div>
 
-                <!-- 输入区域 -->
-                <div class="input-area">
-                    <div class="input-mode-tabs">
-                        <button class="mode-btn active" id="tab-text" onclick="switchTab('text')">
-                            <span class="mode-icon">&#128221;</span> 文本输入
+                <!-- 引用来源面板 -->
+                <div id="sources-panel" class="sources-panel" style="display:none;">
+                    <div class="sources-header">
+                        <span class="sources-title">&#128218; 引用来源</span>
+                        <button class="sources-close" onclick="toggleSources()">&times;</button>
+                    </div>
+                    <div id="sources-list" class="sources-list"></div>
+                </div>
+
+                <!-- 聊天输入区域 -->
+                <div class="chat-input-area">
+                    <div class="chat-input-wrap">
+                        <textarea id="chat-input" class="chat-input"
+                                  placeholder="输入问题，按 Enter 发送，Shift+Enter 换行..."
+                                  rows="1"></textarea>
+                        <button id="btn-send" class="send-btn" onclick="sendMessage()" title="发送">
+                            <span class="send-icon">&#10148;</span>
                         </button>
-                        <button class="mode-btn" id="tab-pdf" onclick="switchTab('pdf')">
-                            <span class="mode-icon">&#128196;</span> PDF 上传
-                        </button>
                     </div>
-
-                    <div id="panel-text" class="input-panel active">
-                        <textarea id="user-text" placeholder="请输入需要进行分词和分析的文本..."></textarea>
-                    </div>
-
-                    <div id="panel-pdf" class="input-panel">
-                        <div class="file-upload-box" id="drop-zone">
-                            <div class="upload-icon">&#128194;</div>
-                            <p class="upload-text">点击或拖拽 PDF 文件到此处</p>
-                            <input type="file" id="pdf-file" accept=".pdf" hidden>
-                            <p class="upload-hint">暂仅解析前两页以供演示</p>
-                        </div>
-                        <div class="file-info" id="file-info" style="display:none;">
-                            <span class="file-name" id="file-name"></span>
-                            <button class="file-remove" onclick="removeFile()">&#10005;</button>
-                        </div>
-                    </div>
-
-                    <button id="btn-analyze" class="analyze-btn" onclick="analyze()">
-                        <span class="btn-icon">&#128640;</span> 开始分析
-                    </button>
-
-                    <div id="message-box" class="status-message"></div>
                 </div>
             </main>
 
@@ -286,7 +284,42 @@
             <span id="status-model">模型: DeepSeek/deepseek-chat</span>
             <span class="status-sep">|</span>
             <span id="status-provider">提供商: DeepSeek</span>
+            <!-- 全局消息提示（替代缺失的 message-box） -->
+            <span id="message-box" class="status-message"></span>
         </footer>
+
+        <!-- ===== 文档上传进度遮罩 ===== -->
+        <div id="upload-overlay" class="upload-overlay" style="display:none;">
+            <div class="upload-progress-card">
+                <div class="upload-progress-spinner"></div>
+                <div class="upload-progress-title" id="upload-progress-title">正在处理文档...</div>
+                <div class="upload-progress-steps">
+                    <div class="upload-step" id="upload-step-upload">
+                        <span class="step-icon">&#8987;</span>
+                        <span class="step-text">上传文件</span>
+                    </div>
+                    <div class="upload-step-arrow">&#10132;</div>
+                    <div class="upload-step" id="upload-step-parse">
+                        <span class="step-icon">&#8987;</span>
+                        <span class="step-text">解析 PDF</span>
+                    </div>
+                    <div class="upload-step-arrow">&#10132;</div>
+                    <div class="upload-step" id="upload-step-chunk">
+                        <span class="step-icon">&#8987;</span>
+                        <span class="step-text">文本切分</span>
+                    </div>
+                    <div class="upload-step-arrow">&#10132;</div>
+                    <div class="upload-step" id="upload-step-embed">
+                        <span class="step-icon">&#8987;</span>
+                        <span class="step-text">向量化</span>
+                    </div>
+                </div>
+                <div class="upload-progress-bar-wrap">
+                    <div class="upload-progress-bar" id="upload-progress-bar" style="width: 0%;"></div>
+                </div>
+                <div class="upload-progress-pct" id="upload-progress-pct">0%</div>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>

@@ -7,6 +7,10 @@
 2026-05-04
 变更说明：
   1. 新建 Conversation 和 Message ORM 模型
+
+2026-05-09
+变更说明：
+  1. Message.to_dict() 新增 id 字段（Phase 4.3 前端需要引用消息 ID）
 """
 
 from datetime import datetime, timezone
@@ -73,6 +77,7 @@ class Message(db.Model):
     def to_dict(self):
         """转为字典"""
         return {
+            'id': self.id,
             'role': self.role,
             'content': self.content,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,

@@ -44,10 +44,9 @@ class Document(db.Model):
         onupdate=lambda: datetime.now(timezone.utc)
     )
 
-    # 关系
+    # 关系（不使用 cascade，由路由层显式控制删除顺序）
     chunks = db.relationship(
-        'Chunk', backref='document', lazy='dynamic',
-        cascade='all, delete-orphan'
+        'Chunk', backref='document', lazy='dynamic'
     )
 
     def to_dict(self, include_full_text=False):

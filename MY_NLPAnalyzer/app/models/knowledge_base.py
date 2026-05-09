@@ -37,13 +37,12 @@ class KnowledgeBase(db.Model):
         default=lambda: datetime.now(timezone.utc)
     )
 
-    # 关系
+    # 关系（不使用 SQLAlchemy cascade，由路由层显式控制删除顺序）
     conversations = db.relationship(
         'Conversation', backref='knowledge_base', lazy='dynamic'
     )
     documents = db.relationship(
-        'Document', backref='knowledge_base', lazy='dynamic',
-        cascade='all, delete-orphan'
+        'Document', backref='knowledge_base', lazy='dynamic'
     )
 
     def to_dict(self):

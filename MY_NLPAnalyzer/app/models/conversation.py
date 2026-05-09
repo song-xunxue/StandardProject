@@ -37,10 +37,9 @@ class Conversation(db.Model):
         default=lambda: datetime.now(timezone.utc)
     )
 
-    # 关系
+    # 关系（不使用 cascade，由路由层显式控制删除顺序）
     messages = db.relationship(
         'Message', backref='conversation', lazy='dynamic',
-        cascade='all, delete-orphan',
         order_by='Message.timestamp'
     )
 

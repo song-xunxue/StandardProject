@@ -96,21 +96,44 @@ def update_kb(kb_id):
 @kb_bp.route('/<kb_id>', methods=['DELETE'])
 @login_required
 def delete_kb(kb_id):
-    """删除知识库（级联删除文档、chunks 和磁盘文件）"""
+    """删除知识库（级联删除对话、消息、文档、chunks 和磁盘文件）"""
+    from app.models.conversation import Conversation, Message
+    from app.models.document import Document
+    from app.models.chunk import Chunk
+    from app.extensions import db as db_ext
+
     # 先检查知识库是否存在
     kb = memory_store.get_kb(kb_id, g.user['email'])
     if not kb:
         return error_response('知识库不存在', 404)
 
-    # 清理磁盘文件：删除整个 kb_id 目录
+    try:
+        # 1. 删除对话及消息
+        convs = Conversation.query.filter_by(kb_id=kb_id).all()
+        for conv in convs:
+            Message.query.filter_by(conv_id=conv.id).delete()
+        Conversation.query.filter_by(kb_id=kb_id).delete()
+
+        # 2. 删除文档及 chunks
+        docs = Document.query.filter_by(kb_id=kb_id).all()
+        for doc in docs:
+            Chunk.query.filter_by(doc_id=doc.id).delete()
+        Document.query.filter_by(kb_id=kb_id).delete()
+
+        # 3. 删除知识库本身
+        memory_store.delete_kb(kb_id, g.user['email'])
+
+        db_ext.session.commit()
+    except Exception as e:
+        db_ext.session.rollback()
+        return error_response(f'删除失败: {str(e)}')
+
+    # 4. 清理磁盘文件
     kb_upload_dir = os.path.join(Config.UPLOAD_FOLDER, kb_id)
     if os.path.exists(kb_upload_dir):
         shutil.rmtree(kb_upload_dir)
 
-    # 数据库级联删除（KnowledgeBase → Document → Chunk）
-    memory_store.delete_kb(kb_id, g.user['email'])
-
-    # Phase 4.2: 清理 FAISS 索引目录
+    # 5. 清理 FAISS 索引
     from app.services import faiss_service
     faiss_service.delete_kb_index(kb_id)
 

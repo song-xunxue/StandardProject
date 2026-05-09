@@ -506,6 +506,7 @@ async function analyzePDF() {
 
 function initFileUpload() {
     const dropZone = document.getElementById('drop-zone');
+    if (!dropZone) return;  // Phase 4.4 后旧分析面板已移除
 
     dropZone.addEventListener('click', () => {
         document.getElementById('pdf-file').click();

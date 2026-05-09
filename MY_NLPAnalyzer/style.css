@@ -182,6 +182,40 @@ body {
     border-right: none;
 }
 
+/* 左栏可拖拽分隔线 */
+.panel-resizer {
+    width: 6px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.panel-resizer:hover,
+.panel-resizer.active {
+    background: var(--primary-color);
+}
+
+.panel-resizer::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 30px;
+    background: var(--border-color);
+    border-radius: 1px;
+    transition: background 0.2s;
+}
+
+.panel-resizer:hover::after,
+.panel-resizer.active::after {
+    background: white;
+}
+
 .panel-header {
     display: flex;
     align-items: center;

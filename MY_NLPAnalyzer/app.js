@@ -125,6 +125,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // 初始化左栏拖拽分隔线
+    initPanelResizer();
 });
 
 // ========== 认证模块 ==========
@@ -666,8 +669,10 @@ function togglePanel(side) {
     if (side === 'left') {
         const panel = document.getElementById('left-panel');
         const expandBtn = document.getElementById('left-expand');
+        const resizer = document.getElementById('left-resizer');
         const isCollapsed = panel.classList.toggle('collapsed');
         expandBtn.style.display = isCollapsed ? 'flex' : 'none';
+        if (resizer) resizer.style.display = isCollapsed ? 'none' : '';
     } else if (side === 'right') {
         const panel = document.getElementById('right-panel');
         const expandBtn = document.getElementById('right-expand');
@@ -681,6 +686,44 @@ function toggleSection(sectionId) {
     const arrow = document.getElementById(`arrow-${sectionId}`);
     const isCollapsed = body.classList.toggle('collapsed');
     arrow.textContent = isCollapsed ? '\u25B6' : '\u25BC';
+}
+
+// ========== 左栏拖拽调整宽度 ==========
+
+function initPanelResizer() {
+    const resizer = document.getElementById('left-resizer');
+    const panel = document.getElementById('left-panel');
+    if (!resizer || !panel) return;
+
+    let startX = 0;
+    let startWidth = 0;
+
+    resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startX = e.clientX;
+        startWidth = panel.offsetWidth;
+        resizer.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMouseMove = (e) => {
+            const diff = e.clientX - startX;
+            const newWidth = Math.min(Math.max(startWidth + diff, 200), 500);
+            panel.style.width = newWidth + 'px';
+            panel.style.minWidth = newWidth + 'px';
+        };
+
+        const onMouseUp = () => {
+            resizer.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
 }
 
 // ========== 底部状态栏 ==========
@@ -712,7 +755,12 @@ async function loadKBList() {
             renderKBList();
             // 自动选中第一个知识库
             if (knowledgeBases.length > 0 && !currentKB) {
-                switchKB(knowledgeBases[0].id);
+                await switchKB(knowledgeBases[0].id);
+                // 恢复上次对话：选中该知识库的最新对话
+                const convsPanel = document.getElementById(`kb-convs-${knowledgeBases[0].id}`);
+                if (convsPanel && conversations.length > 0) {
+                    switchConversation(conversations[0].id);
+                }
             }
         }
     } catch (error) {

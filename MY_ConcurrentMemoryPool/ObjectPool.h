@@ -53,13 +53,15 @@ public:
 		obj->~T();
 
 		//使用头插，合并_freelist==nullptr的情况
-		*(void**)obj = _freelist;//*(void**)让系统自动判断是32还是64，保证obj前指针大小指向下一个内存块的首地址处
+		//*(void**)让系统自动判断是32还是64，保证obj前指针大小指向下一个内存块的首地址处
+		//*(void*)不行，因为void是不完整的类型，指向了未知大小的空间，但是*(int*）可以
+		*(void**)obj = _freelist;
 		_freelist = obj;
 		 
 	}
 private:
 	char* _memory = nullptr;//申请的定长内存池大小
-	size_t surplusSize = 0;//剩余的字节数
+	size_t surplusSize = 0;//定长内存池剩余的字节数
 	void* _freelist = nullptr;//释放的内存 将其组织为链表
 
 };

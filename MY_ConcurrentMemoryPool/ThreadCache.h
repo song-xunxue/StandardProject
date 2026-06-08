@@ -15,4 +15,5 @@ private:
 	//TLS进行线程局部存储 保证线程独立性
 };
 //static保证只在本文件可见，链接不会出错
+ //_declspec(thread) static ThreadCache* pTLSThreadCache = nullptr;
 thread_local static ThreadCache* pTLSThreadCache = nullptr;

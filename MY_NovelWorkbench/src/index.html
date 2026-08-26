@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+  渲染进程 HTML 入口
+
+  作者: 李文煜
+  日期: 2026-08-25
+
+  2026-08-25
+  变更说明：
+    1. 初版：挂载 #root 并引入 main.tsx；最小 CSP（M3 接入 AI API 时按需追加 connect-src 白名单）
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MY_NovelWorkbench</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws:"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

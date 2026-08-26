@@ -1,0 +1,70 @@
+/*
+ * 主题色板与全局基础样式（色值见 docs/01-产品需求文档.md 5.2 节）
+ *
+ * 作者: 李文煜
+ * 日期: 2026-08-25
+ *
+ * 2026-08-25
+ * 变更说明：
+ *   1. 初版：需求指定色板 CSS 变量 + 滚动条样式 + 全局 reset
+ */
+
+:root {
+  /* 需求文档指定色板 */
+  --bg-left: #191a1c;      /* 左侧创建栏背景 */
+  --bg-right: #1e1f22;     /* 右侧内容展示框 */
+  --splitter: #26282b;     /* 分界线 */
+  --scrollbar: #545557;    /* 左栏滚动条 */
+  --canvas-bg: #161618;    /* 蓝图画布背景（黑色网格基调） */
+
+  /* 派生色（非指定，界面层次用） */
+  --fg-default: #dcdfe3;
+  --fg-muted: #9da0a8;
+  --border-subtle: #2f3136;
+  --accent: #6c9ef8;
+  --tab-active: #2b2d30;
+
+  --icon-strip-width: 46px;
+  --tabbar-height: 36px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--fg-default);
+  background: var(--bg-right);
+  user-select: none;
+}
+
+/* 左栏滚动条（指定色 #545557） */
+.left-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+.left-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.left-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 4px;
+}
+
+.left-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}

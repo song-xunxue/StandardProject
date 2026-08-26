@@ -10,10 +10,13 @@
  * 变更说明：
  *   1. M0 初版：11 个用例覆盖 M0 验收标准「纯函数+单测」
  *   2. 修正夹具可达性：b-1 → bp-b 补边（否则 bp-b 从 a-1 不可达）；预算用例改用 20 token 触发丢弃
+ *   3. M3 补齐（≥90% 分支覆盖验收）：空图/prompt 前缀/content 回退/关键词按标题与标签命中/
+ *      兜底放不下跳过与中途断流/总结余不足不进兜底/不命中 continue/权重平局字典序/
+ *      悬空边忽略/起点不存在/layerBudgetsOf/祖先兼邻居只计一次
  */
 
 import { describe, expect, it } from 'vitest'
-import { assembleContext, bfsDepths, estimateTokens } from './contextAssembly'
+import { assembleContext, bfsDepths, estimateTokens, layerBudgetsOf } from './contextAssembly'
 import type { BlueprintEdge, BlueprintNode, GraphData, GraphView } from '@/types/blueprint'
 
 // ---------- 测试数据工厂 ----------
@@ -194,5 +197,119 @@ describe('assembleContext 分层', () => {
     const b = assembleContext(fixture(), 'a-1', { draft: '剑冢' })
     expect(a.segments).toEqual(b.segments)
     expect(a.dropped).toEqual(b.dropped)
+  })
+})
+
+// ---------- M3 补齐：≥90% 分支覆盖 ----------
+
+describe('assembleContext 分支补齐（M3）', () => {
+  it('空图返回空结果', () => {
+    const result = assembleContext({ nodes: {}, edges: {}, graphs: {} }, 'any')
+    expect(result.segments).toHaveLength(0)
+    expect(result.layerTokens).toEqual([0, 0, 0])
+  })
+
+  it('text 节点带 prompt 时注入「【写作要求】」前缀', () => {
+    const data = fixture()
+    data.nodes['a-2']!.prompt = '多用短句'
+    const result = assembleContext(data, 'a-1')
+    const seg = result.segments.find((s) => s.nodeId === 'a-2')
+    expect(seg?.text.startsWith('【写作要求】多用短句')).toBe(true)
+  })
+
+  it('text 节点 content 缺失时回退 summary', () => {
+    const data = fixture()
+    data.nodes['a-2']!.content = undefined
+    const result = assembleContext(data, 'a-1')
+    const seg = result.segments.find((s) => s.nodeId === 'a-2')
+    expect(seg?.text).toContain('a-2 的摘要')
+  })
+
+  it('关键词兜底可按 title 与 tags 命中（不止 aliases）', () => {
+    const byTitle = assembleContext(fixture(), 'a-1', { draft: '关于剑冢传说的正文字。' })
+    expect(byTitle.segments.some((s) => s.nodeId === 'iso' && s.role === 'keyword')).toBe(true)
+    const byTag = assembleContext(fixture(), 'a-1', { draft: '这段提到了设定 事项。' })
+    expect(byTag.segments.some((s) => s.nodeId === 'iso' && s.role === 'keyword')).toBe(true)
+  })
+
+  it('兜底候选放不下时跳过，更小的候选仍被补入', () => {
+    const data = fixture()
+    // 大候选（远超剩余）在字典序最前；小候选 13 token 可放入
+    data.nodes['a-big'] = node('a-big', { graphId: 'g-a', aliases: ['触发词'], content: '长'.repeat(1000) })
+    data.nodes['a-small'] = node('a-small', { graphId: 'g-a', aliases: ['触发词'], content: '十'.repeat(20) })
+    const draft = '这里出现了触发词。'
+    const result = assembleContext(data, 'a-1', { totalBudget: 300, draft })
+    expect(result.segments.some((s) => s.nodeId === 'a-big')).toBe(false)
+    expect(result.segments.some((s) => s.nodeId === 'a-small' && s.role === 'keyword')).toBe(true)
+  })
+
+  it('兜底循环中途总结余 ≤64 时断流（后续命中候选不再补入）', () => {
+    const data = fixture()
+    data.nodes['a-big'] = node('a-big', { graphId: 'g-a', aliases: ['触发词'], content: '长'.repeat(1000) })
+    data.nodes['a-s1'] = node('a-s1', { graphId: 'g-a', aliases: ['触发词'], content: '十'.repeat(20) })
+    data.nodes['a-s2'] = node('a-s2', { graphId: 'g-a', aliases: ['触发词'], content: '十'.repeat(20) })
+    const draft = '这里出现了触发词。'
+    // 预算 100：三层用掉约 26，剩 74 >64 进入兜底 → a-big 跳过 → a-s1(13t) 补入后剩 61 ≤64 → a-s2 断流
+    const result = assembleContext(data, 'a-1', { totalBudget: 100, draft })
+    expect(result.segments.some((s) => s.nodeId === 'a-s1')).toBe(true)
+    expect(result.segments.some((s) => s.nodeId === 'a-s2')).toBe(false)
+  })
+
+  it('有草稿但总结余 ≤64 时完全不进兜底', () => {
+    // 预算 70：三层约 26 → 剩 44 ≤64，即使草稿命中也不补
+    const result = assembleContext(fixture(), 'a-1', { totalBudget: 70, draft: '他在剑冢边缘驻足。' })
+    expect(result.segments.some((s) => s.nodeId === 'iso')).toBe(false)
+  })
+
+  it('不命中的候选被跳过（continue 分支）', () => {
+    const data = fixture()
+    data.nodes['zz-unrelated'] = node('zz-unrelated', { graphId: 'g-a', content: '无关内容' })
+    const result = assembleContext(data, 'a-1', { draft: '他在剑冢边缘驻足。' })
+    expect(result.segments.some((s) => s.nodeId === 'zz-unrelated')).toBe(false)
+    expect(result.segments.some((s) => s.nodeId === 'iso')).toBe(true)
+  })
+
+  it('深层候选权重平局时按 id 字典序稳定排序', () => {
+    const data = fixture()
+    data.nodes['c-1'] = node('c-1', { graphId: 'g-b' })
+    data.nodes['c-2'] = node('c-2', { graphId: 'g-b' })
+    data.edges['e-c1'] = edge('e-c1', 'b-1', 'c-1', 'arrow')
+    data.edges['e-c2'] = edge('e-c2', 'b-1', 'c-2', 'arrow')
+    const r1 = assembleContext(data, 'a-1')
+    const r2 = assembleContext(data, 'a-1')
+    const deepIds = r1.segments.filter((s) => s.role === 'deep').map((s) => s.nodeId)
+    expect(deepIds.indexOf('c-1')).toBeGreaterThan(-1)
+    expect(deepIds.indexOf('c-2')).toBe(deepIds.indexOf('c-1') + 1) // 字典序相邻
+    expect(r1.segments).toEqual(r2.segments) // 两次一致（确定性）
+  })
+
+  it('悬空边（端点不存在）被 BFS 忽略', () => {
+    const data = fixture()
+    data.edges['e-ghost'] = edge('e-ghost', 'a-1', 'ghost-node')
+    const depths = bfsDepths(data, 'a-1')
+    expect(depths.has('ghost-node')).toBe(false)
+    // 组装不抛错
+    expect(() => assembleContext(data, 'a-1')).not.toThrow()
+  })
+
+  it('bfsDepths 起点不存在时返回仅含起点的深度表', () => {
+    const depths = bfsDepths(fixture(), 'ghost')
+    expect(depths.size).toBe(1)
+    expect(depths.get('ghost')).toBe(0)
+  })
+
+  it('祖先同时是直接邻居时只以 neighbor 身份出现一次', () => {
+    // b-1 的邻居含 bp-b（e-b-owner），bp-b 又是 g-b 的拥有节点（其祖先）
+    const result = assembleContext(fixture(), 'b-1')
+    const appearances = result.segments.filter((s) => s.nodeId === 'bp-b')
+    expect(appearances).toHaveLength(1)
+    expect(appearances[0]?.role).toBe('neighbor')
+    expect(appearances[0]?.layer).toBe(1)
+  })
+
+  it('layerBudgetsOf：默认比例 60/25/15 向下取整；自定义比例生效', () => {
+    expect(layerBudgetsOf()).toEqual([4800, 2000, 1200])
+    expect(layerBudgetsOf(1000)).toEqual([600, 250, 150])
+    expect(layerBudgetsOf(99, [0.5, 0.3, 0.2])).toEqual([49, 29, 19])
   })
 })

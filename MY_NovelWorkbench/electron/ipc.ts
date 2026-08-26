@@ -8,10 +8,12 @@
  * 变更说明：
  *   1. M1 初版：fs:* 通道注册；打开/创建小说后自动启动监听与索引
  *   2. M2：新增元信息读写（readMeta/saveMeta）与资源库（listResources/saveResource/deleteResource）
+ *   3. M3：新增 AI Provider（provider:*）与 LLM 流式生成（llm:*，chunk 经 llm:chunk 推送）
  */
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import { IPC } from '../shared/types'
+import type { ProviderConfig } from '../shared/types'
 import { createNovel, openNovel, readMeta, recentNovels, saveMeta } from './services/novelService'
 import {
   createFile,
@@ -26,6 +28,8 @@ import {
   saveChapter,
   saveResource
 } from './services/fileService'
+import { deleteProvider, listProviders, saveProvider, testProvider } from './services/providerService'
+import { startGeneration, stopGeneration } from './services/llmService'
 import { indexStats, rebuildIndex, closeIndex } from './services/indexService'
 import { startWatching } from './watcher'
 
@@ -94,4 +98,18 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     opened(() => saveResource(p.template as Parameters<typeof saveResource>[0]))
   )
   ipcMain.handle(IPC.deleteResource, (_e, p: { path: string }) => opened(() => deleteResource(p.path)))
+
+  // M3：AI Provider（ADR-9/16）与 LLM 流式生成（ADR-10）
+  ipcMain.handle(IPC.providerList, () => opened(() => listProviders()))
+  ipcMain.handle(IPC.providerSave, (_e, p: { config: Omit<ProviderConfig, 'apiKeyEnc'>; apiKey?: string }) =>
+    opened(() => saveProvider(p.config, p.apiKey))
+  )
+  ipcMain.handle(IPC.providerDelete, (_e, p: { id: string }) => opened(() => deleteProvider(p.id)))
+  ipcMain.handle(IPC.providerTest, (_e, p: { id: string }) => opened(() => testProvider(p.id)))
+  ipcMain.handle(IPC.llmGenerate, (_e, p: Parameters<typeof startGeneration>[1]) =>
+    opened(() => {
+      startGeneration(win, p)
+    })
+  )
+  ipcMain.handle(IPC.llmStop, (_e, p: { requestId: string }) => opened(() => stopGeneration(p.requestId)))
 }

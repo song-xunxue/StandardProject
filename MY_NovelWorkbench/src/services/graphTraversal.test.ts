@@ -104,3 +104,23 @@ describe('ancestorNodesOf', () => {
     expect(chain.length).toBeLessThanOrEqual(3)
   })
 })
+
+// ---------- M3 补齐：幽灵 owner / 图缺失分支 ----------
+
+describe('脏数据防御（M3 补齐）', () => {
+  it('幽灵 ownerNodeId（owner 节点不存在）：pathToGraph 停在该图，ancestorNodesOf 停止回溯', () => {
+    const data = fixture()
+    data.graphs['g-a']!.ownerNodeId = 'ghost-owner' // 指向不存在的节点
+    expect(pathToGraph(data, 'g-a')).toEqual(['g-a']) // 不抛错、不回到根（幽灵 owner 处链断）
+    // leaf ∈ g-a2（owner bp-a2 有效）→ g-a（owner 幽灵）→ 断：链只到 bp-a2
+    expect(ancestorNodesOf(data, 'leaf').map((n) => n.id)).toEqual(['bp-a2'])
+  })
+
+  it('节点的 graphId 无对应图：ancestorNodesOf 按 null 处理（停止回溯）', () => {
+    const data = fixture()
+    data.nodes['orphan'] = { ...data.nodes['leaf']!, id: 'orphan', graphId: 'g-missing' }
+    expect(ancestorNodesOf(data, 'orphan')).toEqual([])
+    // pathToGraph 对不存在的图返回空（M0 既定语义）
+    expect(pathToGraph(data, 'g-missing')).toEqual([])
+  })
+})

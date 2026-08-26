@@ -17,6 +17,7 @@ import type { TagDef } from '@shared/tags'
 import { hydrateGraphData } from '@shared/blueprintCodec'
 import type { BlueprintFile } from '@shared/types'
 import { useGraphStore } from './graphStore'
+import { useAiStore } from './aiStore'
 
 /** 打开的文件 Tab */
 export interface OpenTab {
@@ -97,6 +98,8 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
   openNovel: async (dir) => {
     // 切换前落盘旧小说的挂起编辑（防抖窗口内的属性/位置变更），否则会被新小说水合冲掉
     await useGraphStore.getState().flushDirty()
+    // 同步清除旧小说的编辑草稿（否则旧正文泄漏进新小说的上下文组装与目标判定）
+    useAiStore.getState().setDraft(null)
     const meta = await api().fs.openNovel(dir)
     set({ novel: meta, tabs: [], activeTabId: null })
     await get().refreshTree()

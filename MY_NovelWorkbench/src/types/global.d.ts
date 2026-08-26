@@ -9,9 +9,21 @@
  *   1. 初版：声明 preload 暴露的 versions 信息
  *   2. M1：fs 通道与目录变化订阅的完整类型（复用 shared 契约类型）
  *   3. M2：新增元信息读写与资源库通道类型
+ *   4. M3：新增 provider 组（Provider CRUD/测试）与 llm 组（流式生成/中断 + 分块订阅）
  */
 
-import type { BlueprintFile, ChapterDoc, NovelMeta, RecentNovel, ResourceTemplate, TreeNode } from '@shared/types'
+import type {
+  BlueprintFile,
+  ChapterDoc,
+  ChatMessage,
+  LlmChunkPayload,
+  NovelMeta,
+  ProviderConfig,
+  ProviderInfo,
+  RecentNovel,
+  ResourceTemplate,
+  TreeNode
+} from '@shared/types'
 
 export interface Api {
   versions: {
@@ -41,6 +53,23 @@ export interface Api {
     deleteResource: (path: string) => Promise<void>
   }
   onNovelChanged: (callback: (tree: TreeNode[]) => void) => () => void
+  provider: {
+    list: () => Promise<ProviderInfo[]>
+    /** apiKey 明文仅经此通道进主进程加密（ADR-16） */
+    save: (config: Omit<ProviderConfig, 'apiKeyEnc'>, apiKey?: string) => Promise<ProviderInfo>
+    remove: (id: string) => Promise<void>
+    test: (id: string) => Promise<{ ok: boolean; message: string }>
+  }
+  llm: {
+    generate: (payload: {
+      requestId: string
+      providerId: string
+      messages: ChatMessage[]
+      maxTokens?: number
+    }) => Promise<void>
+    stop: (requestId: string) => Promise<void>
+    onChunk: (callback: (chunk: LlmChunkPayload) => void) => () => void
+  }
 }
 
 declare global {

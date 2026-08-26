@@ -20,7 +20,7 @@ import { LeftPanel } from './layout/LeftPanel'
 import { Splitter } from './layout/Splitter'
 import { TabBar } from './layout/TabBar'
 import { BlueprintCanvas } from './canvas/BlueprintCanvas'
-import { ContextPreviewPanel } from './canvas/ContextPreviewPanel'
+import { AiPanel } from './canvas/AiPanel'
 import { ChapterEditor } from './canvas/ChapterEditor'
 import { InspectorPanel } from './canvas/InspectorPanel'
 import { Dialog } from './components/Dialog'
@@ -146,7 +146,7 @@ export default function App(): ReactElement {
           ) : (
             <div className="placeholder-editor">在左侧点击蓝图或章节文件打开</div>
           )}
-          {activeStrip === 'ai' && <ContextPreviewPanel />}
+          {activeStrip === 'ai' && <AiPanel />}
         </div>
       </div>
       <Dialog />

@@ -8,6 +8,7 @@
  * 变更说明：
  *   1. M1 初版：小说元信息/文件树/章节文档/最近列表 + fs 通道 IPC 契约
  *   2. M2：新增 novel.json 元信息读写与资源库通道；节点补充 refTarget 字段
+ *   3. M3：新增 AI Provider 配置与 LLM 流式生成契约（provider:* / llm:* 通道 + llm:chunk 推送）
  */
 
 /** 小说元信息（novel.json） */
@@ -66,14 +67,35 @@ export const IPC = {
   saveMeta: 'fs:saveMeta', // (payload: { meta }) => NovelMeta（标签库等元信息更新）
   listResources: 'fs:listResources', // () => ResourceTemplate[]
   saveResource: 'fs:saveResource', // (payload: { template }) => { path }（resources/ 下新建/覆盖）
-  deleteResource: 'fs:deleteResource' // (payload: { path }) => void
+  deleteResource: 'fs:deleteResource', // (payload: { path }) => void
+
+  // M3：AI Provider（ADR-9/16）
+  providerList: 'provider:list', // () => ProviderInfo[]
+  providerSave: 'provider:save', // (payload: { config: Omit<ProviderConfig,'apiKeyEnc'>, apiKey?: string }) => ProviderInfo（apiKey 明文仅经此通道进主进程加密）
+  providerDelete: 'provider:delete', // (payload: { id }) => void
+  providerTest: 'provider:test', // (payload: { id }) => { ok: boolean; message: string }
+
+  // M3：LLM 流式生成（主进程 fetch SSE，ADR-10；chunk 经 IPC_PUSH.llmChunk 推送）
+  llmGenerate: 'llm:generate', // (payload: { providerId, requestId, messages, maxTokens? }) => void
+  llmStop: 'llm:stop' // (payload: { requestId }) => void
 } as const
 
 /** 主进程 → 渲染进程推送（webContents.send） */
 export const IPC_PUSH = {
   /** 小说目录内文件变化（防抖后）：负载为最新文件树 */
-  novelChanged: 'novel:changed'
+  novelChanged: 'novel:changed',
+  /** LLM 流式分块：负载 { requestId, delta?, done, error? } */
+  llmChunk: 'llm:chunk'
 } as const
+
+/** llm:chunk 推送负载 */
+export interface LlmChunkPayload {
+  requestId: string
+  /** 本次增量文本（done 时可缺省） */
+  delta?: string
+  done: boolean
+  error?: string
+}
 
 /** 蓝图文件落盘结构（.blueprint.json）：节点不带 graphId（由所属文件隐含） */
 export interface BlueprintFile {
@@ -129,4 +151,27 @@ export interface NodeTemplatePayload {
 /** 标签组模板载荷 */
 export interface TagSetTemplatePayload {
   tags: string[]
+}
+
+/**
+ * AI Provider 配置（userData/providers.json；baseURL+key+model 一套覆盖 OpenAI 兼容厂商，ADR-9）
+ * apiKeyEnc 为 safeStorage 加密后的 base64（ADR-16），仅存主进程，绝不回传渲染层
+ */
+export interface ProviderConfig {
+  id: string
+  name: string
+  /** OpenAI 兼容 Base URL（如 https://api.deepseek.com 或 http://localhost:11434/v1） */
+  baseURL: string
+  model: string
+  apiKeyEnc?: string
+  isDefault?: boolean
+}
+
+/** 渲染层可见的 Provider 信息（密文剔除，以 hasKey 表示是否已配置密钥） */
+export type ProviderInfo = Omit<ProviderConfig, 'apiKeyEnc'> & { hasKey: boolean }
+
+/** 聊天消息（OpenAI 兼容 /chat/completions 的 messages 元素） */
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
 }

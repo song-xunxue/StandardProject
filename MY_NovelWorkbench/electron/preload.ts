@@ -10,6 +10,7 @@
  *   1. 初版：仅暴露应用版本信息
  *   2. M1：新增 fs 通道（小说/文件树/蓝图/章节 CRUD/索引）与目录变化订阅
  *   3. M2：新增元信息读写与资源库通道
+ *   4. M3：新增 provider 组（Provider CRUD/测试）与 llm 组（流式生成/中断 + llm:chunk 订阅）
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
@@ -47,6 +48,22 @@ const api = {
     const listener = (_e: unknown, tree: unknown): void => callback(tree)
     ipcRenderer.on(IPC_PUSH.novelChanged, listener)
     return () => ipcRenderer.removeListener(IPC_PUSH.novelChanged, listener)
+  },
+  provider: {
+    list: () => ipcRenderer.invoke(IPC.providerList),
+    save: (config: unknown, apiKey?: string) => ipcRenderer.invoke(IPC.providerSave, { config, apiKey }),
+    remove: (id: string) => ipcRenderer.invoke(IPC.providerDelete, { id }),
+    test: (id: string) => ipcRenderer.invoke(IPC.providerTest, { id })
+  },
+  llm: {
+    generate: (payload: unknown) => ipcRenderer.invoke(IPC.llmGenerate, payload),
+    stop: (requestId: string) => ipcRenderer.invoke(IPC.llmStop, { requestId }),
+    /** 订阅流式分块（返回取消订阅函数） */
+    onChunk: (callback: (chunk: unknown) => void): (() => void) => {
+      const listener = (_e: unknown, chunk: unknown): void => callback(chunk)
+      ipcRenderer.on(IPC_PUSH.llmChunk, listener)
+      return () => ipcRenderer.removeListener(IPC_PUSH.llmChunk, listener)
+    }
   }
 }
 

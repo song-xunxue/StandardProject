@@ -555,6 +555,10 @@
 
 .chapter-body {
   flex: 1;
+  /* Tiptap 版编辑区自身滚动（textarea 原生滚动能力的等价物——审查修复：
+     flex 子项需 min-height:0 才能被约束到可用高度并触发滚动） */
+  min-height: 0;
+  overflow-y: auto;
   padding: 20px 24px;
   font-size: 14px;
   line-height: 1.9;
@@ -1299,4 +1303,271 @@
 .resource-act:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* ---------- Tiptap 正文编辑器（M3） ---------- */
+
+.chapter-tiptap {
+  outline: none;
+  min-height: 300px;
+  font-size: 14px;
+  line-height: 1.9;
+  user-select: text;
+}
+
+.chapter-tiptap p {
+  margin: 0 0 0.6em;
+}
+
+.chapter-tiptap h1,
+.chapter-tiptap h2,
+.chapter-tiptap h3 {
+  margin: 0.8em 0 0.4em;
+  font-weight: 600;
+}
+
+.chapter-tiptap blockquote {
+  margin: 0.5em 0;
+  padding: 0.2em 0.9em;
+  border-left: 3px solid var(--border-subtle);
+  color: var(--fg-muted);
+}
+
+.chapter-tiptap ul,
+.chapter-tiptap ol {
+  margin: 0.3em 0;
+  padding-left: 1.6em;
+}
+
+.chapter-tiptap code {
+  background: #242629;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.92em;
+}
+
+.chapter-tiptap pre {
+  background: #191a1c;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+}
+
+.chapter-tiptap pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.chapter-tiptap hr {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 1em 0;
+}
+
+/* Placeholder（@tiptap/extension-placeholder） */
+.chapter-tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--fg-muted);
+  opacity: 0.6;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* wikilink 正文内链 */
+.wikilink {
+  color: var(--accent);
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(108, 158, 248, 0.55);
+}
+
+.wikilink:hover {
+  border-bottom-style: solid;
+}
+
+/* wikilink 补全下拉 */
+.wikilink-menu {
+  z-index: 60;
+  min-width: 220px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #202225;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+}
+
+.wikilink-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: var(--fg-default);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wikilink-menu-item.active,
+.wikilink-menu-item:hover {
+  background: #2a2d33;
+}
+
+.wikilink-menu-kind {
+  flex: none;
+  font-size: 10px;
+  color: var(--fg-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.wikilink-menu-empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+/* wikilink 悬浮预览卡片 */
+.wikilink-preview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 70;
+  display: none;
+  width: 260px;
+  background: #202225;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 10px 12px;
+  pointer-events: none;
+}
+
+.wikilink-preview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.wikilink-preview-desc {
+  font-size: 11.5px;
+  color: var(--fg-default);
+  line-height: 1.6;
+  max-height: 90px;
+  overflow: hidden;
+}
+
+.wikilink-preview-hint {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+}
+
+/* ---------- AI 面板（M3） ---------- */
+
+.ai-panel {
+  width: 380px;
+}
+
+.ai-provider-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.ai-provider-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ai-provider-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+}
+
+.ai-provider-form .dialog-input {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.ai-provider-default {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.ai-provider-form-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-provider-form-actions .left-tool-btn {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.ai-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-actions .left-tool-btn {
+  flex: 1;
+  font-size: 12px;
+  padding: 5px 6px;
+}
+
+.ai-streaming {
+  color: #e0a868;
+}
+
+.ai-error {
+  color: #e07a7a;
+}
+
+.ai-prompt-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-prompt-actions .left-tool-btn {
+  flex: 1;
+  font-size: 11.5px;
+  padding: 4px 6px;
+}
+
+.ai-prompt-fulltext {
+  margin: 8px 0 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+  color: var(--fg-default);
 }

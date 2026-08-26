@@ -143,7 +143,9 @@ MyNovel/
 | 画布交互 | 节点拖拽/画布缩放平移/小地图；100 节点画布拖拽不掉帧（60fps 目标） |
 | 资源库 v1 | 常用节点/标签模板可保存、可插入当前蓝图 |
 
-### M3：正文编辑 + AI（3 周，前置：M1 索引、M2 蓝图）
+### M3：正文编辑 + AI（3 周，前置：M1 索引、M2 蓝图）✅ **已完成（2026-08-26，验收 4 PASS + 2 PARTIAL[需真实 API Key 人工联调]）**
+
+**完成情况**：Tiptap **v3.30.5**（ADR-5 未锁版本；v2 已冻结且社区 markdown 包停维护）+ 官方 @tiptap/markdown 自定义 wikilink token 双向桥接；LLM 请求移至**主进程**执行（sandbox 渲染层 fetch 有 CORS 风险 + 凭据不出主进程；ADR-10 的 fetch+ReadableStream 解析 SSE 语义不变），chunk 经 `llm:chunk` IPC 推送。三视角审查（17 代理）+ 反驳式复核确认 4 高/5 中/7 低，全部修复：wikilink mark `inclusive:false`（后续打字不再被吸收进 [[...]] 污染落盘）、流式帧批次改纯文本内联 + GenerationWriter 收尾按 markdown 重排（不再逐帧碎段落）、章节编辑区滚动恢复（M1 回归）、预算条 CSS 类名对齐（M0 回归）、改写延迟删选区（失败/空响应原文完好）、生成中切 Tab 自动中断、加载章节 `emitUpdate:false`（不再打开即回写）、切小说清 editingDraft、env-default 幽灵 Provider 防护 + hasKey 真实探测 + .env 行内注释剥离。**待人工联调**（需 API Key）：Provider 连接测试真实通过、SSE 流式呈现（代码链路已经审查逐环核验）。组装分支覆盖实测 **97.3%**（contextAssembly 96.8% + graphTraversal 100%），118 用例全绿。
 
 | 任务 | 验收标准 |
 |---|---|
@@ -218,3 +220,4 @@ MY_NovelWorkbench/
 | 2026-08-25 | v1.3 | M1 完成并通过验收审查（5/5 PASS）：shared 层 + 主进程三服务 + IPC fs 通道 + watcher/SQLite 索引 + 欢迎页/文件树/Tab/章节编辑；37 单测全绿；better-sqlite3 双 ABI 验证（R5 开发期解除）。审查修复：索引删除残留清理（removePath+ENOENT 级联）、StrictMode 重复订阅、hydrate 路由保留、deleteFile 路径规范化防绕过、recent.json 容错+原子写、章节编辑器卸载冲刷保存 |
 | 2026-08-26 | v1.4 | M2 完成并通过审查修复（4 PASS + 1 PARTIAL：100 节点 60fps 待人工实测）：三类节点创建编辑 + 属性面板（InspectorPanel）+ 8 层嵌套拦截（ADR-12）；语义连线创建/改型/label + 持久化还原；标签系统（内置四标签 + 自定义 + 节点多标签 + 着色，novel.json 标签库 + saveMeta 通道）；画布交互（拖拽持久化/缩放/小地图/受控选中）；资源库 v1（resources/ 节点与标签组模板，saveResource/deleteResource 通道）。架构落点：graphStore 变更 action + 脏图/保存中图集合 + 「结构变更立即落盘、属性防抖 600ms」保存编排；ref 节点补 refTarget 字段；codec 节点/边归一化容错。审查修复 4 高/3 中/10 低（详见 M2 完成情况），77 单测全绿 |
 | 2026-08-26 | v1.5 | M2 收官：100 节点 60fps 人工实测通过，M2 验收 5/5 PASS |
+| 2026-08-26 | v1.6 | M3 完成并通过审查修复（4 PASS + 2 PARTIAL 待人工联调）：Tiptap v3 编辑器（markdown 双向 + wikilink 补全/悬浮/跳转 + 自动保存）；Provider 层（providers.json + safeStorage 加密 + .env 联调回退 + GET /models 连接测试）；流式生成（主进程 fetch SSE → llm:chunk 推送 → StreamInserter 帧合并 + GenerationWriter 纯文本流式/markdown 收尾重排；AbortController 中断）；上下文组装真实 draft 接入 + 分支覆盖 97.3%；Context Viewer（prompt 全文/复制、三层 token、命中率）。架构注记：LLM 请求在主进程执行（CORS+凭据安全），ADR-10 语义不变。审查修复 4 高/5 中/7 低，118 用例全绿 |

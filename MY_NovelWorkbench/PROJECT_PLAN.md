@@ -131,9 +131,9 @@ MyNovel/
 | IPC 桥扩展（fs 通道） | 渲染进程经 window.api.fs 完成全部读写，无 nodeIntegration |
 | tsconfig 拆分（node/web） | 主进程代码误用 DOM API 时类型检查报错 |
 
-### M2：蓝图编辑器完整版（3 周，前置：M1）✅ **已完成（2026-08-26，验收 4 PASS + 1 PARTIAL）**
+### M2：蓝图编辑器完整版（3 周，前置：M1）✅ **已完成（2026-08-26，验收 5/5 PASS）**
 
-**完成情况**：三视角审查（验收核验/逻辑正确性/回归）+ 反驳式复核确认 4 高/3 中/10 低危发现，全部高危与中危当日修复：受控选中（数组化 selectedNodeIds/selectedEdgeIds 回灌 RF，属性面板不再首键即关）、canvas-row 高度链（.content-area 非 flex 导致画布视口 0 高）、hydrate 脏图/保存中图保护（自身保存触发的 watcher 回推不再回滚防抖窗口内编辑）、defaultTitle 同名基数（第二次创建蓝图节点不再必然撞文件名）、孤儿子图不抢根图身份（hydrate 沿用 prev.rootGraphId）、外部手编文件字段归一化（缺 tags/position 不再白屏）。低危修复含：连线 label 改防抖落盘、ref 下拉 kind 标注、资源浮层锚定画布与滚动容器、资源名清洗撞车拒写、proxy↔proxy 连线拒绝、createTag/删资源失败提示、8 层插入模板提示、M1 旧 novel.json 无 tagLibrary 回填。**待人工实测**：100 节点 60fps（`node scripts/gen-stress-blueprint.mjs <小说目录>` 生成压力蓝图后拖拽观察）。新增 77 用例（graphStore 22 / codec 4 / tags 6 / resource 6 / naming 4 / 既有扩展），typecheck/vitest/build/dev 冒烟全绿。
+**完成情况**：三视角审查（验收核验/逻辑正确性/回归）+ 反驳式复核确认 4 高/3 中/10 低危发现，全部高危与中危当日修复：受控选中（数组化 selectedNodeIds/selectedEdgeIds 回灌 RF，属性面板不再首键即关）、canvas-row 高度链（.content-area 非 flex 导致画布视口 0 高）、hydrate 脏图/保存中图保护（自身保存触发的 watcher 回推不再回滚防抖窗口内编辑）、defaultTitle 同名基数（第二次创建蓝图节点不再必然撞文件名）、孤儿子图不抢根图身份（hydrate 沿用 prev.rootGraphId）、外部手编文件字段归一化（缺 tags/position 不再白屏）。低危修复含：连线 label 改防抖落盘、ref 下拉 kind 标注、资源浮层锚定画布与滚动容器、资源名清洗撞车拒写、proxy↔proxy 连线拒绝、createTag/删资源失败提示、8 层插入模板提示、M1 旧 novel.json 无 tagLibrary 回填。100 节点 60fps 已人工实测通过（2026-08-26，`scripts/gen-stress-blueprint.mjs` 生成压力蓝图后拖拽/缩放观察）。新增 77 用例（graphStore 22 / codec 4 / tags 6 / resource 6 / naming 4 / 既有扩展），typecheck/vitest/build/dev 冒烟全绿。
 
 | 任务 | 验收标准 |
 |---|---|
@@ -217,3 +217,4 @@ MY_NovelWorkbench/
 | 2026-08-25 | v1.2 | M0 PoC 完成并通过验收审查：React Flow 选型冻结；新增 graphStore/contextAssembly/graphTraversal 与画布集成；18 个单测全绿 |
 | 2026-08-25 | v1.3 | M1 完成并通过验收审查（5/5 PASS）：shared 层 + 主进程三服务 + IPC fs 通道 + watcher/SQLite 索引 + 欢迎页/文件树/Tab/章节编辑；37 单测全绿；better-sqlite3 双 ABI 验证（R5 开发期解除）。审查修复：索引删除残留清理（removePath+ENOENT 级联）、StrictMode 重复订阅、hydrate 路由保留、deleteFile 路径规范化防绕过、recent.json 容错+原子写、章节编辑器卸载冲刷保存 |
 | 2026-08-26 | v1.4 | M2 完成并通过审查修复（4 PASS + 1 PARTIAL：100 节点 60fps 待人工实测）：三类节点创建编辑 + 属性面板（InspectorPanel）+ 8 层嵌套拦截（ADR-12）；语义连线创建/改型/label + 持久化还原；标签系统（内置四标签 + 自定义 + 节点多标签 + 着色，novel.json 标签库 + saveMeta 通道）；画布交互（拖拽持久化/缩放/小地图/受控选中）；资源库 v1（resources/ 节点与标签组模板，saveResource/deleteResource 通道）。架构落点：graphStore 变更 action + 脏图/保存中图集合 + 「结构变更立即落盘、属性防抖 600ms」保存编排；ref 节点补 refTarget 字段；codec 节点/边归一化容错。审查修复 4 高/3 中/10 低（详见 M2 完成情况），77 单测全绿 |
+| 2026-08-26 | v1.5 | M2 收官：100 节点 60fps 人工实测通过，M2 验收 5/5 PASS |

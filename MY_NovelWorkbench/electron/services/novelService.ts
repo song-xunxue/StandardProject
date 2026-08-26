@@ -7,13 +7,14 @@
  * 2026-08-25
  * 变更说明：
  *   1. M1 初版：标准目录模板落盘、novel.json 校验、recent.json 维护（userData）
+ *   2. M2：新增 readMeta/saveMeta（标签库等元信息的渲染层读写）
  */
 
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { novelFileMap } from '../../shared/novelTemplate'
+import { builtinTagLibrary, novelFileMap } from '../../shared/novelTemplate'
 import { sanitizeFileName } from '../../shared/sanitize'
 import type { NovelMeta, RecentNovel } from '../../shared/types'
 
@@ -89,6 +90,10 @@ export function openNovel(dir: string): NovelMeta {
   if (!meta.id || !meta.title) {
     throw new Error(`novel.json 结构不完整：${dir}`)
   }
+  // M1 早期目录迁移：无 tagLibrary 字段时回填内置标签库（否则 M2 标签系统对其不可用）
+  if (!Array.isArray(meta.tagLibrary)) {
+    meta.tagLibrary = builtinTagLibrary()
+  }
   current = { dir, meta: { ...meta, dir } }
   touchRecent(dir, meta.title)
   return current.meta
@@ -97,4 +102,25 @@ export function openNovel(dir: string): NovelMeta {
 /** 最近打开列表（新→旧） */
 export function recentNovels(): RecentNovel[] {
   return loadRecent()
+}
+
+/** 读取当前小说元信息（novel.json，含标签库） */
+export function readMeta(): NovelMeta {
+  if (!current) throw new Error('尚未打开小说')
+  return current.meta
+}
+
+/** 保存元信息：校验后原子写回 novel.json，并同步模块级 current（dir 运行时字段不落盘） */
+export function saveMeta(meta: NovelMeta): NovelMeta {
+  if (!current) throw new Error('尚未打开小说')
+  if (!meta.id || !meta.title || !Array.isArray(meta.tagLibrary)) {
+    throw new Error('novel.json 结构不完整（缺少 id/title/tagLibrary）')
+  }
+  const { dir: _dir, ...onDisk } = meta
+  const target = join(current.dir, 'novel.json')
+  const tmp = `${target}.tmp`
+  writeFileSync(tmp, JSON.stringify(onDisk, null, 2), 'utf-8')
+  renameSync(tmp, target)
+  current = { dir: current.dir, meta: { ...onDisk, dir: current.dir } }
+  return current.meta
 }

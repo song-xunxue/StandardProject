@@ -8,10 +8,12 @@
  * 2026-08-25
  * 变更说明：
  *   1. M1 初版：init/创建/打开小说、树刷新+图水合、Tab 管理、文件 CRUD、变化订阅
+ *   2. M2：新增 createTag（自定义标签写入 novel.json 标签库）
  */
 
 import { create } from 'zustand'
 import type { NovelMeta, RecentNovel, TreeNode } from '@shared/types'
+import type { TagDef } from '@shared/tags'
 import { hydrateGraphData } from '@shared/blueprintCodec'
 import type { BlueprintFile } from '@shared/types'
 import { useGraphStore } from './graphStore'
@@ -44,6 +46,8 @@ interface NovelState {
   renameFile: (path: string, title: string) => Promise<void>
   /** 删除文件（并同步 Tab） */
   deleteFile: (path: string) => Promise<void>
+  /** 新建自定义标签（写回 novel.json 并更新本地元信息）；重名返回已有定义 */
+  createTag: (name: string, color: string) => Promise<TagDef | null>
   /** 打开 Tab（已打开则激活） */
   openTab: (kind: OpenTab['kind'], path: string, title?: string) => void
   closeTab: (id: string) => void
@@ -91,13 +95,15 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
   },
 
   openNovel: async (dir) => {
+    // 切换前落盘旧小说的挂起编辑（防抖窗口内的属性/位置变更），否则会被新小说水合冲掉
+    await useGraphStore.getState().flushDirty()
     const meta = await api().fs.openNovel(dir)
     set({ novel: meta, tabs: [], activeTabId: null })
     await get().refreshTree()
     await refreshRecents(set)
-    // 默认打开根蓝图
-    const rootFile = get().tree[0]?.children?.find((c) => c.kind === 'blueprint')
-    if (rootFile) get().openTab('blueprint', rootFile.path)
+    // 默认打开第一张蓝图（树的第一层是 blueprints/chapters 两个目录节点，需下钻一层）
+    const firstBlueprint = (get().tree[0]?.children ?? []).flatMap((c) => c.children ?? []).find((c) => c.kind === 'blueprint')
+    if (firstBlueprint) get().openTab('blueprint', firstBlueprint.path)
   },
 
   refreshTree: async () => {
@@ -145,6 +151,17 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     const activeTabId = tabs.find((t) => t.id === get().activeTabId) ? get().activeTabId : (tabs[0]?.id ?? null)
     set({ tabs, activeTabId })
     await get().refreshTree()
+  },
+
+  createTag: async (name, color) => {
+    const novel = get().novel
+    if (!novel) return null
+    const exists = novel.tagLibrary.find((t) => t.name === name)
+    if (exists) return exists
+    const tagLibrary = [...novel.tagLibrary, { name, color, builtin: false }]
+    const meta = await api().fs.saveMeta({ ...novel, tagLibrary })
+    set({ novel: meta })
+    return meta.tagLibrary.find((t) => t.name === name) ?? null
   },
 
   openTab: (kind, path, title) => {

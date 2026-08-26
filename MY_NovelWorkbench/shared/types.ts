@@ -7,6 +7,7 @@
  * 2026-08-25
  * 变更说明：
  *   1. M1 初版：小说元信息/文件树/章节文档/最近列表 + fs 通道 IPC 契约
+ *   2. M2：新增 novel.json 元信息读写与资源库通道；节点补充 refTarget 字段
  */
 
 /** 小说元信息（novel.json） */
@@ -60,7 +61,12 @@ export const IPC = {
   renameFile: 'fs:renameFile', // (payload: { path, title }) => { path }
   deleteFile: 'fs:deleteFile', // (payload: { path }) => void
   rebuildIndex: 'fs:rebuildIndex', // () => { nodes: number; edges: number }
-  indexStats: 'fs:indexStats' // () => { nodes: number; edges: number; lastBuiltAt: string | null }
+  indexStats: 'fs:indexStats', // () => { nodes: number; edges: number; lastBuiltAt: string | null }
+  readMeta: 'fs:readMeta', // () => NovelMeta（当前小说的 novel.json）
+  saveMeta: 'fs:saveMeta', // (payload: { meta }) => NovelMeta（标签库等元信息更新）
+  listResources: 'fs:listResources', // () => ResourceTemplate[]
+  saveResource: 'fs:saveResource', // (payload: { template }) => { path }（resources/ 下新建/覆盖）
+  deleteResource: 'fs:deleteResource' // (payload: { path }) => void
 } as const
 
 /** 主进程 → 渲染进程推送（webContents.send） */
@@ -90,6 +96,7 @@ export interface BlueprintFileNode {
   title: string
   graphId: string
   refGraphId?: string
+  refTarget?: string
   tags: string[]
   aliases: string[]
   prompt: string
@@ -97,4 +104,29 @@ export interface BlueprintFileNode {
   content?: string
   position: { x: number; y: number }
   size: { width: number; height: number }
+}
+
+/**
+ * 资源库模板（resources/*.json，M2 v1 单本内；M4 评估跨小说独立目录）
+ * - node：节点模板（保存时剥离 id/graphId/position/refGraphId/content，插入时重新生成）
+ * - tagSet：标签组模板（一键为选中节点贴一组标签）
+ */
+export type ResourceTemplate =
+  | { kind: 'node'; name: string; payload: NodeTemplatePayload }
+  | { kind: 'tagSet'; name: string; payload: TagSetTemplatePayload }
+
+/** 节点模板载荷：可安全复制到任意画布的节点字段 */
+export interface NodeTemplatePayload {
+  type: 'blueprint' | 'text' | 'ref'
+  title: string
+  tags: string[]
+  aliases: string[]
+  prompt: string
+  summary: string
+  size: { width: number; height: number }
+}
+
+/** 标签组模板载荷 */
+export interface TagSetTemplatePayload {
+  tags: string[]
 }

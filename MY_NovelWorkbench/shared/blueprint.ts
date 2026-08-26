@@ -12,6 +12,8 @@
  *   2. 审查修订：节点补充 prompt 字段（提示词信息）；NodeType 补充 ref 引用节点
  *   3. M0：节点补充 graphId（所在画布）/ refGraphId（蓝图节点指向的子图）/
  *      aliases（关键词兜底用别名）/ content（text 节点正文）；新增 GraphView 图视图
+ *   4. M2：节点补充 refTarget（ref 节点指向的章节/蓝图相对路径）；
+ *      新增 MAX_NESTING_DEPTH 蓝图嵌套深度上限常量（ADR-12）
  */
 
 /**
@@ -25,6 +27,9 @@ export type NodeType = 'blueprint' | 'text' | 'ref'
 /** 语义连线类型：箭头=因果/顺序，直线=并列关联，虚线=参考/伏笔（映射表见 PROJECT_PLAN.md ADR-15） */
 export type EdgeType = 'arrow' | 'line' | 'dashed'
 
+/** 蓝图嵌套深度上限（ADR-12：route 最长 8 级；在第 8 层中创建蓝图节点时界面提示并阻止） */
+export const MAX_NESTING_DEPTH = 8
+
 /**
  * 蓝图节点（全局唯一 id；graphId 声明节点摆放在哪张画布上）
  * id 约定：禁止以 'proxy:' 开头——该前缀保留给画布层生成的跨图代理节点（见 BlueprintCanvas）
@@ -37,6 +42,8 @@ export interface BlueprintNode {
   graphId: string
   /** 仅 type=blueprint：双击进入的子图 id */
   refGraphId?: string
+  /** 仅 type=ref：指向的正文/蓝图文件相对路径（chapters/xxx.md 或 blueprints/xxx.blueprint.json） */
+  refTarget?: string
   /** 节点标签（设定/伏笔/大纲/世界观等，引用小说级标签库） */
   tags: string[]
   /** 别名：关键词兜底匹配用（正文提及别名也会激活该节点） */

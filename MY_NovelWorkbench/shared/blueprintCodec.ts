@@ -8,22 +8,94 @@
  * 2026-08-25
  * 变更说明：
  *   1. M1 初版：文件 → 图视图集合（owner 关系由父文件节点 refGraphId 推导）
+ *   2. M2 审查修订：解析时对节点做字段归一化（缺 tags/position 等的外部手编文件
+ *      不再让渲染层抛 TypeError）；type 非法或 id 缺失的节点跳过并告警
  */
 
-import type { BlueprintEdge, BlueprintNode, GraphData, GraphView } from './blueprint'
+import type { BlueprintEdge, BlueprintNode, GraphData, GraphView, NodeType } from './blueprint'
 import type { BlueprintFile, BlueprintFileNode } from './types'
+
+const VALID_NODE_TYPES: ReadonlySet<string> = new Set(['blueprint', 'text', 'ref'])
+const VALID_EDGE_TYPES: ReadonlySet<string> = new Set(['arrow', 'line', 'dashed'])
 
 /** 落盘节点：剥离 graphId（所属文件即 graphId） */
 export function toFileNodes(nodes: BlueprintNode[]): Array<Omit<BlueprintFileNode, 'graphId'>> {
   return nodes.map(({ graphId: _graphId, ...rest }) => rest)
 }
 
-/** 解析文件：回填 graphId 为所属文件 id */
-export function parseBlueprintFile(file: BlueprintFile): { nodes: BlueprintNode[]; edges: BlueprintEdge[] } {
-  return {
-    nodes: file.nodes.map((n) => ({ ...n, graphId: file.id })),
-    edges: file.edges.map((e) => ({ ...e }))
+/**
+ * 节点归一化：外部编辑器可能写出缺字段/坏类型的节点，渲染层（node.tags.length 等）
+ * 会对 undefined 直接抛错——在数据入口统一补默认值；id 缺失或 type 非法则跳过该节点
+ */
+function normalizeNode(n: unknown, fileId: string): BlueprintNode | null {
+  if (typeof n !== 'object' || n === null) return null
+  const raw = n as Partial<BlueprintFileNode> & { id?: unknown; type?: unknown }
+  if (typeof raw.id !== 'string' || raw.id === '' || raw.id.startsWith('proxy:')) {
+    console.warn(`[blueprintCodec] 跳过非法节点（id 缺失或占用 proxy: 前缀）：${fileId}`)
+    return null
   }
+  if (typeof raw.type !== 'string' || !VALID_NODE_TYPES.has(raw.type)) {
+    console.warn(`[blueprintCodec] 跳过非法节点（type 未知：${String(raw.type)}）：${fileId}`)
+    return null
+  }
+  return {
+    id: raw.id,
+    type: raw.type as NodeType,
+    title: typeof raw.title === 'string' && raw.title !== '' ? raw.title : raw.id,
+    graphId: fileId,
+    refGraphId: typeof raw.refGraphId === 'string' ? raw.refGraphId : undefined,
+    refTarget: typeof raw.refTarget === 'string' ? raw.refTarget : undefined,
+    tags: Array.isArray(raw.tags) ? raw.tags.filter((t): t is string => typeof t === 'string') : [],
+    aliases: Array.isArray(raw.aliases) ? raw.aliases.filter((t): t is string => typeof t === 'string') : [],
+    prompt: typeof raw.prompt === 'string' ? raw.prompt : '',
+    summary: typeof raw.summary === 'string' ? raw.summary : '',
+    position:
+      raw.position && typeof raw.position.x === 'number' && typeof raw.position.y === 'number'
+        ? { x: raw.position.x, y: raw.position.y }
+        : { x: 0, y: 0 },
+    size:
+      raw.size && typeof raw.size.width === 'number' && typeof raw.size.height === 'number'
+        ? { width: raw.size.width, height: raw.size.height }
+        : { width: 160, height: 50 }
+  }
+}
+
+/** 边归一化：id/from/to 缺失或 type 非法（渲染层 EDGE_VISUAL 查表会炸）时跳过 */
+function normalizeEdge(e: unknown, fileId: string): BlueprintEdge | null {
+  const raw = e as Partial<BlueprintEdge> | null
+  if (
+    raw === null ||
+    typeof raw.id !== 'string' ||
+    typeof raw.from !== 'string' ||
+    typeof raw.to !== 'string' ||
+    typeof raw.type !== 'string' ||
+    !VALID_EDGE_TYPES.has(raw.type)
+  ) {
+    console.warn(`[blueprintCodec] 跳过非法边：${fileId}`)
+    return null
+  }
+  return {
+    id: raw.id,
+    from: raw.from,
+    to: raw.to,
+    type: raw.type as BlueprintEdge['type'],
+    label: typeof raw.label === 'string' && raw.label !== '' ? raw.label : undefined
+  }
+}
+
+/** 解析文件：回填 graphId 为所属文件 id；节点/边字段归一化（坏条目跳过不阻断） */
+export function parseBlueprintFile(file: BlueprintFile): { nodes: BlueprintNode[]; edges: BlueprintEdge[] } {
+  const nodes: BlueprintNode[] = []
+  for (const n of file.nodes) {
+    const normalized = normalizeNode(n, file.id)
+    if (normalized) nodes.push(normalized)
+  }
+  const edges: BlueprintEdge[] = []
+  for (const e of file.edges) {
+    const normalized = normalizeEdge(e, file.id)
+    if (normalized) edges.push(normalized)
+  }
+  return { nodes, edges }
 }
 
 /**

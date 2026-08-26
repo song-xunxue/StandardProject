@@ -7,20 +7,24 @@
  * 2026-08-25
  * 变更说明：
  *   1. M1 初版：fs:* 通道注册；打开/创建小说后自动启动监听与索引
+ *   2. M2：新增元信息读写（readMeta/saveMeta）与资源库（listResources/saveResource/deleteResource）
  */
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import { IPC } from '../shared/types'
-import { createNovel, openNovel, recentNovels } from './services/novelService'
+import { createNovel, openNovel, readMeta, recentNovels, saveMeta } from './services/novelService'
 import {
   createFile,
   deleteFile,
+  deleteResource,
+  listResources,
   readBlueprint,
   readChapter,
   readTree,
   renameFile,
   saveBlueprint,
-  saveChapter
+  saveChapter,
+  saveResource
 } from './services/fileService'
 import { indexStats, rebuildIndex, closeIndex } from './services/indexService'
 import { startWatching } from './watcher'
@@ -79,4 +83,15 @@ export function registerIpcHandlers(win: BrowserWindow): void {
 
   ipcMain.handle(IPC.rebuildIndex, () => opened(() => rebuildIndex()))
   ipcMain.handle(IPC.indexStats, () => opened(() => indexStats()))
+
+  // M2：元信息（标签库）与资源库
+  ipcMain.handle(IPC.readMeta, () => opened(() => readMeta()))
+  ipcMain.handle(IPC.saveMeta, (_e, p: { meta: unknown }) =>
+    opened(() => saveMeta(p.meta as Parameters<typeof saveMeta>[0]))
+  )
+  ipcMain.handle(IPC.listResources, () => opened(() => listResources()))
+  ipcMain.handle(IPC.saveResource, (_e, p: { template: unknown }) =>
+    opened(() => saveResource(p.template as Parameters<typeof saveResource>[0]))
+  )
+  ipcMain.handle(IPC.deleteResource, (_e, p: { path: string }) => opened(() => deleteResource(p.path)))
 }

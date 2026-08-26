@@ -9,6 +9,7 @@
  * 变更说明：
  *   1. 初版：仅暴露应用版本信息
  *   2. M1：新增 fs 通道（小说/文件树/蓝图/章节 CRUD/索引）与目录变化订阅
+ *   3. M2：新增元信息读写与资源库通道
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
@@ -34,7 +35,12 @@ const api = {
     renameFile: (path: string, title: string) => ipcRenderer.invoke(IPC.renameFile, { path, title }),
     deleteFile: (path: string) => ipcRenderer.invoke(IPC.deleteFile, { path }),
     rebuildIndex: () => ipcRenderer.invoke(IPC.rebuildIndex),
-    indexStats: () => ipcRenderer.invoke(IPC.indexStats)
+    indexStats: () => ipcRenderer.invoke(IPC.indexStats),
+    readMeta: () => ipcRenderer.invoke(IPC.readMeta),
+    saveMeta: (meta: unknown) => ipcRenderer.invoke(IPC.saveMeta, { meta }),
+    listResources: () => ipcRenderer.invoke(IPC.listResources),
+    saveResource: (template: unknown) => ipcRenderer.invoke(IPC.saveResource, { template }),
+    deleteResource: (path: string) => ipcRenderer.invoke(IPC.deleteResource, { path })
   },
   /** 订阅小说目录变化（返回取消订阅函数） */
   onNovelChanged: (callback: (tree: unknown) => void): (() => void) => {

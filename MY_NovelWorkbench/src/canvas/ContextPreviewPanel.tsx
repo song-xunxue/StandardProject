@@ -31,7 +31,8 @@ const DEMO_DRAFT = '少年立于北原镇的风雪中，怀中古剑发出微鸣
 export function ContextPreviewPanel(): ReactElement {
   const nodes = useGraphStore((s) => s.nodes)
   const edges = useGraphStore((s) => s.edges)
-  const selectedNodeId = useGraphStore((s) => s.selectedNodeId)
+  // M2 审查修订：选中态改数组化受控，此处取首个选中节点
+  const selectedNodeId = useGraphStore((s) => s.selectedNodeIds[0] ?? null)
 
   // 目标优先级：选中节点 → 当前画布首个节点 → 任意节点（均无则空面板）
   const route = useGraphStore((s) => s.route)

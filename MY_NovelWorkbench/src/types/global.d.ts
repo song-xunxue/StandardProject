@@ -8,9 +8,10 @@
  * 变更说明：
  *   1. 初版：声明 preload 暴露的 versions 信息
  *   2. M1：fs 通道与目录变化订阅的完整类型（复用 shared 契约类型）
+ *   3. M2：新增元信息读写与资源库通道类型
  */
 
-import type { BlueprintFile, ChapterDoc, NovelMeta, RecentNovel, TreeNode } from '@shared/types'
+import type { BlueprintFile, ChapterDoc, NovelMeta, RecentNovel, ResourceTemplate, TreeNode } from '@shared/types'
 
 export interface Api {
   versions: {
@@ -33,6 +34,11 @@ export interface Api {
     deleteFile: (path: string) => Promise<void>
     rebuildIndex: () => Promise<{ nodes: number; edges: number }>
     indexStats: () => Promise<{ nodes: number; edges: number; lastBuiltAt: string | null }>
+    readMeta: () => Promise<NovelMeta>
+    saveMeta: (meta: NovelMeta) => Promise<NovelMeta>
+    listResources: () => Promise<Array<{ path: string; template: ResourceTemplate }>>
+    saveResource: (template: ResourceTemplate) => Promise<{ path: string }>
+    deleteResource: (path: string) => Promise<void>
   }
   onNovelChanged: (callback: (tree: TreeNode[]) => void) => () => void
 }

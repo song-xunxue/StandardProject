@@ -10,6 +10,7 @@
  *   1. 初版：布局骨架 + 分栏宽度拖动（200-480px 钳制）+ 蓝图画布演示
  *   2. M0：AI 图标切换上下文预览面板（assembleContext 实时结果）
  *   3. M1：novelStore 初始化、欢迎页（新建/打开/最近列表）、动态 Tab 分发画布/章节编辑器
+ *   4. M2：蓝图 Tab 增加右侧属性面板（Inspector，可拖宽度 200-420px，复用 Splitter）
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -21,6 +22,7 @@ import { TabBar } from './layout/TabBar'
 import { BlueprintCanvas } from './canvas/BlueprintCanvas'
 import { ContextPreviewPanel } from './canvas/ContextPreviewPanel'
 import { ChapterEditor } from './canvas/ChapterEditor'
+import { InspectorPanel } from './canvas/InspectorPanel'
 import { Dialog } from './components/Dialog'
 import { useNovelStore } from './store/novelStore'
 import { dialogPrompt } from './store/dialogStore'
@@ -28,6 +30,11 @@ import { dialogPrompt } from './store/dialogStore'
 const MIN_LEFT = 200
 const MAX_LEFT = 480
 const DEFAULT_LEFT = 240
+
+/** 属性面板宽度范围 */
+const MIN_INSPECTOR = 200
+const MAX_INSPECTOR = 420
+const DEFAULT_INSPECTOR = 280
 
 /** 欢迎页：无小说时全屏引导 */
 function Welcome(): ReactElement {
@@ -78,6 +85,7 @@ function Welcome(): ReactElement {
 
 export default function App(): ReactElement {
   const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT)
+  const [inspectorWidth, setInspectorWidth] = useState(DEFAULT_INSPECTOR)
   const [activeStrip, setActiveStrip] = useState('novel')
   const novel = useNovelStore((s) => s.novel)
   const init = useNovelStore((s) => s.init)
@@ -95,6 +103,15 @@ export default function App(): ReactElement {
   // 双击分界线：复位默认宽度
   const handleReset = useCallback(() => {
     setLeftWidth(DEFAULT_LEFT)
+  }, [])
+
+  // 属性面板分界线（dx 为正向右=面板加宽）
+  const handleInspectorResize = useCallback((dx: number) => {
+    setInspectorWidth((w) => Math.min(MAX_INSPECTOR, Math.max(MIN_INSPECTOR, w + dx)))
+  }, [])
+
+  const handleInspectorReset = useCallback(() => {
+    setInspectorWidth(DEFAULT_INSPECTOR)
   }, [])
 
   if (!novel) {
@@ -117,7 +134,13 @@ export default function App(): ReactElement {
         <TabBar />
         <div className="content-area">
           {activeTab?.kind === 'blueprint' ? (
-            <BlueprintCanvas />
+            <div className="canvas-row">
+              <BlueprintCanvas />
+              <Splitter onResize={handleInspectorResize} onReset={handleInspectorReset} />
+              <div className="inspector-wrap" style={{ width: inspectorWidth }}>
+                <InspectorPanel />
+              </div>
+            </div>
           ) : activeTab?.kind === 'chapter' ? (
             <ChapterEditor key={activeTab.path} path={activeTab.path} />
           ) : (

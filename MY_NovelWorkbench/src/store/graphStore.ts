@@ -45,6 +45,8 @@ export interface AddNodeInput {
   type: BlueprintNode['type']
   title: string
   position: { x: number; y: number }
+  /** 目标图 id（缺省=当前画布；左栏「在某蓝图内新建子蓝图」时指定） */
+  graphId?: string
   /** 仅 blueprint：子图 id（需先由 fs.createFile 建好子图文件并 refreshTree） */
   refGraphId?: string
   /** 仅 ref：指向的章节/蓝图文件相对路径 */
@@ -275,10 +277,15 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
 
   addNode: (input) => {
     const { route, graphs, nodes } = get()
-    const graphId = route[route.length - 1]
+    const graphId = input.graphId ?? route[route.length - 1]
     if (!graphId || !graphs[graphId]) return null
-    // ADR-12：蓝图节点承载下一层子图，当前已在第 8 层时禁止创建（UI 层负责提示）
-    if (input.type === 'blueprint' && route.length >= MAX_NESTING_DEPTH) return null
+    // ADR-12：蓝图节点承载下一层子图，目标图已达第 8 层深度时禁止创建（UI 层负责提示）
+    if (input.type === 'blueprint') {
+      const depth = input.graphId
+        ? pathToGraph({ nodes: get().nodes, edges: get().edges, graphs }, input.graphId).length
+        : route.length
+      if (depth >= MAX_NESTING_DEPTH) return null
+    }
     const id = newId('n')
     const node: BlueprintNode = {
       id,

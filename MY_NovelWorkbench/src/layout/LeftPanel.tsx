@@ -24,11 +24,18 @@ import { useNovelStore } from '@/store/novelStore'
 import { useGraphStore } from '@/store/graphStore'
 import { dialogConfirm, dialogPrompt } from '@/store/dialogStore'
 import { defaultTitle, nextNumberedName } from '@/services/naming'
+import { pathToGraph } from '@/services/graphTraversal'
+import { MAX_NESTING_DEPTH } from '@shared/blueprint'
 
 const displayTitle = (name: string): string => name.replace(/\.blueprint\.json$/, '').replace(/\.md$/, '')
 
 /** 右键菜单目标区域 */
-type MenuArea = 'blueprints' | 'chapters' | { volume: string }
+type MenuArea =
+  | 'blueprints'
+  | 'chapters'
+  | { volume: string } // 卷行：卷内新增章节
+  | { blueprintItem: string } // 蓝图项行：新建子蓝图（挂其内）/ 新建顶层蓝图
+  | { chapterItem: string } // 章节项行：同目录新增章节
 
 /**
  * 把 blueprints/ 的平铺文件按 owner 归属关系重排为层级：
@@ -76,6 +83,7 @@ function TreeBranch(props: {
   onOpenFile: (node: TreeNode) => void
   onSelect: (path: string) => void
   onContextArea: (e: ReactMouseEvent, area: MenuArea) => void
+  onContextItem: (e: ReactMouseEvent, node: TreeNode) => void
   onExchange: (pathA: string, pathB: string) => void
 }): ReactElement {
   const { nodes, depth } = props
@@ -145,6 +153,7 @@ function TreeBranch(props: {
                 title={`${node.path}（双击打开）`}
                 onClick={() => props.onSelect(node.path)}
                 onDoubleClick={() => props.onOpenFile(node)}
+                onContextMenu={(e) => props.onContextItem(e, node)}
               >
                 <button
                   className="tree-toggle"
@@ -182,6 +191,7 @@ function TreeBranch(props: {
             title={`${node.path}（双击打开${isChapter ? ' · 可拖动到其他章节交换位置' : ''}）`}
             onClick={() => props.onSelect(node.path)}
             onDoubleClick={() => props.onOpenFile(node)}
+            onContextMenu={(e) => props.onContextItem(e, node)}
             draggable={isChapter}
             onDragStart={(e) => {
               dragPathRef.current = node.path
@@ -282,18 +292,30 @@ export function LeftPanel(): ReactElement {
     setMenu({ x: e.clientX, y: e.clientY, area })
   }
 
-  /** 同级章节显示名（自动序号用） */
-  const siblingChapterNames = (area: MenuArea): string[] => {
+  /** 文件项右键：蓝图→新建（子）蓝图；章节→同目录新增章节 */
+  const onContextItem = (e: ReactMouseEvent, node: TreeNode): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (node.kind === 'blueprint') setMenu({ x: e.clientX, y: e.clientY, area: { blueprintItem: node.path } })
+    else if (node.kind === 'chapter') setMenu({ x: e.clientX, y: e.clientY, area: { chapterItem: node.path } })
+  }
+
+  /** 章节所在卷（chapters/卷/章.md → 卷名；直下章节 → undefined） */
+  const volumeOfChapter = (path: string): string | undefined => {
+    const rest = path.replace(/^chapters\//, '')
+    const slash = rest.lastIndexOf('/')
+    return slash > 0 ? rest.slice(0, slash) : undefined
+  }
+
+  /** 同级章节显示名（自动序号用；volume 缺省= chapters 直下） */
+  const siblingChapterNames = (volume?: string): string[] => {
     const chDir = tree[0]?.children?.find((c) => c.kind === 'dir' && c.path === 'chapters')
     if (!chDir?.children) return []
-    if (area === 'chapters') {
+    if (volume === undefined) {
       return chDir.children.filter((c) => c.kind === 'chapter').map((c) => displayTitle(c.name))
     }
-    if (typeof area === 'object') {
-      const vol = chDir.children.find((c) => c.kind === 'dir' && c.name === area.volume)
-      return (vol?.children ?? []).map((c) => displayTitle(c.name))
-    }
-    return []
+    const vol = chDir.children.find((c) => c.kind === 'dir' && c.name === volume)
+    return (vol?.children ?? []).map((c) => displayTitle(c.name))
   }
 
   /** 已有卷名列表 */
@@ -313,14 +335,52 @@ export function LeftPanel(): ReactElement {
     if (name) void createFile('blueprint', name)
   }
 
+  /** 在指定蓝图内新建子蓝图：建子图文件 → 刷新 → 在目标图内落蓝图节点（挂 refGraphId） */
+  const handleCreateSubBlueprint = async (parentPath: string): Promise<void> => {
+    const gs = useGraphStore.getState()
+    const gid = Object.entries(gs.graphPaths).find(([, p]) => p === parentPath)?.[0]
+    const parentGraph = gid ? gs.graphs[gid] : undefined
+    if (!gid || !parentGraph) {
+      await dialogConfirm('该蓝图的图数据尚未加载完成，请先双击打开一次再试', '知道了')
+      return
+    }
+    // ADR-12 深度检查（目标图不在当前路由上，按祖先链长度判）
+    const depth = pathToGraph({ nodes: gs.nodes, edges: gs.edges, graphs: gs.graphs }, gid).length
+    if (depth >= MAX_NESTING_DEPTH) {
+      await dialogConfirm(`「${parentGraph.title}」已达蓝图嵌套上限（${MAX_NESTING_DEPTH} 层），无法再建子蓝图`, '知道了')
+      return
+    }
+    const nodeTitles = parentGraph.nodeIds.map((id) => gs.nodes[id]?.title ?? '')
+    const name = await dialogPrompt(
+      `在「${parentGraph.title}」内新建子蓝图`,
+      '蓝图名称',
+      defaultTitle('新蓝图', [...nodeTitles, ...blueprintNames()])
+    )
+    if (!name) return
+    let created: { path: string; id?: string }
+    try {
+      created = await window.api.fs.createFile('blueprint', name)
+    } catch (err) {
+      await dialogConfirm(`子蓝图文件创建失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+      return
+    }
+    await useNovelStore.getState().refreshTree()
+    useGraphStore.getState().addNode({
+      type: 'blueprint',
+      title: name,
+      graphId: gid,
+      position: { x: 80 + (parentGraph.nodeIds.length % 5) * 60, y: 80 + (parentGraph.nodeIds.length % 5) * 48 },
+      refGraphId: created.id
+    })
+  }
+
   const handleCreateVolume = async (): Promise<void> => {
     const name = await dialogPrompt('新增卷', '卷名称', nextNumberedName(volumeNames(), '卷'))
     if (name) void createVolume(name)
   }
 
-  const handleCreateChapter = async (area: MenuArea): Promise<void> => {
-    const volume = typeof area === 'object' ? area.volume : undefined
-    const name = await dialogPrompt(volume ? `在「${volume}」新增章节` : '新增章节', '章节名称', nextNumberedName(siblingChapterNames(area), '章'))
+  const handleCreateChapter = async (volume?: string): Promise<void> => {
+    const name = await dialogPrompt(volume ? `在「${volume}」新增章节` : '新增章节', '章节名称', nextNumberedName(siblingChapterNames(volume), '章'))
     if (name) void createFile('chapter', name, volume)
   }
 
@@ -336,11 +396,25 @@ export function LeftPanel(): ReactElement {
         : menu.area === 'chapters'
           ? [
               { key: 'vol', label: '📕 新增卷', run: handleCreateVolume },
-              { key: 'ch', label: '▪ 新增章节', run: () => handleCreateChapter('chapters') }
+              { key: 'ch', label: '▪ 新增章节', run: () => handleCreateChapter() }
             ]
-          : [
-              { key: 'ch', label: `▪ 在「${menu.area.volume}」新增章节`, run: () => handleCreateChapter(menu!.area as { volume: string }) }
-            ]
+          : 'volume' in menu.area
+            ? [{ key: 'ch', label: `▪ 在「${menu.area.volume}」新增章节`, run: () => handleCreateChapter((menu!.area as { volume: string }).volume) }]
+            : 'blueprintItem' in menu.area
+              ? [
+                  { key: 'sub', label: `◆ 在此蓝图内新建子蓝图`, run: () => handleCreateSubBlueprint((menu!.area as { blueprintItem: string }).blueprintItem) },
+                  { key: 'bp', label: '◆ 新建蓝图（顶层）', run: handleCreateBlueprint }
+                ]
+              : [
+                  {
+                    key: 'ch',
+                    label: '▪ 同目录新增章节',
+                    run: () => {
+                      const vol = volumeOfChapter((menu!.area as { chapterItem: string }).chapterItem)
+                      return handleCreateChapter(vol)
+                    }
+                  }
+                ]
 
   return (
     <div className="left-panel" style={{ background: 'var(--bg-left)' }}>
@@ -349,7 +423,7 @@ export function LeftPanel(): ReactElement {
         <button className="left-tool-btn" title="新建蓝图（或在 blueprints 目录右键）" onClick={() => void handleCreateBlueprint()} disabled={!novel}>
           + 蓝图
         </button>
-        <button className="left-tool-btn" title="新增章节（或在 chapters 目录右键）" onClick={() => void handleCreateChapter('chapters')} disabled={!novel}>
+        <button className="left-tool-btn" title="新增章节（或在 chapters 目录右键）" onClick={() => void handleCreateChapter()} disabled={!novel}>
           + 章节
         </button>
       </div>
@@ -362,6 +436,7 @@ export function LeftPanel(): ReactElement {
             onOpenFile={openFile}
             onSelect={setSelectedPath}
             onContextArea={onContextArea}
+            onContextItem={onContextItem}
             onExchange={handleExchange}
           />
         ) : (

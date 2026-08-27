@@ -36,7 +36,7 @@ function resolveInNovel(path: string): string {
   return abs
 }
 
-/** 读取文件树：novel.json / blueprints/*.blueprint.json / chapters/*.md */
+/** 读取文件树：novel.json / blueprints/*.blueprint.json / chapters/[卷/]*.md（卷 = chapters 下的一层目录） */
 export function readTree(): TreeNode[] {
   const novel = currentNovel()
   if (!novel) return []
@@ -45,7 +45,7 @@ export function readTree(): TreeNode[] {
   const listDir = (dir: string, kind: TreeNode['kind']): TreeNode[] =>
     existsSync(dir)
       ? readdirSync(dir, { withFileTypes: true })
-          .filter((e) => e.isFile())
+          .filter((e) => e.isFile() && !e.name.startsWith('.')) // 跳过 .gitkeep 等占位/隐藏文件
           .map((e) => ({ name: e.name, path: relative(novel.dir, join(dir, e.name)).replace(/\\/g, '/'), kind }))
           .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
       : []
@@ -53,7 +53,18 @@ export function readTree(): TreeNode[] {
     { name: novel.meta.title, path: '', kind: 'meta', children: [] as TreeNode[] }
   ]
   const blueprints: TreeNode = { name: 'blueprints', path: 'blueprints', kind: 'dir', children: listDir(bpDir, 'blueprint') }
-  const chapters: TreeNode = { name: 'chapters', path: 'chapters', kind: 'dir', children: listDir(chDir, 'chapter') }
+  // chapters 支持卷（一层子目录）：文件与卷目录混合列出，卷目录递归列一层章节
+  const chapterChildren: TreeNode[] = existsSync(chDir)
+    ? readdirSync(chDir, { withFileTypes: true })
+        .filter((e) => (e.isFile() || e.isDirectory()) && !e.name.startsWith('.'))
+        .map((e) => {
+          const path = relative(novel.dir, join(chDir, e.name)).replace(/\\/g, '/')
+          if (e.isFile()) return { name: e.name, path, kind: 'chapter' as const }
+          return { name: e.name, path, kind: 'dir' as const, children: listDir(join(chDir, e.name), 'chapter') }
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+    : []
+  const chapters: TreeNode = { name: 'chapters', path: 'chapters', kind: 'dir', children: chapterChildren }
   tree[0]!.children = [blueprints, chapters]
   return tree
 }
@@ -91,8 +102,8 @@ export function saveChapter(path: string, doc: ChapterDoc): void {
   writeFileSync(resolveInNovel(path), raw, 'utf-8')
 }
 
-/** 创建文件：蓝图（空图）或章节（空 frontmatter），返回相对路径 */
-export function createFile(kind: 'blueprint' | 'chapter', title: string): { path: string; id?: string } {
+/** 创建文件：蓝图（空图）或章节（空 frontmatter，可指定卷目录），返回相对路径 */
+export function createFile(kind: 'blueprint' | 'chapter', title: string, volume?: string): { path: string; id?: string } {
   const novel = currentNovel()
   if (!novel) throw new Error('尚未打开小说')
   const name = sanitizeFileName(title)
@@ -106,7 +117,9 @@ export function createFile(kind: 'blueprint' | 'chapter', title: string): { path
     writeFileSync(abs, JSON.stringify(file, null, 2), 'utf-8')
     return { path, id }
   }
-  const path = `chapters/${name}.md`
+  // 章节：卷目录（chapters/<卷>/<章>.md），卷名同样清洗；v1 卷不嵌套
+  const dir = volume && volume.trim() !== '' ? `chapters/${sanitizeFileName(volume)}` : 'chapters'
+  const path = `${dir}/${name}.md`
   const abs = resolveInNovel(path)
   if (existsSync(abs)) throw new Error(`章节已存在：${name}`)
   mkdirSync(join(abs, '..'), { recursive: true })
@@ -114,7 +127,20 @@ export function createFile(kind: 'blueprint' | 'chapter', title: string): { path
   return { path }
 }
 
-/** 重命名（改文件名 stem；蓝图文件同步更新内部 title） */
+/** 创建卷（chapters 下的一层目录；空目录以 .gitkeep 占位保证可见性与 git 跟踪） */
+export function createVolume(name: string): { path: string } {
+  const novel = currentNovel()
+  if (!novel) throw new Error('尚未打开小说')
+  const clean = sanitizeFileName(name)
+  const path = `chapters/${clean}`
+  const abs = resolveInNovel(path)
+  if (existsSync(abs)) throw new Error(`卷已存在：${clean}`)
+  mkdirSync(abs, { recursive: true })
+  writeFileSync(join(abs, '.gitkeep'), '', 'utf-8')
+  return { path }
+}
+
+/** 重命名（改文件名 stem；蓝图同步内部 title；章节同步 frontmatter title） */
 export function renameFile(path: string, newTitle: string): { path: string } {
   const abs = resolveInNovel(path)
   const novel = currentNovel()!
@@ -124,17 +150,59 @@ export function renameFile(path: string, newTitle: string): { path: string } {
   const newAbs = resolveInNovel(newPath)
   if (existsSync(newAbs)) throw new Error(`目标文件已存在：${newTitle}`)
   renameSync(abs, newAbs)
-  // 蓝图：文件内 title 与文件名保持一致（否则面包屑/树标题漂移）
-  if (newPath.endsWith('.blueprint.json')) {
-    try {
-      const file = JSON.parse(readFileSync(newAbs, 'utf-8')) as { title?: string }
-      file.title = sanitizeFileName(newTitle)
-      writeFileSync(newAbs, JSON.stringify(file, null, 2), 'utf-8')
-    } catch (err) {
-      console.error('[fileService] 重命名后同步蓝图 title 失败:', err)
+  syncInternalTitle(newPath, newTitle)
+  return { path: newPath }
+}
+
+/** 文件名变更后同步内部标题（蓝图 JSON title / 章节 frontmatter title），失败仅记日志不回滚 */
+function syncInternalTitle(path: string, newTitle: string): void {
+  const abs = resolveInNovel(path)
+  const clean = sanitizeFileName(newTitle)
+  try {
+    if (path.endsWith('.blueprint.json')) {
+      const file = JSON.parse(readFileSync(abs, 'utf-8')) as { title?: string }
+      file.title = clean
+      writeFileSync(abs, JSON.stringify(file, null, 2), 'utf-8')
+    } else if (path.endsWith('.md')) {
+      const raw = readFileSync(abs, 'utf-8')
+      const { data, content } = parseFrontmatter(raw)
+      writeFileSync(abs, serializeFrontmatter({ ...data, title: clean }, content), 'utf-8')
+    }
+  } catch (err) {
+    console.error(`[fileService] 重命名后同步内部 title 失败 (${path}):`, err)
+  }
+}
+
+/**
+ * 交换两个文件的位置（文件名互换，内容随文件——树上的显示位置即对调）。
+ * 用于章节拖动排序：第一章 ↔ 第二章 交换后，两章正文互换了先后位置。
+ * 经临时中转名防止目标冲突；内部标题同步到新文件名。
+ */
+export function exchangeFiles(pathA: string, pathB: string): void {
+  const novel = currentNovel()
+  if (!novel) throw new Error('尚未打开小说')
+  for (const p of [pathA, pathB]) {
+    const rel = relative(novel.dir, resolveInNovel(p)).replace(/\\/g, '/')
+    if (!rel.startsWith('chapters/') && !rel.startsWith('blueprints/')) {
+      throw new Error(`仅允许交换章节或蓝图文件：${p}`)
     }
   }
-  return { path: newPath }
+  if (pathA === pathB) return
+  const stemOf = (p: string): string => p.split('/').pop()!.replace(/\.blueprint\.json$/, '').replace(/\.md$/, '')
+  const extOf = (p: string): string => (p.endsWith('.md') ? '.md' : '.blueprint.json')
+  const dirOf = (p: string): string => p.slice(0, p.lastIndexOf('/'))
+  if (extOf(pathA) !== extOf(pathB)) throw new Error('仅允许交换同类型文件（章节 ↔ 章节 / 蓝图 ↔ 蓝图）')
+  const absA = resolveInNovel(pathA)
+  const absB = resolveInNovel(pathB)
+  if (!existsSync(absA) || !existsSync(absB)) throw new Error('交换的文件不存在')
+  const tmpPath = `${dirOf(pathA)}/.__exchange_tmp__${extOf(pathA)}`
+  const absTmp = resolveInNovel(tmpPath)
+  renameSync(absA, absTmp)
+  renameSync(absB, absA)
+  renameSync(absTmp, absB)
+  // 内容随文件走到对方名字下——内部标题同步为新文件名的 stem
+  syncInternalTitle(pathA, stemOf(pathA))
+  syncInternalTitle(pathB, stemOf(pathB))
 }
 
 /** 删除文件（仅限 blueprints/ 与 chapters/ 内；基于规范化后的路径判定，防 ../ 绕过） */

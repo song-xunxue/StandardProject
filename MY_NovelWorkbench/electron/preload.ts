@@ -32,8 +32,11 @@ const api = {
     saveBlueprint: (path: string, file: unknown) => ipcRenderer.invoke(IPC.saveBlueprint, { path, file }),
     readChapter: (path: string) => ipcRenderer.invoke(IPC.readChapter, { path }),
     saveChapter: (path: string, doc: unknown) => ipcRenderer.invoke(IPC.saveChapter, { path, doc }),
-    createFile: (kind: 'blueprint' | 'chapter', title: string) => ipcRenderer.invoke(IPC.createFile, { kind, title }),
+    createFile: (kind: 'blueprint' | 'chapter', title: string, volume?: string) =>
+      ipcRenderer.invoke(IPC.createFile, { kind, title, volume }),
+    createVolume: (name: string) => ipcRenderer.invoke(IPC.createVolume, { name }),
     renameFile: (path: string, title: string) => ipcRenderer.invoke(IPC.renameFile, { path, title }),
+    exchangeFiles: (pathA: string, pathB: string) => ipcRenderer.invoke(IPC.exchangeFiles, { pathA, pathB }),
     deleteFile: (path: string) => ipcRenderer.invoke(IPC.deleteFile, { path }),
     rebuildIndex: () => ipcRenderer.invoke(IPC.rebuildIndex),
     indexStats: () => ipcRenderer.invoke(IPC.indexStats),

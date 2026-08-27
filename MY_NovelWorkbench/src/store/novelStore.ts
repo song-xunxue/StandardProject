@@ -41,8 +41,12 @@ interface NovelState {
   openNovel: (dir: string) => Promise<void>
   /** 刷新文件树 + 重新水合图数据 */
   refreshTree: () => Promise<void>
-  /** 创建蓝图/章节文件 */
-  createFile: (kind: 'blueprint' | 'chapter', title: string) => Promise<void>
+  /** 创建蓝图/章节文件（章节可指定卷目录名） */
+  createFile: (kind: 'blueprint' | 'chapter', title: string, volume?: string) => Promise<void>
+  /** 新建卷（chapters 下一层目录） */
+  createVolume: (name: string) => Promise<void>
+  /** 交换两个文件位置（文件名互换=内容对调；章节拖动排序用） */
+  exchangeFiles: (pathA: string, pathB: string) => Promise<void>
   /** 重命名文件（并同步 Tab） */
   renameFile: (path: string, title: string) => Promise<void>
   /** 删除文件（并同步 Tab） */
@@ -136,10 +140,20 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     }
   },
 
-  createFile: async (kind, title) => {
-    const created = await api().fs.createFile(kind, title)
+  createFile: async (kind, title, volume) => {
+    const created = await api().fs.createFile(kind, title, volume)
     await get().refreshTree()
     get().openTab(kind, created.path, title)
+  },
+
+  createVolume: async (name) => {
+    await api().fs.createVolume(name)
+    await get().refreshTree()
+  },
+
+  exchangeFiles: async (pathA, pathB) => {
+    await api().fs.exchangeFiles(pathA, pathB)
+    await get().refreshTree()
   },
 
   renameFile: async (path, title) => {

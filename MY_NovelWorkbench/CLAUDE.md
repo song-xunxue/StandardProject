@@ -32,7 +32,7 @@ node scripts/gen-stress-blueprint.mjs <小说目录> [节点数]  # 生成 100 �
 - `ipc.ts` — fs/provider/llm 通道路由（契约见 `shared/types.ts` 的 IPC 常量）
 - `preload.ts` — contextBridge 暴露 `window.api`（fs + provider + llm + 目录变化/流式分块订阅）
 - `services/novelService.ts` — 小说目录创建/打开/最近列表（userData/recent.json）+ readMeta/saveMeta（novel.json 标签库，tmp+rename 原子写；openNovel 对旧目录回填 tagLibrary）
-- `services/fileService.ts` — 文件树/蓝图/章节 CRUD（`resolveInNovel` 路径穿越防护）+ 资源库（resources/ 模板列表/保存/删除，清洗撞车拒写）
+- `services/fileService.ts` — 文件树/蓝图/章节 CRUD（`resolveInNovel` 路径穿越防护）+ 卷支持（chapters/ 一层卷目录）+ exchangeFiles（文件名互换=章节排序）+ 资源库（resources/ 模板列表/保存/删除，清洗撞车拒写）；rename 同步内部 title（蓝图 JSON / 章节 frontmatter）
 - `services/providerService.ts` — AI Provider 配置（userData/providers.json + safeStorage 加密 API Key；.env 三变量开发期回退 Provider 'env-default' 不入盘；GET /models 连接测试）
 - `services/llmService.ts` — OpenAI 兼容流式生成（主进程 fetch SSE → llm:chunk 推送；AbortController 中断；LLM 在主进程执行：sandbox 渲染层 CORS + 凭据不出主进程）
 - `services/indexService.ts` — SQLite 索引（better-sqlite3，`.index/index.db`，mtime+size 增量）
@@ -51,14 +51,14 @@ node scripts/gen-stress-blueprint.mjs <小说目录> [节点数]  # 生成 100 �
 - `store/graphStore.ts` — 全局图数据+路由栈+**变更 action 与保存编排**：结构变更（增删节点/边、连线改型）立即落盘，属性/位置变更 600ms 防抖；脏图与保存中图受 hydrate 保护（自身保存触发的 watcher 回推不回滚内存）；受控选中数组（selectedNodeIds/selectedEdgeIds）；8 层嵌套拦截（ADR-12）
 - `store/aiStore.ts` — AI 工作区：Provider 列表/选择、流式生成会话（llm:chunk 全局单订阅按 requestId 路由）、editingDraft（ChapterEditor 节流 300ms 发布的正文草稿）、chapterEditor 实例引用
 - `store/dialogStore.ts` + `components/Dialog.tsx` — Promise 化 prompt/confirm（Electron 无原生）
-- `layout/` — 图标条/文件树（含重命名删除）/Tab 栏/分界线
+- `layout/` — 图标条/文件树/Tab 栏/分界线。左栏：**双击打开**（单击仅选中）、目录右键创建（卷/章节中文序号自动递增）、章节拖动交换（经 exchangeFiles）、蓝图按 owner 嵌套层级；Tab 激活走 novelStore.activateTab（蓝图 Tab 同步画布路由）
 - `canvas/BlueprintCanvas.tsx` — 蓝图画布（子图进入+跨图代理+连线创建+拖拽持久化+受控选中+标签着色+Delete 删除）
 - `canvas/CanvasToolbar.tsx` — 画布工具条（三类节点创建/保存状态/层级指示/资源库入口）
 - `canvas/InspectorPanel.tsx` — 右侧属性面板（节点标题/标签/prompt/summary/refTarget/子图、边改型与 label、图信息）
 - `canvas/ResourcePanel.tsx` — 资源库浮层（节点/标签组模板保存、插入、应用、删除）
 - `canvas/ChapterEditor.tsx` — 章节 Tiptap 编辑器（StarterKit+Markdown+Placeholder+Wikilink；600ms 防抖保存 getMarkdown 落盘+卸载冲刷；加载 emitUpdate:false；草稿节流发布）
 - `canvas/extensions/Wikilink.ts` — [[wikilink]] Mark（inclusive:false；suggestion 补全 allowedPrefixes:null+isComposing 放行；markdown 自定义 token 双向；悬浮预览 floating-ui+点击跳转）
-- `canvas/AiPanel.tsx` — AI 撰写面板（Provider 管理/续写/改写选中/停止；Context Viewer：三层预算/prompt 全文与复制/丢弃记录；组装目标 ref→选中→首节点）
+- `canvas/AiPanel.tsx` — AI 撰写面板（Provider 管理/续写/改写选中/停止；**前情提要**：编辑第 N 章自动注入前 2 章正文尾部；Context Viewer：三层预算/prompt 全文与复制/丢弃记录；组装目标 ref→选中→首节点；无编辑器时自动切最近章节）
 - `services/contextAssembly.ts` + `graphTraversal.ts` — 上下文组装与图遍历纯函数（分支覆盖 97.3%）；`naming.ts` — 默认标题去重
 - `services/streamInsert.ts` — StreamInserter 帧合并缓冲（R7：rAF/16ms 批量）；`generationWriter.ts` — 生成区写入器（流式纯文本内联 + finalize 按 markdown 重排；改写延迟删选区；编辑器销毁防护）
 - `styles/` — 主题色板；色值以需求文档 5.2 节为准

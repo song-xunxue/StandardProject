@@ -58,8 +58,10 @@ export const IPC = {
   saveBlueprint: 'fs:saveBlueprint', // (payload: { path, file: BlueprintFile }) => void
   readChapter: 'fs:readChapter', // (payload: { path }) => ChapterDoc
   saveChapter: 'fs:saveChapter', // (payload: { path, doc: ChapterDoc }) => void
-  createFile: 'fs:createFile', // (payload: { kind, title }) => { path }
+  createFile: 'fs:createFile', // (payload: { kind, title, volume? }) => { path }（章节可指定卷目录）
+  createVolume: 'fs:createVolume', // (payload: { name }) => { path }（chapters 下建卷目录）
   renameFile: 'fs:renameFile', // (payload: { path, title }) => { path }
+  exchangeFiles: 'fs:exchangeFiles', // (payload: { pathA, pathB }) => void（文件名互换=内容位置对调，用于章节排序）
   deleteFile: 'fs:deleteFile', // (payload: { path }) => void
   rebuildIndex: 'fs:rebuildIndex', // () => { nodes: number; edges: number }
   indexStats: 'fs:indexStats', // () => { nodes: number; edges: number; lastBuiltAt: string | null }

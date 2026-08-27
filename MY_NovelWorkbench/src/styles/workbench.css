@@ -1671,3 +1671,10 @@
   line-height: 1.7;
   white-space: pre-line;
 }
+
+/* 章节拖动交换的落点高亮（M3+ 左栏交互） */
+.tree-item.drop-target {
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+  background: rgba(108, 158, 248, 0.08);
+}

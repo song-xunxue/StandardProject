@@ -41,8 +41,10 @@ export interface Api {
     saveBlueprint: (path: string, file: BlueprintFile) => Promise<void>
     readChapter: (path: string) => Promise<ChapterDoc>
     saveChapter: (path: string, doc: ChapterDoc) => Promise<void>
-    createFile: (kind: 'blueprint' | 'chapter', title: string) => Promise<{ path: string; id?: string }>
+    createFile: (kind: 'blueprint' | 'chapter', title: string, volume?: string) => Promise<{ path: string; id?: string }>
+    createVolume: (name: string) => Promise<{ path: string }>
     renameFile: (path: string, title: string) => Promise<{ path: string }>
+    exchangeFiles: (pathA: string, pathB: string) => Promise<void>
     deleteFile: (path: string) => Promise<void>
     rebuildIndex: () => Promise<{ nodes: number; edges: number }>
     indexStats: () => Promise<{ nodes: number; edges: number; lastBuiltAt: string | null }>

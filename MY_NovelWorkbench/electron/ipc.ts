@@ -17,8 +17,10 @@ import type { ProviderConfig } from '../shared/types'
 import { createNovel, openNovel, readMeta, recentNovels, saveMeta } from './services/novelService'
 import {
   createFile,
+  createVolume,
   deleteFile,
   deleteResource,
+  exchangeFiles,
   listResources,
   readBlueprint,
   readChapter,
@@ -79,10 +81,12 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.saveChapter, (_e, p: { path: string; doc: unknown }) =>
     opened(() => saveChapter(p.path, p.doc as Parameters<typeof saveChapter>[1]))
   )
-  ipcMain.handle(IPC.createFile, (_e, p: { kind: 'blueprint' | 'chapter'; title: string }) =>
-    opened(() => createFile(p.kind, p.title))
+  ipcMain.handle(IPC.createFile, (_e, p: { kind: 'blueprint' | 'chapter'; title: string; volume?: string }) =>
+    opened(() => createFile(p.kind, p.title, p.volume))
   )
+  ipcMain.handle(IPC.createVolume, (_e, p: { name: string }) => opened(() => createVolume(p.name)))
   ipcMain.handle(IPC.renameFile, (_e, p: { path: string; title: string }) => opened(() => renameFile(p.path, p.title)))
+  ipcMain.handle(IPC.exchangeFiles, (_e, p: { pathA: string; pathB: string }) => opened(() => exchangeFiles(p.pathA, p.pathB)))
   ipcMain.handle(IPC.deleteFile, (_e, p: { path: string }) => opened(() => deleteFile(p.path)))
 
   ipcMain.handle(IPC.rebuildIndex, () => opened(() => rebuildIndex()))

@@ -38,6 +38,9 @@ const LAYER_LABEL = ['第1层 60%', '第2层 25%', '第3层 15%']
 
 /** 续写的用户指令正文截取（正文可能很长，只送尾部） */
 const DRAFT_TAIL_CHARS = 2000
+/** 前情提要：自动注入的前文章节数与各自正文尾部字数 */
+const RECAP_CHAPTERS = 2
+const RECAP_TAIL_CHARS = 800
 
 /** —— Provider 编辑表单 —— */
 function ProviderForm(props: { initial: ProviderInfo | null; onDone: () => void }): ReactElement {
@@ -150,6 +153,42 @@ export function AiPanel(): ReactElement {
   const [showPrompt, setShowPrompt] = useState(false)
   const inserterRef = useRef<StreamInserter | null>(null)
   const writerRef = useRef<GenerationWriter | null>(null)
+  /** 前情提要：当前章之前最近 2 章的正文尾部（自动注入，无需手动关联） */
+  const [recap, setRecap] = useState('')
+
+  // 编辑章节切换时异步读取前情（含卷内章节，按树序取前 2 章正文结尾）
+  useEffect(() => {
+    let disposed = false
+    setRecap('')
+    if (!editingDraft) return
+    void (async () => {
+      try {
+        const tree = useNovelStore.getState().tree
+        const chDir = tree[0]?.children?.find((c) => c.kind === 'dir' && c.path === 'chapters')
+        const all: Array<{ path: string }> = []
+        for (const child of chDir?.children ?? []) {
+          if (child.kind === 'chapter') all.push({ path: child.path })
+          else for (const f of child.children ?? []) if (f.kind === 'chapter') all.push({ path: f.path })
+        }
+        const idx = all.findIndex((c) => c.path === editingDraft.path)
+        if (idx <= 0) return
+        const prev = all.slice(Math.max(0, idx - RECAP_CHAPTERS), idx)
+        const parts: string[] = []
+        for (const p of prev) {
+          const doc = await window.api.fs.readChapter(p.path)
+          if (disposed) return
+          const tail = doc.content.replace(/\s+/g, ' ').trim().slice(-RECAP_TAIL_CHARS)
+          if (tail !== '') parts.push(`【${doc.title}】…${tail}`)
+        }
+        if (!disposed && parts.length > 0) setRecap(parts.join('\n'))
+      } catch (err) {
+        console.error('[AiPanel] 前情提要读取失败:', err)
+      }
+    })()
+    return () => {
+      disposed = true
+    }
+  }, [editingDraft?.path])
 
   useEffect(() => {
     void loadProviders()
@@ -203,15 +242,19 @@ export function AiPanel(): ReactElement {
     }
   }, [generation, chapterEditor])
 
-  /** 组装消息（system=上下文全文；user=指令+正文） */
+  /** 组装消息（system=上下文全文+前情提要；user=指令+正文） */
   const buildMessages = (mode: 'continue' | 'rewrite', selectedText: string): ChatMessage[] => {
     const instruction =
       mode === 'continue'
-        ? '请紧接上文自然续写，保持人称、时态与文风一致，直接输出正文，不要任何说明或标题。'
+        ? '请紧接上文自然续写，保持人称、时态与文风一致，与前情提要中的情节保持连贯，直接输出正文，不要任何说明或标题。'
         : '请改写下面选中的文字，保持情节事实不变、提升文笔，直接输出改写后的正文，不要任何说明。'
     const body = mode === 'continue' ? (editingDraft?.text ?? '').slice(-DRAFT_TAIL_CHARS) : selectedText
+    const systemParts = [promptFullText || '（上下文为空：请在蓝图中先组织节点与连线）']
+    if (recap !== '') {
+      systemParts.push(`【前情提要】（当前章之前最近 ${RECAP_CHAPTERS} 章的正文结尾，情节须保持连贯）\n${recap}`)
+    }
     return [
-      { role: 'system', content: promptFullText || '（上下文为空：请在蓝图中先组织节点与连线）' },
+      { role: 'system', content: systemParts.join('\n\n') },
       { role: 'user', content: `${instruction}\n\n${body}` }
     ]
   }
@@ -364,9 +407,10 @@ export function AiPanel(): ReactElement {
         {generationError && <div className="insp-hint ai-error">生成失败：{generationError}</div>}
         {editingDraft && !chapterLinked && (
           <div className="insp-hint ai-unlinked">
-            ⚠ 本章尚未链接到蓝图，AI 上下文目标已降级为默认节点。串联方法（一次性）：
+            ⚠ 本章尚未链接到蓝图，AI 上下文目标已降级为默认节点（前情提要不受影响，仍自动注入）。串联方法（一次性）：
             ① 在蓝图空白处右键「新建引用节点」；② 右侧属性面板「指向」选择本章；
             ③ 把该引用节点与设定/大纲等节点连线（箭头=顺序 · 直线=关联 · 虚线=参考）。
+            多章共享同一设定：把设定节点分别连到各章的引用节点即可。
             之后续写会自动以引用节点为「当前节点」，按三层优先级注入其链接的节点内容与上级蓝图摘要。
           </div>
         )}
@@ -393,6 +437,7 @@ export function AiPanel(): ReactElement {
           合计 {result.totalTokens} / {result.totalBudget} tokens · 预算命中率{' '}
           {result.totalBudget > 0 ? `${Math.min(100, Math.round((result.totalTokens / result.totalBudget) * 100))}%` : '—'}
           {editingDraft ? ' · 草稿来源：编辑中章节' : ' · 草稿来源：无'}
+          {recap !== '' ? ` · 前情提要：已注入前 ${RECAP_CHAPTERS} 章结尾（${recap.length} 字）` : ' · 前情提要：无'}
         </div>
       </div>
 

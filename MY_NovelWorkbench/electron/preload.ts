@@ -46,9 +46,9 @@ const api = {
     saveResource: (template: unknown) => ipcRenderer.invoke(IPC.saveResource, { template }),
     deleteResource: (path: string) => ipcRenderer.invoke(IPC.deleteResource, { path })
   },
-  /** 订阅小说目录变化（返回取消订阅函数） */
-  onNovelChanged: (callback: (tree: unknown) => void): (() => void) => {
-    const listener = (_e: unknown, tree: unknown): void => callback(tree)
+  /** 订阅小说目录变化（返回取消订阅函数）；负载 { tree, changed } */
+  onNovelChanged: (callback: (payload: unknown) => void): (() => void) => {
+    const listener = (_e: unknown, payload: unknown): void => callback(payload)
     ipcRenderer.on(IPC_PUSH.novelChanged, listener)
     return () => ipcRenderer.removeListener(IPC_PUSH.novelChanged, listener)
   },

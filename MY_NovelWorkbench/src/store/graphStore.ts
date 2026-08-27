@@ -27,7 +27,8 @@
 import { create } from 'zustand'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
 import type { BlueprintEdge, BlueprintNode, EdgeType, GraphData, GraphView } from '@shared/blueprint'
-import { exportBlueprintFile } from '@shared/blueprintCodec'
+import { exportBlueprintFile, parseBlueprintFile } from '@shared/blueprintCodec'
+import type { BlueprintFile } from '@shared/types'
 import { pathToGraph } from '@/services/graphTraversal'
 
 /** 跨图代理节点 id 前缀（约定见 shared/blueprint.ts；连线端点可能带此前缀，换回真实 id） */
@@ -82,6 +83,12 @@ interface GraphState extends GraphData {
    * 保留仍有效的当前图与选中节点/边（失效则回退根图/清空）
    */
   hydrate: (data: GraphData, paths: Record<string, string>) => void
+  /**
+   * 增量合并（watcher 推送变更清单时）：只重读变更的蓝图文件并入现有数据——
+   * 未变图的节点/图对象保持同一引用（画布 rfNodes 不整体失效、RF 内部选中视觉保留）；
+   * 脏图/保存中图同样跳过磁盘版；树中已不存在的图（文件被删）整体移除
+   */
+  mergeRefresh: (files: BlueprintFile[], newPaths: Record<string, string>, treeBlueprintPaths: Set<string>) => void
   /** 进入子图（双击蓝图节点）；对非祖先目标则整体替换为目标的祖先路径；超 8 层拒绝（ADR-12） */
   enterGraph: (graphId: string) => void
   /** 面包屑回退到指定层级 */
@@ -229,6 +236,69 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
       selectedNodeIds: selNodes,
       selectedEdgeIds: selEdges
     })
+  },
+
+  mergeRefresh: (files, newPaths, treeBlueprintPaths) => {
+    const prev = get()
+    const protect = new Set([...prev.dirtyGraphIds, ...prev.savingGraphIds])
+    const nodes: Record<string, BlueprintNode> = { ...prev.nodes }
+    const edges: Record<string, BlueprintEdge> = { ...prev.edges }
+    const graphs: Record<string, GraphView> = { ...prev.graphs }
+    const graphPaths: Record<string, string> = { ...prev.graphPaths }
+
+    // 变更文件：替换该图的节点与归属边（脏/保存中图跳过——内存为真相）
+    for (const file of files) {
+      graphPaths[file.id] = newPaths[file.id] ?? graphPaths[file.id]
+      if (protect.has(file.id)) continue
+      for (const [id, n] of Object.entries(nodes)) {
+        if (n.graphId === file.id) delete nodes[id]
+      }
+      const parsed = parseBlueprintFile(file)
+      for (const n of parsed.nodes) nodes[n.id] = n
+      for (const e of parsed.edges) edges[e.id] = e
+      graphs[file.id] = {
+        id: file.id,
+        title: file.title,
+        nodeIds: parsed.nodes.map((n) => n.id),
+        ownerNodeId: null // 统一在下方 owner 重算中补齐
+      }
+    }
+
+    // 树中已不存在的蓝图（文件被删）：图/节点/路径整体移除
+    for (const [gid, path] of Object.entries(prev.graphPaths)) {
+      if (!treeBlueprintPaths.has(path)) {
+        delete graphs[gid]
+        delete graphPaths[gid]
+        for (const [id, n] of Object.entries(nodes)) {
+          if (n.graphId === gid) delete nodes[id]
+        }
+      }
+    }
+
+    // 孤儿边清理（from 端节点已不存在）
+    for (const [id, e] of Object.entries(edges)) {
+      if (!nodes[e.from]) delete edges[id]
+    }
+
+    // owner 重算：仅实际变化的图换新对象（未变图保持引用——画布 memo 稳定的关键）
+    for (const [gid, g] of Object.entries(graphs)) {
+      const owner = Object.values(nodes).find((n) => n.type === 'blueprint' && n.refGraphId === gid)
+      const next = owner ? owner.id : null
+      if (g.ownerNodeId !== next) graphs[gid] = { ...g, ownerNodeId: next }
+    }
+
+    const selectedNodeIds = prev.selectedNodeIds.filter((id) => Boolean(nodes[id]))
+    const selectedEdgeIds = prev.selectedEdgeIds.filter((id) => Boolean(edges[id]))
+    let rootGraphId = prev.rootGraphId && graphs[prev.rootGraphId]?.ownerNodeId === null ? prev.rootGraphId : null
+    if (!rootGraphId) {
+      rootGraphId = Object.values(graphs).find((g) => g.ownerNodeId === null)?.id ?? null
+    }
+    const last = prev.route[prev.route.length - 1]
+    let route = prev.route
+    if (!last || !graphs[last]) {
+      route = rootGraphId ? [rootGraphId] : []
+    }
+    set({ nodes, edges, graphs, graphPaths, selectedNodeIds, selectedEdgeIds, route, rootGraphId })
   },
 
   enterGraph: (graphId) => {

@@ -20,7 +20,7 @@
  *      画布工具条与资源库浮层挂载
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from 'react'
 import {
   ReactFlow,
@@ -63,6 +63,9 @@ const isProxyId = (id: string): boolean => id.startsWith(PROXY_PREFIX)
 const remoteIdOf = (id: string): string => id.slice(PROXY_PREFIX.length)
 
 const basename = (path: string): string => path.split('/').pop() ?? path
+
+/** MiniMap 着色兜底常量（避免每节点分配临时对象） */
+const EMPTY_TAGS_NODE: { tags: string[] } = { tags: [] }
 
 /** 右键菜单的节点创建项（M3 交互调整：创建入口移入画布右键菜单） */
 const CREATE_MENU_ITEMS: Array<{ type: NodeType; icon: string; label: string; hint: string }> = [
@@ -132,13 +135,49 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
   const currentGraphId = route[route.length - 1]
   const graph = graphs[currentGraphId]
 
+  // MiniMap 着色回调稳定化：内联闭包会令 memo 失效、拖拽期间每帧全量重算着色
+  const minimapNodeColor = useCallback(
+    (n: Node): string => nodeAccentColor(tagLibrary, nodes[n.id] ?? EMPTY_TAGS_NODE) ?? '#3f3f46',
+    [tagLibrary, nodes]
+  )
+
   // ---- 右键菜单（M3 交互调整：节点创建入口；创建逻辑经 canvasCreateBridge 复用工具条实现） ----
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
+  const ctxMenuRef = useRef<HTMLDivElement | null>(null)
+
+  // Esc / 菜单外按下鼠标关闭（与左栏菜单行为一致）
+  useEffect(() => {
+    if (!ctxMenu) return
+    const onDown = (e: MouseEvent): void => {
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as globalThis.Node)) setCtxMenu(null)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setCtxMenu(null)
+    }
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [ctxMenu])
+
+  // 视口边缘钳制：靠右/下缘打开时收回到屏内（菜单条目始终可达）
+  useLayoutEffect(() => {
+    if (!ctxMenu || !ctxMenuRef.current) return
+    const el = ctxMenuRef.current
+    const maxX = window.innerWidth - el.offsetWidth - 8
+    const maxY = window.innerHeight - el.offsetHeight - 8
+    const x = Math.min(ctxMenu.x, Math.max(8, maxX))
+    const y = Math.min(ctxMenu.y, Math.max(8, maxY))
+    if (x !== ctxMenu.x || y !== ctxMenu.y) setCtxMenu({ x, y })
+  }, [ctxMenu])
 
   // ---- 拖拽跟手（受控节点镜像）：RF 受控模式下必须接 onNodesChange，否则拖拽变更被丢弃、
   // 节点只在 dragStop 提交时跳变。镜像只承接 position/remove——dimensions（尺寸测量）与
   // select 若回灌会与 RF 内部测量/选中形成「重建→再测量→再变更」无限循环打满主线程 ----
   const [nodeMirror, setNodeMirror] = useState<Node[]>([])
+  const draggingRef = useRef(false)
   const handleNodesChange = (changes: NodeChange[]): void => {
     const relevant = changes.filter((c) => c.type === 'position' || c.type === 'remove')
     if (relevant.length === 0) return
@@ -214,9 +253,10 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
     return { rfNodes: [...rfNodes, ...uniqueProxies], rfEdges }
   }, [graph, nodes, edges, graphs, tagLibrary])
 
-  // store 派生结果同步进本地镜像（拖拽中间态由 handleNodesChange 维护，不受 store 重建打断）
+  // store 派生结果同步进本地镜像；拖拽进行中跳过——否则 watcher→hydrate 的重建
+  // 会把拖拽中间态整体重置（节点跳回原点并以错误基准继续）
   useEffect(() => {
-    setNodeMirror(rfNodes)
+    if (!draggingRef.current) setNodeMirror(rfNodes)
   }, [rfNodes])
 
   /** 用户点击节点 → 选中（显式事件驱动，不随 props 重建波动；代理节点映射回远端） */
@@ -251,8 +291,13 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
     addEdge(conn.source, conn.target, 'arrow')
   }
 
-  /** 拖拽结束：批量回写最终坐标（代理节点不持久化） */
+  /** 拖拽起止：置位标记防止 hydrate 重建重置拖拽中间态；结束批量回写最终坐标（代理不持久化） */
+  const handleNodeDragStart = (): void => {
+    draggingRef.current = true
+  }
+
   const handleNodeDragStop = (_e: unknown, _node: Node, dragged: Node[]): void => {
+    draggingRef.current = false
     const moves = dragged
       .filter((n) => !isProxyId(n.id))
       .map((n) => ({ id: n.id, position: n.position }))
@@ -323,6 +368,7 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
         onConnect={handleConnect}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         onNodesDelete={handleNodesDelete}
         onEdgesDelete={handleEdgesDelete}
@@ -339,7 +385,7 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
           zoomable
           style={{ background: '#161618', border: '1px solid #2f3136' }}
           maskColor="rgba(13, 14, 15, 0.7)"
-          nodeColor={(n) => nodeAccentColor(tagLibrary, nodes[n.id] ?? { tags: [] }) ?? '#3f3f46'}
+          nodeColor={minimapNodeColor}
         />
         <Controls showInteractive={false} />
       </ReactFlow>
@@ -350,6 +396,7 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
       {/* 右键菜单：节点创建（落点=鼠标位置） */}
       {ctxMenu && (
         <div
+          ref={ctxMenuRef}
           className="canvas-context-menu"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
           onMouseLeave={() => setCtxMenu(null)}

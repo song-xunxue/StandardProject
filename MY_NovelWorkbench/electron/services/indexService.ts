@@ -150,15 +150,17 @@ export function indexChapter(path: string): void {
 export function rebuildIndex(): { nodes: number; edges: number } {
   const database = openDb()
   database.exec('DELETE FROM nodes; DELETE FROM edges; DELETE FROM file_state;')
-  const walk = (nodes: Array<{ path: string; kind: string }>): void => {
+  // 深度优先遍历（卷目录递归下钻——chapters/卷/章.md 也是章节）
+  const walk = (nodes: Array<{ path: string; kind: string; children?: unknown[] }>): void => {
     for (const n of nodes) {
       if (n.kind === 'blueprint') indexBlueprint(n.path)
       else if (n.kind === 'chapter') indexChapter(n.path)
+      else if (n.kind === 'dir' && Array.isArray(n.children)) walk(n.children as Parameters<typeof walk>[0])
     }
   }
   const tree = readTree()
   for (const root of tree) {
-    for (const child of root.children ?? []) walk(child.children ?? [child])
+    walk((root.children ?? []) as Parameters<typeof walk>[0])
   }
   return indexStats()
 }

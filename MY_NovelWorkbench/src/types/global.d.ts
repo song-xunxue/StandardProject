@@ -17,6 +17,7 @@ import type {
   ChapterDoc,
   ChatMessage,
   LlmChunkPayload,
+  NovelChangedPayload,
   NovelMeta,
   ProviderConfig,
   ProviderInfo,
@@ -54,7 +55,7 @@ export interface Api {
     saveResource: (template: ResourceTemplate) => Promise<{ path: string }>
     deleteResource: (path: string) => Promise<void>
   }
-  onNovelChanged: (callback: (tree: TreeNode[]) => void) => () => void
+  onNovelChanged: (callback: (payload: NovelChangedPayload) => void) => () => void
   provider: {
     list: () => Promise<ProviderInfo[]>
     /** apiKey 明文仅经此通道进主进程加密（ADR-16） */

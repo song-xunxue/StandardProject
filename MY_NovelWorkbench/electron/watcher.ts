@@ -54,7 +54,8 @@ export function startWatching(win: BrowserWindow): void {
           console.error('[watcher] 索引更新失败:', path, err)
         }
       }
-      // 推送最新文件树（外部增删改对渲染层可见）
+      // 推送最新文件树 + 变更清单（渲染层据此做增量合并，只重读变更蓝图——
+      // 未变图保持对象引用，画布/AI 面板不整体重渲）
       let tree: TreeNode[]
       try {
         tree = readTree()
@@ -62,7 +63,7 @@ export function startWatching(win: BrowserWindow): void {
         return
       }
       if (!win.isDestroyed()) {
-        win.webContents.send(IPC_PUSH.novelChanged, tree)
+        win.webContents.send(IPC_PUSH.novelChanged, { tree, changed })
       }
     }, DEBOUNCE_MS)
   })

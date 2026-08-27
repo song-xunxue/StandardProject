@@ -18,12 +18,17 @@ export function Dialog(): ReactElement | null {
   const close = useDialogStore((s) => s.close)
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const confirmBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     setValue(request?.defaultValue ?? '')
     if (request?.type === 'prompt') {
       // 弹出后聚焦并全选，便于直接覆盖默认值
       setTimeout(() => inputRef.current?.select(), 0)
+    }
+    // confirm 型无输入框：聚焦主按钮，使 Enter 确定 / Esc 取消即时可用
+    if (request?.type === 'confirm') {
+      setTimeout(() => confirmBtnRef.current?.focus(), 0)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request])
@@ -48,7 +53,7 @@ export function Dialog(): ReactElement | null {
 
   return (
     <div className="dialog-overlay" onMouseDown={cancel}>
-      <div className="dialog" onMouseDown={(e) => e.stopPropagation()} onKeyDown={onKeyDown} role="dialog" aria-label={request.title}>
+      <div className="dialog nokey" onMouseDown={(e) => e.stopPropagation()} onKeyDown={onKeyDown} role="dialog" aria-label={request.title}>
         <div className="dialog-title">{request.title}</div>
         {request.type === 'prompt' && (
           <>
@@ -67,7 +72,7 @@ export function Dialog(): ReactElement | null {
           <button className="dialog-btn" onClick={cancel}>
             取消
           </button>
-          <button className="dialog-btn primary" onClick={submit}>
+          <button ref={confirmBtnRef} className="dialog-btn primary" onClick={submit}>
             {request.okText ?? '确定'}
           </button>
         </div>

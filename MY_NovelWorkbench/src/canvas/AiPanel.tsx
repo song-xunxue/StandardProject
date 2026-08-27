@@ -19,6 +19,7 @@ import type { ReactElement } from 'react'
 import type { Editor } from '@tiptap/core'
 import type { ChatMessage, ProviderInfo } from '@shared/types'
 import { assembleContext, layerBudgetsOf } from '@/services/contextAssembly'
+import { flattenChapterFiles } from '@/services/chapterTree'
 import { StreamInserter } from '@/services/streamInsert'
 import { GenerationWriter } from '@/services/generationWriter'
 import { useAiStore } from '@/store/aiStore'
@@ -156,20 +157,14 @@ export function AiPanel(): ReactElement {
   /** 前情提要：当前章之前最近 2 章的正文尾部（自动注入，无需手动关联） */
   const [recap, setRecap] = useState('')
 
-  // 编辑章节切换时异步读取前情（含卷内章节，按树序取前 2 章正文结尾）
+  // 编辑章节切换时异步读取前情（含卷内章节，按「第N章」数字序取前 2 章正文结尾）
   useEffect(() => {
     let disposed = false
     setRecap('')
     if (!editingDraft) return
     void (async () => {
       try {
-        const tree = useNovelStore.getState().tree
-        const chDir = tree[0]?.children?.find((c) => c.kind === 'dir' && c.path === 'chapters')
-        const all: Array<{ path: string }> = []
-        for (const child of chDir?.children ?? []) {
-          if (child.kind === 'chapter') all.push({ path: child.path })
-          else for (const f of child.children ?? []) if (f.kind === 'chapter') all.push({ path: f.path })
-        }
+        const all = flattenChapterFiles(useNovelStore.getState().tree)
         const idx = all.findIndex((c) => c.path === editingDraft.path)
         if (idx <= 0) return
         const prev = all.slice(Math.max(0, idx - RECAP_CHAPTERS), idx)
@@ -275,7 +270,9 @@ export function AiPanel(): ReactElement {
       if (ed && useAiStore.getState().editingDraft?.path === target.path) return ed
       await new Promise((r) => setTimeout(r, 100))
     }
-    return useAiStore.getState().chapterEditor
+    // 超时：编辑器未就绪或内容未载入——直接生成会写入空文档并被加载覆盖，中止并提示
+    await dialogConfirm('章节加载超时，请稍后重试', '知道了')
+    return null
   }
 
   const handleGenerate = async (mode: 'continue' | 'rewrite'): Promise<void> => {
@@ -327,7 +324,7 @@ export function AiPanel(): ReactElement {
   }
 
   return (
-    <div className="ctx-panel left-scroll ai-panel">
+    <div className="ctx-panel left-scroll ai-panel nokey">
       <div className="ctx-header">
         <div className="ctx-title">AI 撰写</div>
         <div className="ctx-target">{target ? `上下文目标：${target.title}` : '无上下文目标'}</div>

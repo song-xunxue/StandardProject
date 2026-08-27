@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MY_NovelWorkbench（小说创作工作台）——**AI 辅助的小说编辑器**：ComfyUI 式节点工作流（蓝图/节点/语义连线）× Obsidian 式双向链接（全局图谱），AI 创作上下文由链接关系自动组装，支持多类 AI API。UI 参考 PyCharm（左侧创建栏 + 右侧内容区 + 顶部文件 Tab + 可拖分界线），深色主题。
 
-**当前状态：M0/M1/M2/M3 已完成（2026-08-27 DeepSeek 全链路联调通过）——正文 Tiptap 编辑器 + [[wikilink]] 双链 + AI Provider（safeStorage 加密）+ 流式生成/中断 + 上下文组装 v1（分支覆盖 97.3%）+ Context Viewer 可用；画布为右键菜单创建/拖拽跟手/树形蓝图层级。M4（全局图谱 + 资源库完善）待启动。**
+**当前状态：M0-M3 + 全量审查批次完成（2026-08-27，131 用例全绿）——正文 Tiptap 编辑器 + [[wikilink]] 双链 + AI Provider（safeStorage 加密）+ 流式生成/中断 + 上下文组装 v1（分支覆盖 97.3%）+ Context Viewer 可用；画布为右键菜单创建/拖拽跟手/树形蓝图层级。M4（全局图谱 + 资源库完善）待启动。**
 
 **重要交互机制（2026-08-27 联调修复，改动画布前必读）**：
 - 画布选中为**显式事件驱动**（onNodeClick/onEdgeClick/onPaneClick → setSelection），勿回灌 `selected` 到 nodes/edges props——会与 RF 内部状态在结构变更时形成无限渲染循环（建节点/连线全黑崩溃）
@@ -32,7 +32,7 @@ node scripts/gen-stress-blueprint.mjs <小说目录> [节点数]  # 生成 100 �
 - `ipc.ts` — fs/provider/llm 通道路由（契约见 `shared/types.ts` 的 IPC 常量）
 - `preload.ts` — contextBridge 暴露 `window.api`（fs + provider + llm + 目录变化/流式分块订阅）
 - `services/novelService.ts` — 小说目录创建/打开/最近列表（userData/recent.json）+ readMeta/saveMeta（novel.json 标签库，tmp+rename 原子写；openNovel 对旧目录回填 tagLibrary）
-- `services/fileService.ts` — 文件树/蓝图/章节 CRUD（`resolveInNovel` 路径穿越防护）+ 卷支持（chapters/ 一层卷目录）+ exchangeFiles（文件名互换=章节排序）+ 资源库（resources/ 模板列表/保存/删除，清洗撞车拒写）；rename 同步内部 title（蓝图 JSON / 章节 frontmatter）
+- `services/fileService.ts` — 文件树/蓝图/章节 CRUD（`resolveInNovel` 路径穿越防护）+ 卷支持（chapters/ 一层卷目录，章节按「第N章」数字序）+ exchangeFiles（文件名互换=章节排序）+ 资源库（resources/ 模板列表/保存/删除，清洗撞车拒写）；rename 同步内部 title（蓝图 JSON / 章节 frontmatter）
 - `services/providerService.ts` — AI Provider 配置（userData/providers.json + safeStorage 加密 API Key；.env 三变量开发期回退 Provider 'env-default' 不入盘；GET /models 连接测试）
 - `services/llmService.ts` — OpenAI 兼容流式生成（主进程 fetch SSE → llm:chunk 推送；AbortController 中断；LLM 在主进程执行：sandbox 渲染层 CORS + 凭据不出主进程）
 - `services/indexService.ts` — SQLite 索引（better-sqlite3，`.index/index.db`，mtime+size 增量）
@@ -51,7 +51,7 @@ node scripts/gen-stress-blueprint.mjs <小说目录> [节点数]  # 生成 100 �
 - `store/graphStore.ts` — 全局图数据+路由栈+**变更 action 与保存编排**：结构变更（增删节点/边、连线改型）立即落盘，属性/位置变更 600ms 防抖；脏图与保存中图受 hydrate 保护（自身保存触发的 watcher 回推不回滚内存）；受控选中数组（selectedNodeIds/selectedEdgeIds）；8 层嵌套拦截（ADR-12）
 - `store/aiStore.ts` — AI 工作区：Provider 列表/选择、流式生成会话（llm:chunk 全局单订阅按 requestId 路由）、editingDraft（ChapterEditor 节流 300ms 发布的正文草稿）、chapterEditor 实例引用
 - `store/dialogStore.ts` + `components/Dialog.tsx` — Promise 化 prompt/confirm（Electron 无原生）
-- `layout/` — 图标条/文件树/Tab 栏/分界线。左栏：**双击打开**（单击仅选中）、目录右键创建（卷/章节中文序号自动递增）、章节拖动交换（经 exchangeFiles）、蓝图按 owner 嵌套层级；Tab 激活走 novelStore.activateTab（蓝图 Tab 同步画布路由）
+- `layout/` — 图标条/文件树/Tab 栏/分界线。左栏：**双击打开**（单击仅选中）、目录右键创建（卷/章节中文序号自动递增，>99 回绕阿拉伯数字）、章节拖动交换（含跨卷，经 exchangeFiles+chapterReloadSeq 重载编辑器）、蓝图按 owner 嵌套层级（成环兜底顶层）；Tab 激活走 novelStore.activateTab（蓝图 Tab 同步画布路由）；全部容器带 nokey 类（画布外 Delete 不删节点）
 - `canvas/BlueprintCanvas.tsx` — 蓝图画布（子图进入+跨图代理+连线创建+拖拽持久化+受控选中+标签着色+Delete 删除）
 - `canvas/CanvasToolbar.tsx` — 画布工具条（三类节点创建/保存状态/层级指示/资源库入口）
 - `canvas/InspectorPanel.tsx` — 右侧属性面板（节点标题/标签/prompt/summary/refTarget/子图、边改型与 label、图信息）

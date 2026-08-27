@@ -11,7 +11,7 @@
  *   1. M2 初版
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { CSSProperties } from 'react'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
@@ -19,6 +19,7 @@ import type { BlueprintEdge, BlueprintNode, EdgeType } from '@shared/blueprint'
 import type { TagDef } from '@shared/tags'
 import { nextPaletteColor, tagColorOf } from '@shared/tags'
 import { pathToGraph } from '@/services/graphTraversal'
+import { flattenChapterFiles } from '@/services/chapterTree'
 import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
 import { dialogConfirm, dialogPrompt } from '@/store/dialogStore'
@@ -119,6 +120,25 @@ function NodeInspector(props: { node: BlueprintNode }): ReactElement {
   const updateNode = useGraphStore((s) => s.updateNode)
   const tree = useNovelStore((s) => s.tree)
 
+  // 文本字段本地态：打字不写 store（避免每键触发画布/左栏/AI 面板全量重渲染），
+  // 失焦才提交；切换选中节点时重置。标签等离散操作仍即时提交
+  const [title, setTitle] = useState(node.title)
+  const [prompt, setPrompt] = useState(node.prompt)
+  const [summary, setSummary] = useState(node.summary)
+  useEffect(() => {
+    setTitle(node.title)
+    setPrompt(node.prompt)
+    setSummary(node.summary)
+  }, [node.id])
+
+  const commitText = (patch: Partial<Pick<BlueprintNode, 'title' | 'prompt' | 'summary'>>): void => {
+    const fresh = useGraphStore.getState().nodes[node.id]
+    if (!fresh) return
+    const next = { ...fresh, ...patch }
+    if (next.title === fresh.title && next.prompt === fresh.prompt && next.summary === fresh.summary) return
+    updateNode(node.id, patch)
+  }
+
   /** 进入子图：已挂子图直接进入（含 8 层上限校验）；未挂（资源模板插入等）则先创建子图再挂接 */
   const handleEnter = async (): Promise<void> => {
     const gs = useGraphStore.getState()
@@ -152,10 +172,19 @@ function NodeInspector(props: { node: BlueprintNode }): ReactElement {
     useGraphStore.getState().removeNodes([node.id])
   }
 
-  /** ref 指向候选：文件树中的章节与蓝图文件（kind 取文件节点自身，目录节点恒为 'dir'） */
-  const candidates = (tree[0]?.children ?? []).flatMap((dir) =>
-    (dir.children ?? []).map((f) => ({ path: f.path, label: f.name, kind: f.kind }))
-  )
+  /** ref 指向候选：全部章节（含卷内）与蓝图文件（目录节点不进候选） */
+  const candidates = [
+    ...flattenChapterFiles(tree).map((c) => ({
+      path: c.path,
+      label: c.volume ? `${c.volume}/${c.title}` : c.title,
+      kind: 'chapter' as const
+    })),
+    ...(tree[0]?.children?.find((d) => d.path === 'blueprints')?.children ?? []).map((f) => ({
+      path: f.path,
+      label: f.name.replace(/\.blueprint\.json$/, ''),
+      kind: 'blueprint' as const
+    }))
+  ]
 
   return (
     <div className="insp-body">
@@ -163,9 +192,10 @@ function NodeInspector(props: { node: BlueprintNode }): ReactElement {
         <span className={`insp-type-badge ${node.type}`}>{TYPE_LABEL[node.type]}</span>
         <input
           className="dialog-input insp-title-input"
-          value={node.title}
+          value={title}
           title="节点标题"
-          onChange={(e) => updateNode(node.id, { title: e.target.value })}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => commitText({ title })}
         />
       </div>
 
@@ -204,21 +234,23 @@ function NodeInspector(props: { node: BlueprintNode }): ReactElement {
       <div className="insp-section">提示词（写作要求/文风约束）</div>
       <textarea
         className="dialog-input insp-textarea"
-        value={node.prompt}
+        value={prompt}
         rows={4}
         placeholder="例如：武侠文风，战斗场面多用短句；本章需回收第三章埋的伏笔"
-        onChange={(e) => updateNode(node.id, { prompt: e.target.value })}
+        onChange={(e) => setPrompt(e.target.value)}
+        onBlur={() => commitText({ prompt })}
       />
 
       <div className="insp-section">摘要卡片（50-100 字，上级链路注入用）</div>
       <textarea
         className="dialog-input insp-textarea"
-        value={node.summary}
+        value={summary}
         rows={3}
         placeholder="该节点的压缩表示：上级蓝图链路组装上下文时以此代替全文"
-        onChange={(e) => updateNode(node.id, { summary: e.target.value })}
+        onChange={(e) => setSummary(e.target.value)}
+        onBlur={() => commitText({ summary })}
       />
-      <div className="insp-hint">{node.summary.length} 字</div>
+      <div className="insp-hint">{summary.length} 字（失焦保存）</div>
 
       <div className="insp-footer">
         <button className="insp-danger-btn" onClick={() => void handleDelete()}>
@@ -234,6 +266,12 @@ function EdgeInspector(props: { edge: BlueprintEdge }): ReactElement {
   const { edge } = props
   const updateEdge = useGraphStore((s) => s.updateEdge)
   const nodes = useGraphStore((s) => s.nodes)
+
+  // label 本地态（同节点文本字段：失焦提交，避免每键全局扩散）
+  const [label, setLabel] = useState(edge.label ?? '')
+  useEffect(() => {
+    setLabel(edge.label ?? '')
+  }, [edge.id])
 
   const handleDelete = async (): Promise<void> => {
     const ok = await dialogConfirm('删除这条连线？', '删除')
@@ -268,9 +306,10 @@ function EdgeInspector(props: { edge: BlueprintEdge }): ReactElement {
       <div className="insp-section">连线说明（label）</div>
       <input
         className="dialog-input"
-        value={edge.label ?? ''}
+        value={label}
         placeholder="例如：师徒关系 / 第三章埋线"
-        onChange={(e) => updateEdge(edge.id, { label: e.target.value.trim() === '' ? undefined : e.target.value })}
+        onChange={(e) => setLabel(e.target.value)}
+        onBlur={() => updateEdge(edge.id, { label: label.trim() === '' ? undefined : label })}
       />
 
       <div className="insp-footer">

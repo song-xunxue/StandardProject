@@ -33,14 +33,16 @@ interface NovelState {
   tree: TreeNode[]
   tabs: OpenTab[]
   activeTabId: string | null
+  /** 章节内容版本：交换/重排后递增，驱动已挂载的 ChapterEditor 重挂载重读（防旧缓冲回写覆盖交换结果） */
+  chapterReloadSeq: number
   /** 初始化：读最近列表并订阅目录变化 */
   init: () => Promise<void>
   /** 新建小说（目录由对话框选择） */
   createNovel: (dir: string, title: string) => Promise<void>
   /** 打开小说并水合 */
   openNovel: (dir: string) => Promise<void>
-  /** 刷新文件树 + 重新水合图数据 */
-  refreshTree: () => Promise<void>
+  /** 刷新文件树 + 重新水合图数据；传入变更蓝图清单时走增量合并（watcher 推送路径） */
+  refreshTree: (changedBlueprints?: string[]) => Promise<void>
   /** 创建蓝图/章节文件（章节可指定卷目录名） */
   createFile: (kind: 'blueprint' | 'chapter', title: string, volume?: string) => Promise<void>
   /** 新建卷（chapters 下一层目录） */
@@ -77,6 +79,7 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
   tree: [],
   tabs: [],
   activeTabId: null,
+  chapterReloadSeq: 0,
 
   init: async () => {
     try {
@@ -87,9 +90,11 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     }
     // 订阅主进程推送的目录变化（模块级单次注册，防 StrictMode 重复订阅）
     if (!unsubscribeNovelChanged) {
-      unsubscribeNovelChanged = api().onNovelChanged((tree) => {
-        set({ tree })
-        void get().refreshTree()
+      unsubscribeNovelChanged = api().onNovelChanged((payload) => {
+        set({ tree: payload.tree })
+        // 增量：只重读变更的蓝图文件并入图数据（未变图保持引用，画布不整体重渲）
+        const changedBlueprints = payload.changed.filter((p) => p.startsWith('blueprints/') && p.endsWith('.blueprint.json'))
+        void get().refreshTree(changedBlueprints)
       })
     }
   },
@@ -115,14 +120,35 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     if (firstBlueprint) get().openTab('blueprint', firstBlueprint.path)
   },
 
-  refreshTree: async () => {
+  refreshTree: async (changedBlueprints) => {
     if (!get().novel) return
     try {
       const tree = await api().fs.readTree()
       set({ tree })
-      // 读取全部蓝图文件 → 水合全局图数据
       const blueprints: TreeNode[] =
         tree[0]?.children?.find((c) => c.kind === 'dir' && c.path === 'blueprints')?.children ?? []
+      const treePaths = new Set(blueprints.map((bp) => bp.path))
+
+      if (changedBlueprints) {
+        // 增量：只读变更蓝图 → mergeRefresh（未变图保持对象引用）
+        const changedSet = new Set(changedBlueprints)
+        const files: BlueprintFile[] = []
+        const paths: Record<string, string> = {}
+        for (const bp of blueprints) {
+          if (!changedSet.has(bp.path)) continue
+          try {
+            const file = await api().fs.readBlueprint(bp.path)
+            files.push(file)
+            paths[file.id] = bp.path
+          } catch (err) {
+            console.error(`[novelStore] 蓝图解析失败 ${bp.path}:`, err)
+          }
+        }
+        useGraphStore.getState().mergeRefresh(files, paths, treePaths)
+        return
+      }
+
+      // 全量：读取全部蓝图文件 → 水合全局图数据
       const files: BlueprintFile[] = []
       const paths: Record<string, string> = {}
       for (const bp of blueprints) {
@@ -154,6 +180,9 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
   exchangeFiles: async (pathA, pathB) => {
     await api().fs.exchangeFiles(pathA, pathB)
     await get().refreshTree()
+    // 内容随文件对调：递增版本号驱动已打开的章节编辑器重挂载重读，
+    // 否则编辑器内存旧正文会在 600ms 防抖保存时写回、静默吞掉交换进来的内容
+    set((s) => ({ chapterReloadSeq: s.chapterReloadSeq + 1 }))
   },
 
   renameFile: async (path, title) => {
@@ -162,6 +191,11 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
       tabs: get().tabs.map((t) => (t.path === path ? { ...t, path: newPath, title } : t))
     })
     await get().refreshTree()
+    // 引用随迁：指向旧路径的 ref 节点更新为新路径（否则重命名一章会悄悄打断章节↔蓝图串联）
+    const gs = useGraphStore.getState()
+    for (const n of Object.values(gs.nodes)) {
+      if (n.type === 'ref' && n.refTarget === path) gs.updateNode(n.id, { refTarget: newPath })
+    }
   },
 
   deleteFile: async (path) => {

@@ -90,6 +90,8 @@ export default function App(): ReactElement {
   const novel = useNovelStore((s) => s.novel)
   const init = useNovelStore((s) => s.init)
   const activeTab = useNovelStore((s) => s.tabs.find((t) => t.id === s.activeTabId) ?? null)
+  // 章节内容版本：交换/重排后递增 → key 变化 → ChapterEditor 重挂载重读磁盘
+  const chapterReloadSeq = useNovelStore((s) => s.chapterReloadSeq)
 
   useEffect(() => {
     void init()
@@ -142,7 +144,7 @@ export default function App(): ReactElement {
               </div>
             </div>
           ) : activeTab?.kind === 'chapter' ? (
-            <ChapterEditor key={activeTab.path} path={activeTab.path} />
+            <ChapterEditor key={`${activeTab.path}#${chapterReloadSeq}`} path={activeTab.path} />
           ) : (
             <div className="placeholder-editor">在左侧点击蓝图或章节文件打开</div>
           )}

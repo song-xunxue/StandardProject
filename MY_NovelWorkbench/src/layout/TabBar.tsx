@@ -20,7 +20,7 @@ export function TabBar(): ReactElement {
   const setActive = (id: string): void => useNovelStore.getState().activateTab(id)
 
   return (
-    <div className="tabbar" style={{ height: 'var(--tabbar-height)' }}>
+    <div className="tabbar nokey" style={{ height: 'var(--tabbar-height)' }}>
       {tabs.length === 0 && <div className="tabbar-empty">在左侧点击蓝图或章节文件打开</div>}
       {tabs.map((tab) => (
         <button

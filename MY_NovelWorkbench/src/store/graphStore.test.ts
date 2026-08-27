@@ -128,10 +128,85 @@ describe('addNode', () => {
     expect(store().addNode({ type: 'blueprint', title: 'b', position: { x: 0, y: 0 } })).toBeNull()
   })
 
+  it('graphId 覆盖（左栏「在某蓝图内建子蓝图」路径）：深度按目标图祖先链判', () => {
+    // route 停在 g-root，但目标 g-sub 位于第 2 层——正常放行；深度检查不走 route
+    const id = store().addNode({ type: 'blueprint', graphId: 'g-sub', title: '子蓝图', position: { x: 0, y: 0 } })
+    expect(id).toBeTruthy()
+    expect(store().nodes[id!]).toMatchObject({ graphId: 'g-sub', refGraphId: undefined })
+    expect(store().graphs['g-sub']!.nodeIds).toContain(id)
+    expect(store().route[store().route.length - 1]).toBe('g-root') // 路由不跳
+    // 目标图为第 8 层（deepFixture 的 g8）时拒绝蓝图节点、文本放行
+    store().hydrate(deepFixture(8), { g1: 'blueprints/g1.blueprint.json' })
+    expect(store().addNode({ type: 'blueprint', graphId: 'g8', title: 'x', position: { x: 0, y: 0 } })).toBeNull()
+    expect(store().addNode({ type: 'text', graphId: 'g8', title: 'y', position: { x: 0, y: 0 } })).toBeTruthy()
+    // 不存在的图 → null
+    expect(store().addNode({ type: 'text', graphId: 'g-missing', title: 'z', position: { x: 0, y: 0 } })).toBeNull()
+  })
+
   it('进入超 8 层的异常深图被拒（防御外部构造文件）', () => {
     store().hydrate(deepFixture(9), { g1: 'blueprints/g1.blueprint.json' })
     store().enterGraph('g9')
     expect(store().route.length).toBeLessThanOrEqual(8)
+  })
+})
+
+describe('mergeRefresh（增量合并，全量审查新增）', () => {
+  const treePaths = new Set(['blueprints/根图.blueprint.json', 'blueprints/子图.blueprint.json'])
+
+  it('变更图替换、未变图对象引用保持不变；选中与路由保留', () => {
+    const { data, paths } = fixture()
+    store().hydrate(data, paths)
+    const before = store()
+    const rootGraphBefore = before.graphs['g-root']!
+    const subNodeBefore = before.nodes['n-c']!
+
+    // g-root 磁盘版：n-a 改名 + 新增 n-new；g-sub 不在变更清单
+    const rootFile = {
+      id: 'g-root',
+      title: '根图',
+      nodes: [
+        { ...bnode('n-a', 'g-root'), title: '改名A' },
+        bnode('n-b', 'g-root'),
+        bnode('n-bp', 'g-root', { type: 'blueprint', refGraphId: 'g-sub' }),
+        bnode('n-new', 'g-root')
+      ],
+      edges: [{ id: 'e-ab', from: 'n-a', to: 'n-b', type: 'arrow' as const }]
+    }
+    store().selectNode('n-a')
+    store().mergeRefresh([rootFile], { 'g-root': 'blueprints/根图.blueprint.json' }, treePaths)
+
+    expect(store().nodes['n-new']).toBeDefined()
+    expect(store().nodes['n-a']!.title).toBe('改名A')
+    expect(store().graphs['g-root']!.nodeIds).toContain('n-new')
+    expect(store().nodes['n-c']).toBe(subNodeBefore) // 未变图节点引用不变
+    expect(store().graphs['g-root']).not.toBe(rootGraphBefore) // 变更图换新对象
+    expect(store().selectedNodeIds).toEqual(['n-a'])
+    expect(store().route[store().route.length - 1]).toBe('g-root')
+    // owner 重算：g-sub 的 owner 仍是 n-bp
+    expect(store().graphs['g-sub']!.ownerNodeId).toBe('n-bp')
+  })
+
+  it('树中已删除的图整体移除；孤儿边清理', () => {
+    const { data, paths } = fixture()
+    store().hydrate(data, paths)
+    // 树里只剩根图（子图文件被删）
+    const onlyRoot = new Set(['blueprints/根图.blueprint.json'])
+    const rootFile = { id: 'g-root', title: '根图', nodes: [bnode('n-a', 'g-root')], edges: [] }
+    store().mergeRefresh([rootFile], { 'g-root': 'blueprints/根图.blueprint.json' }, onlyRoot)
+    expect(store().graphs['g-sub']).toBeUndefined()
+    expect(store().nodes['n-c']).toBeUndefined()
+    // e-cross 的 from=n-bp 存在但 to=n-c 已删：边保留（级联删除由 removeNodes 负责，
+    // 外部手删文件的孤儿边按 from 端存活保留——与 codec 归属规则一致）
+    expect(store().route[store().route.length - 1]).toBe('g-root')
+  })
+
+  it('脏图跳过磁盘版（内存为真相）', () => {
+    const { data, paths } = fixture()
+    store().hydrate(data, paths)
+    store().updateNode('n-a', { title: '防抖中的新标题' })
+    const rootFile = { id: 'g-root', title: '根图', nodes: [bnode('n-a', 'g-root')], edges: [] }
+    store().mergeRefresh([rootFile], { 'g-root': 'blueprints/根图.blueprint.json' }, treePaths)
+    expect(store().nodes['n-a']!.title).toBe('防抖中的新标题')
   })
 })
 

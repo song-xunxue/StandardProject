@@ -17,13 +17,14 @@
  *   4. M3+ 批次：双击打开 / 目录右键创建（卷与章节自动序号）/ 章节拖动交换
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement, MouseEvent as ReactMouseEvent } from 'react'
 import type { TreeNode } from '@shared/types'
 import { useNovelStore } from '@/store/novelStore'
 import { useGraphStore } from '@/store/graphStore'
 import { dialogConfirm, dialogPrompt } from '@/store/dialogStore'
 import { defaultTitle, nextNumberedName } from '@/services/naming'
+import { volumeOfChapter } from '@/services/chapterTree'
 import { pathToGraph } from '@/services/graphTraversal'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
 
@@ -72,7 +73,20 @@ function buildBlueprintHierarchy(
         return children.length > 0 ? { ...i, children } : { ...i, children: undefined }
       })
 
-  return assemble(null, new Set())
+  const tops = assemble(null, new Set())
+  // 环兜底：owner 链成环的成员（assemble 永远收不到）挂到顶层展示，避免整组从树上消失
+  const collected = new Set<string>()
+  const collect = (arr: TreeNode[]): void => {
+    for (const i of arr) {
+      collected.add(i.path)
+      if (i.children) collect(i.children)
+    }
+  }
+  collect(tops)
+  for (const item of items) {
+    if (item.kind === 'blueprint' && !collected.has(item.path)) tops.push({ ...item, children: undefined })
+  }
+  return tops
 }
 
 /** 文件树渲染（递归） */
@@ -107,8 +121,9 @@ function TreeBranch(props: {
   return (
     <>
       {nodes.map((node) => {
-        // 卷目录（chapters 下的 dir）：右键菜单 + 章节分组
+        // 卷目录（chapters 下的 dir）：可折叠 + 右键菜单（卷内新增章节）
         if (node.kind === 'dir' && node.path !== 'blueprints' && node.path !== 'chapters') {
+          const hasChildren = (node.children ?? []).length > 0
           return (
             <div key={node.path}>
               <div
@@ -116,11 +131,25 @@ function TreeBranch(props: {
                 style={{ paddingLeft: 6 + depth * 14, color: 'var(--fg-muted)' }}
                 onContextMenu={(e) => props.onContextArea(e, { volume: node.name })}
               >
-                <span className="tree-icon">▸</span>
-                <span className="tree-label">📕 {node.name}</span>
+                {hasChildren ? (
+                  <button
+                    className="tree-toggle"
+                    title={collapsed[node.path] ? '展开卷' : '折叠卷'}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setCollapsed((prev) => ({ ...prev, [node.path]: !prev[node.path] }))
+                    }}
+                  >
+                    {collapsed[node.path] ? '▸' : '▾'}
+                  </button>
+                ) : (
+                  <span className="tree-icon">·</span>
+                )}
+                <span className="tree-icon">📕</span>
+                <span className="tree-label">{node.name}</span>
               </div>
-              {node.children && node.children.length > 0 && (
-                <TreeBranch {...props} nodes={node.children} depth={depth + 1} />
+              {hasChildren && !collapsed[node.path] && (
+                <TreeBranch {...props} nodes={node.children!} depth={depth + 1} />
               )}
             </div>
           )
@@ -199,7 +228,10 @@ function TreeBranch(props: {
               e.dataTransfer.effectAllowed = 'move'
             }}
             onDragOver={(e) => {
-              if (!isChapter || !dragPathRef.current || dragPathRef.current === node.path) return
+              // 跨分组拖动（顶层↔卷）时 dragPathRef 属另一 TreeBranch 实例恒为 null——
+              // 改用 dataTransfer.types 判定（dragover 阶段不可读数据但 types 可读）
+              if (!isChapter || dragPathRef.current === node.path) return
+              if (!e.dataTransfer.types.includes('text/plain')) return
               e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
               setDragOverPath(node.path)
@@ -262,6 +294,15 @@ export function LeftPanel(): ReactElement {
     }
   }, [menu])
 
+  // 视口边缘钳制（靠右/下缘右键时菜单收回屏内）
+  useLayoutEffect(() => {
+    if (!menu || !menuRef.current) return
+    const el = menuRef.current
+    const x = Math.min(menu.x, Math.max(8, window.innerWidth - el.offsetWidth - 8))
+    const y = Math.min(menu.y, Math.max(8, window.innerHeight - el.offsetHeight - 8))
+    if (x !== menu.x || y !== menu.y) setMenu({ ...menu, x, y })
+  }, [menu])
+
   /** 展示树：blueprints/ 平铺列表 → owner 嵌套层级（磁盘真相不变，仅展示重排） */
   const displayTree = useMemo<TreeNode[]>(() => {
     if (tree.length === 0) return tree
@@ -300,12 +341,7 @@ export function LeftPanel(): ReactElement {
     else if (node.kind === 'chapter') setMenu({ x: e.clientX, y: e.clientY, area: { chapterItem: node.path } })
   }
 
-  /** 章节所在卷（chapters/卷/章.md → 卷名；直下章节 → undefined） */
-  const volumeOfChapter = (path: string): string | undefined => {
-    const rest = path.replace(/^chapters\//, '')
-    const slash = rest.lastIndexOf('/')
-    return slash > 0 ? rest.slice(0, slash) : undefined
-  }
+  /** 章节所在卷（chapterTree 共享实现：chapters/卷/章.md → 卷名；直下 → undefined） */
 
   /** 同级章节显示名（自动序号用；volume 缺省= chapters 直下） */
   const siblingChapterNames = (volume?: string): string[] => {
@@ -332,7 +368,12 @@ export function LeftPanel(): ReactElement {
 
   const handleCreateBlueprint = async (): Promise<void> => {
     const name = await dialogPrompt('新建蓝图', '蓝图名称', defaultTitle('新蓝图', blueprintNames()))
-    if (name) void createFile('blueprint', name)
+    if (!name) return
+    try {
+      await createFile('blueprint', name)
+    } catch (err) {
+      await dialogConfirm(`创建失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+    }
   }
 
   /** 在指定蓝图内新建子蓝图：建子图文件 → 刷新 → 在目标图内落蓝图节点（挂 refGraphId） */
@@ -376,12 +417,22 @@ export function LeftPanel(): ReactElement {
 
   const handleCreateVolume = async (): Promise<void> => {
     const name = await dialogPrompt('新增卷', '卷名称', nextNumberedName(volumeNames(), '卷'))
-    if (name) void createVolume(name)
+    if (!name) return
+    try {
+      await createVolume(name)
+    } catch (err) {
+      await dialogConfirm(`创建失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+    }
   }
 
   const handleCreateChapter = async (volume?: string): Promise<void> => {
     const name = await dialogPrompt(volume ? `在「${volume}」新增章节` : '新增章节', '章节名称', nextNumberedName(siblingChapterNames(volume), '章'))
-    if (name) void createFile('chapter', name, volume)
+    if (!name) return
+    try {
+      await createFile('chapter', name, volume)
+    } catch (err) {
+      await dialogConfirm(`创建失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+    }
   }
 
   const handleExchange = (pathA: string, pathB: string): void => {
@@ -417,7 +468,7 @@ export function LeftPanel(): ReactElement {
                 ]
 
   return (
-    <div className="left-panel" style={{ background: 'var(--bg-left)' }}>
+    <div className="left-panel nokey" style={{ background: 'var(--bg-left)' }}>
       <div className="left-header">{novel ? novel.title : '未打开小说'}</div>
       <div className="left-toolbar">
         <button className="left-tool-btn" title="新建蓝图（或在 blueprints 目录右键）" onClick={() => void handleCreateBlueprint()} disabled={!novel}>

@@ -84,11 +84,18 @@ export const IPC = {
 
 /** 主进程 → 渲染进程推送（webContents.send） */
 export const IPC_PUSH = {
-  /** 小说目录内文件变化（防抖后）：负载为最新文件树 */
+  /** 小说目录内文件变化（防抖后）：负载 { tree, changed }（changed=本窗口内变更的相对路径清单） */
   novelChanged: 'novel:changed',
   /** LLM 流式分块：负载 { requestId, delta?, done, error? } */
   llmChunk: 'llm:chunk'
 } as const
+
+/** novel:changed 推送负载 */
+export interface NovelChangedPayload {
+  tree: TreeNode[]
+  /** 防抖窗口内累积变更的相对路径（渲染层据此增量合并，仅重读变更蓝图） */
+  changed: string[]
+}
 
 /** llm:chunk 推送负载 */
 export interface LlmChunkPayload {

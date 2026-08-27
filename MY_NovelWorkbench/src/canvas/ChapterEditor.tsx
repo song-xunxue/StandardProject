@@ -25,6 +25,7 @@ import type { WikilinkItem, WikilinkPreview } from './extensions/Wikilink'
 import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
 import { useAiStore } from '@/store/aiStore'
+import { flattenChapterFiles } from '@/services/chapterTree'
 
 const SAVE_DEBOUNCE_MS = 600
 /** 编辑草稿发布节流（上下文面板重组装的频率上限） */
@@ -49,7 +50,7 @@ export function ChapterEditor(props: { path: string }): ReactElement {
     docRef.current = doc
   }, [doc])
 
-  /** wikilink 候选：图节点标题 + 章节文件名（按 query 过滤，最多 12 条） */
+  /** wikilink 候选：图节点标题 + 章节文件名（含卷内，query 过滤，最多 12 条） */
   const wikilinkItems = (query: string): WikilinkItem[] => {
     const gs = useGraphStore.getState()
     const q = query.toLowerCase()
@@ -57,28 +58,25 @@ export function ChapterEditor(props: { path: string }): ReactElement {
       .filter((n) => n.title.toLowerCase().includes(q))
       .slice(0, 12)
       .map((n) => ({ target: n.title, kind: 'node' as const, label: n.title }))
-    const fromChapters: WikilinkItem[] = (useNovelStore.getState().tree[0]?.children ?? [])
-      .flatMap((dir) => (dir.children ?? []).filter((f) => f.kind === 'chapter'))
-      .map((f) => ({ target: f.name.replace(/\.md$/, ''), kind: 'chapter' as const, label: f.name.replace(/\.md$/, '') }))
-      .filter((c) => c.label.toLowerCase().includes(q))
+    const fromChapters: WikilinkItem[] = flattenChapterFiles(useNovelStore.getState().tree)
+      .filter((c) => c.title.toLowerCase().includes(q))
       .slice(0, 6)
+      .map((c) => ({ target: c.title, kind: 'chapter' as const, label: c.volume ? `${c.volume}/${c.title}` : c.title }))
     return [...fromNodes, ...fromChapters].slice(0, 12)
   }
 
-  /** wikilink 悬浮预览：节点取 summary/prompt，章节仅标题 */
+  /** wikilink 悬浮预览：节点取 summary/prompt，章节（含卷内）仅标题 */
   const wikilinkLookup = (target: string): WikilinkPreview | null => {
     const node = Object.values(useGraphStore.getState().nodes).find((n) => n.title === target)
     if (node) {
       const description = node.summary || node.prompt || `类型：${node.type}`
       return { title: node.title, description: description.slice(0, 120) }
     }
-    const isChapter = (useNovelStore.getState().tree[0]?.children ?? []).some((dir) =>
-      (dir.children ?? []).some((f) => f.name.replace(/\.md$/, '') === target)
-    )
+    const isChapter = flattenChapterFiles(useNovelStore.getState().tree).some((c) => c.title === target)
     return isChapter ? { title: target, description: '章节正文' } : null
   }
 
-  /** wikilink 点击跳转：节点 → 打开所属蓝图并选中；章节 → 打开正文 Tab */
+  /** wikilink 点击跳转：节点 → 打开所属蓝图并选中；章节（含卷内）→ 打开正文 Tab */
   const wikilinkNavigate = (target: string): void => {
     const gs = useGraphStore.getState()
     const node = Object.values(gs.nodes).find((n) => n.title === target)
@@ -89,9 +87,7 @@ export function ChapterEditor(props: { path: string }): ReactElement {
       if (bpPath) useNovelStore.getState().openTab('blueprint', bpPath)
       return
     }
-    const chapter = (useNovelStore.getState().tree[0]?.children ?? [])
-      .flatMap((dir) => (dir.children ?? []).filter((f) => f.kind === 'chapter'))
-      .find((f) => f.name.replace(/\.md$/, '') === target)
+    const chapter = flattenChapterFiles(useNovelStore.getState().tree).find((c) => c.title === target)
     if (chapter) useNovelStore.getState().openTab('chapter', chapter.path)
   }
 

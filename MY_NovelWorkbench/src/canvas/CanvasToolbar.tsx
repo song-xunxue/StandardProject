@@ -14,6 +14,7 @@
  */
 
 import type { ReactElement } from 'react'
+import { useEffect } from 'react'
 import type { RefObject } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
@@ -101,11 +102,16 @@ export function CanvasToolbar(props: {
     useGraphStore.getState().addNode({ type, title, position })
   }
 
-  // 暴露给右键菜单（每次渲染同步最新闭包；工具条常驻画布，生命周期一致）
-  canvasCreateBridge.current = handleCreate
+  // 暴露给右键菜单（effect 同步最新闭包 + 卸载清理，防止画布卸载后悬空调用拿到失效实例）
+  useEffect(() => {
+    canvasCreateBridge.current = handleCreate
+    return () => {
+      canvasCreateBridge.current = null
+    }
+  })
 
   return (
-    <div className="canvas-toolbar">
+    <div className="canvas-toolbar nokey">
       <div className="canvas-toolbar-left">
         <span className="canvas-toolbar-tip">右键画布新建节点 · 拖端口连线 · Delete 删除选中</span>
       </div>

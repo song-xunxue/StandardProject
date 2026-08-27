@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto'
 import { currentNovel } from './novelService'
 import { parseFrontmatter, serializeFrontmatter } from '../../shared/frontmatter'
 import { sanitizeFileName } from '../../shared/sanitize'
+import { chapterNameCompare } from '../../shared/naming'
 import { isResourceTemplate } from '../../shared/resource'
 import type { BlueprintFile, ChapterDoc, ResourceTemplate, TreeNode } from '../../shared/types'
 
@@ -47,7 +48,8 @@ export function readTree(): TreeNode[] {
       ? readdirSync(dir, { withFileTypes: true })
           .filter((e) => e.isFile() && !e.name.startsWith('.')) // 跳过 .gitkeep 等占位/隐藏文件
           .map((e) => ({ name: e.name, path: relative(novel.dir, join(dir, e.name)).replace(/\\/g, '/'), kind }))
-          .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+          // 章节/卷按「第N章」数字序（zh-CN 拼音序会乱序），蓝图保持字典序
+          .sort((a, b) => (kind === 'chapter' ? chapterNameCompare(a.name, b.name) : a.name.localeCompare(b.name, 'zh-CN')))
       : []
   const tree: TreeNode[] = [
     { name: novel.meta.title, path: '', kind: 'meta', children: [] as TreeNode[] }
@@ -62,7 +64,8 @@ export function readTree(): TreeNode[] {
           if (e.isFile()) return { name: e.name, path, kind: 'chapter' as const }
           return { name: e.name, path, kind: 'dir' as const, children: listDir(join(chDir, e.name), 'chapter') }
         })
-        .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+        // 顶层章节与卷混合按「第N卷/章」数字序排列（同 listDir 的章节口径）
+        .sort((a, b) => chapterNameCompare(a.name, b.name))
     : []
   const chapters: TreeNode = { name: 'chapters', path: 'chapters', kind: 'dir', children: chapterChildren }
   tree[0]!.children = [blueprints, chapters]

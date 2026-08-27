@@ -23,6 +23,7 @@ import { BlueprintCanvas } from './canvas/BlueprintCanvas'
 import { AiPanel } from './canvas/AiPanel'
 import { ChapterEditor } from './canvas/ChapterEditor'
 import { InspectorPanel } from './canvas/InspectorPanel'
+import { GlobalGraphView } from './graph/GlobalGraphView'
 import { Dialog } from './components/Dialog'
 import { useNovelStore } from './store/novelStore'
 import { dialogPrompt } from './store/dialogStore'
@@ -127,7 +128,10 @@ export default function App(): ReactElement {
 
   return (
     <div className="workbench">
-      <IconStrip active={activeStrip} onSelect={setActiveStrip} />
+      <IconStrip
+        active={activeStrip}
+        onSelect={(id) => setActiveStrip((cur) => (cur === id ? 'novel' : id))}
+      />
       <div style={{ width: leftWidth, display: 'flex', flexDirection: 'column' }}>
         <LeftPanel />
       </div>
@@ -149,6 +153,8 @@ export default function App(): ReactElement {
             <div className="placeholder-editor">在左侧点击蓝图或章节文件打开</div>
           )}
           {activeStrip === 'ai' && <AiPanel />}
+          {/* 全局图谱（FR-09）：全宽覆盖层，点击节点跳转回工作区 */}
+          {activeStrip === 'graph' && novel && <GlobalGraphView onClose={() => setActiveStrip('novel')} />}
         </div>
       </div>
       <Dialog />

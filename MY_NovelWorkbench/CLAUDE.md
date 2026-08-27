@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MY_NovelWorkbench（小说创作工作台）——**AI 辅助的小说编辑器**：ComfyUI 式节点工作流（蓝图/节点/语义连线）× Obsidian 式双向链接（全局图谱），AI 创作上下文由链接关系自动组装，支持多类 AI API。UI 参考 PyCharm（左侧创建栏 + 右侧内容区 + 顶部文件 Tab + 可拖分界线），深色主题。
 
-**当前状态：M0-M3 + 全量审查批次完成（2026-08-27，131 用例全绿）——正文 Tiptap 编辑器 + [[wikilink]] 双链 + AI Provider（safeStorage 加密）+ 流式生成/中断 + 上下文组装 v1（分支覆盖 97.3%）+ Context Viewer 可用；画布为右键菜单创建/拖拽跟手/树形蓝图层级。M4（全局图谱 + 资源库完善）待启动。**
+**当前状态：M0-M3 + 全量审查批次完成（2026-08-27，131 用例全绿）——正文 Tiptap 编辑器 + [[wikilink]] 双链 + AI Provider（safeStorage 加密）+ 流式生成/中断 + 上下文组装 v1（分支覆盖 97.3%）+ Context Viewer 可用；画布为右键菜单创建/拖拽跟手/树形蓝图层级。M4-A（全局图谱视图 G6）已完成待人工验收；M4-B（资源库跨小说+审查遗留低危）待启动。**
 
 **重要交互机制（2026-08-27 联调修复，改动画布前必读）**：
 - 画布选中为**显式事件驱动**（onNodeClick/onEdgeClick/onPaneClick → setSelection），勿回灌 `selected` 到 nodes/edges props——会与 RF 内部状态在结构变更时形成无限渲染循环（建节点/连线全黑崩溃）
@@ -19,7 +19,7 @@ MY_NovelWorkbench（小说创作工作台）——**AI 辅助的小说编辑器*
 npm install        # 安装依赖（Electron 二进制慢时: ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/）
 npm run dev        # 开发模式（Electron 窗口 + 热更新）
 npm run typecheck  # tsc --noEmit（web）+ tsconfig.node.json（主进程，无 DOM）
-npm run test       # vitest 单测（纯逻辑 + jsdom 编辑器桥接，当前 118 用例）
+npm run test       # vitest 单测（纯逻辑 + jsdom 编辑器桥接，当前 131 用例）
 npm run build      # electron-vite 三目标构建 → out/{main,preload,renderer}
 node scripts/gen-stress-blueprint.mjs <小说目录> [节点数]  # 生成 100 节点压力蓝图（M2 性能验收工具）
 # LLM 开发期联调：项目根 .env 配 NOVEL_LLM_BASE_URL / NOVEL_LLM_API_KEY / NOVEL_LLM_MODEL（正式配置走应用内 AI 面板）
@@ -56,6 +56,7 @@ node scripts/gen-stress-blueprint.mjs <小说目录> [节点数]  # 生成 100 �
 - `canvas/CanvasToolbar.tsx` — 画布工具条（三类节点创建/保存状态/层级指示/资源库入口）
 - `canvas/InspectorPanel.tsx` — 右侧属性面板（节点标题/标签/prompt/summary/refTarget/子图、边改型与 label、图信息）
 - `canvas/ResourcePanel.tsx` — 资源库浮层（节点/标签组模板保存、插入、应用、删除）
+- `graph/GlobalGraphView.tsx` — 全局图谱（M4-A，G6 5：d3-force 投影/标签着色过滤/点击跳转蓝图/孤立与伏笔高亮；图标条 graph 项全宽覆盖层）
 - `canvas/ChapterEditor.tsx` — 章节 Tiptap 编辑器（StarterKit+Markdown+Placeholder+Wikilink；600ms 防抖保存 getMarkdown 落盘+卸载冲刷；加载 emitUpdate:false；草稿节流发布）
 - `canvas/extensions/Wikilink.ts` — [[wikilink]] Mark（inclusive:false；suggestion 补全 allowedPrefixes:null+isComposing 放行；markdown 自定义 token 双向；悬浮预览 floating-ui+点击跳转）
 - `canvas/AiPanel.tsx` — AI 撰写面板（Provider 管理/续写/改写选中/停止；**前情提要**：编辑第 N 章自动注入前 2 章正文尾部；Context Viewer：三层预算/prompt 全文与复制/丢弃记录；组装目标 ref→选中→首节点；无编辑器时自动切最近章节）

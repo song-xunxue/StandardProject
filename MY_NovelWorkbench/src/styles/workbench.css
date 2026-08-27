@@ -1664,3 +1664,10 @@
   color: var(--fg-default);
   background: #3a3d42;
 }
+
+/* 章节未链接蓝图的引导提示（M3 交互） */
+.ai-unlinked {
+  color: #e0a868;
+  line-height: 1.7;
+  white-space: pre-line;
+}

@@ -16,7 +16,8 @@ import { useNovelStore } from '@/store/novelStore'
 export function TabBar(): ReactElement {
   const tabs = useNovelStore((s) => s.tabs)
   const activeTabId = useNovelStore((s) => s.activeTabId)
-  const setActive = (id: string): void => useNovelStore.setState({ activeTabId: id })
+  // 激活走 store 动作（蓝图 Tab 会同步画布路由，而非裸 set）
+  const setActive = (id: string): void => useNovelStore.getState().activateTab(id)
 
   return (
     <div className="tabbar" style={{ height: 'var(--tabbar-height)' }}>

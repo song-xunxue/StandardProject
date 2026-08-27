@@ -175,6 +175,12 @@ export function AiPanel(): ReactElement {
   const target = nodes[targetId]
   const promptFullText = useMemo(() => result.segments.map((s) => s.text).join('\n\n'), [result.segments])
 
+  /** 章节与蓝图的链接状态：正在编辑的章节是否有 § 引用节点指向（串联是否成立） */
+  const chapterLinked = useMemo(() => {
+    if (!editingDraft) return true
+    return Object.values(nodes).some((n) => n.type === 'ref' && n.refTarget === editingDraft.path)
+  }, [nodes, editingDraft])
+
   /** 生成结束/出错时收尾：冲刷或丢弃挂起批次，再让写入器按 markdown 重排生成区 */
   useEffect(() => {
     if (generation === null && writerRef.current) {
@@ -356,6 +362,14 @@ export function AiPanel(): ReactElement {
         </div>
         {generation && <div className="insp-hint ai-streaming">生成中…（流式写入正文）</div>}
         {generationError && <div className="insp-hint ai-error">生成失败：{generationError}</div>}
+        {editingDraft && !chapterLinked && (
+          <div className="insp-hint ai-unlinked">
+            ⚠ 本章尚未链接到蓝图，AI 上下文目标已降级为默认节点。串联方法（一次性）：
+            ① 在蓝图空白处右键「新建引用节点」；② 右侧属性面板「指向」选择本章；
+            ③ 把该引用节点与设定/大纲等节点连线（箭头=顺序 · 直线=关联 · 虚线=参考）。
+            之后续写会自动以引用节点为「当前节点」，按三层优先级注入其链接的节点内容与上级蓝图摘要。
+          </div>
+        )}
       </div>
 
       {/* Context Viewer：三层预算（行容器 ctx-budget-row / 轨道 ctx-budget-bar，对齐 M0 样式） */}

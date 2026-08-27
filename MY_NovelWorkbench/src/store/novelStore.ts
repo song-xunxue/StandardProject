@@ -51,6 +51,8 @@ interface NovelState {
   createTag: (name: string, color: string) => Promise<TagDef | null>
   /** 打开 Tab（已打开则激活） */
   openTab: (kind: OpenTab['kind'], path: string, title?: string) => void
+  /** 激活 Tab；蓝图 Tab 同步画布路由到该蓝图（Tab 栏点击与左栏树点击切换都走这里） */
+  activateTab: (id: string) => void
   closeTab: (id: string) => void
 }
 
@@ -170,7 +172,7 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
   openTab: (kind, path, title) => {
     const existing = get().tabs.find((t) => t.path === path)
     if (existing) {
-      set({ activeTabId: existing.id })
+      get().activateTab(existing.id)
       return
     }
     const tab: OpenTab = {
@@ -179,7 +181,20 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
       path,
       title: title ?? titleOf(path.split('/').pop() ?? path)
     }
-    set({ tabs: [...get().tabs, tab], activeTabId: tab.id })
+    set({ tabs: [...get().tabs, tab] })
+    get().activateTab(tab.id)
+  },
+
+  activateTab: (id) => {
+    const tab = get().tabs.find((t) => t.id === id)
+    if (!tab) return
+    set({ activeTabId: id })
+    // 蓝图 Tab：画布路由同步到该蓝图（否则画布停留在先前的子图，Tab 切换无视觉响应）
+    if (tab.kind === 'blueprint') {
+      const gs = useGraphStore.getState()
+      const gid = Object.entries(gs.graphPaths).find(([, p]) => p === tab.path)?.[0]
+      if (gid && gs.route[gs.route.length - 1] !== gid) gs.enterGraph(gid)
+    }
   },
 
   closeTab: (id) => {

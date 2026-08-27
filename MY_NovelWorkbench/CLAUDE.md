@@ -6,7 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MY_NovelWorkbench（小说创作工作台）——**AI 辅助的小说编辑器**：ComfyUI 式节点工作流（蓝图/节点/语义连线）× Obsidian 式双向链接（全局图谱），AI 创作上下文由链接关系自动组装，支持多类 AI API。UI 参考 PyCharm（左侧创建栏 + 右侧内容区 + 顶部文件 Tab + 可拖分界线），深色主题。
 
-**当前状态：M0/M1/M2/M3 已完成（2026-08-26）——正文 Tiptap 编辑器 + [[wikilink]] 双链 + AI Provider（safeStorage 加密）+ 流式生成/中断 + 上下文组装 v1（分支覆盖 97.3%）+ Context Viewer 可用；M3 遗留两项需 API Key 的人工联调（Provider 连接测试、SSE 流式呈现）。M4（全局图谱 + 资源库完善）待启动。**
+**当前状态：M0/M1/M2/M3 已完成（2026-08-27 DeepSeek 全链路联调通过）——正文 Tiptap 编辑器 + [[wikilink]] 双链 + AI Provider（safeStorage 加密）+ 流式生成/中断 + 上下文组装 v1（分支覆盖 97.3%）+ Context Viewer 可用；画布为右键菜单创建/拖拽跟手/树形蓝图层级。M4（全局图谱 + 资源库完善）待启动。**
+
+**重要交互机制（2026-08-27 联调修复，改动画布前必读）**：
+- 画布选中为**显式事件驱动**（onNodeClick/onEdgeClick/onPaneClick → setSelection），勿回灌 `selected` 到 nodes/edges props——会与 RF 内部状态在结构变更时形成无限渲染循环（建节点/连线全黑崩溃）
+- 受控 `nodes` 必须接 `onNodesChange`（本地镜像 `applyNodeChanges`，仅承接 `position`/`remove` 变更；`dimensions`/`select` 回灌会与 RF 测量形成主线程打满循环），否则拖拽不跟手
+- 节点创建入口在画布右键菜单（onPaneContextMenu → canvasCreateBridge 复用 CanvasToolbar 的创建实现，落点=鼠标位置）
 
 ## 常用命令
 

@@ -1,13 +1,16 @@
 /**
- * 画布工具条：三类节点创建 / 资源库入口 / 保存状态与嵌套层级指示
- * 位于 ReactFlowProvider 内（screenToFlowCoordinate 计算新节点落点=当前视口中心）
+ * 画布工具条：保存状态 / 嵌套层级指示 / 资源库入口
+ * 节点创建逻辑常驻本组件（useReactFlow 计算落点），经 canvasCreateBridge 供右键菜单复用
+ * （M3 交互调整：创建按钮移入画布右键菜单，工具条不再展示创建按钮）
  *
  * 作者: 李文煜
  * 日期: 2026-08-26
  *
  * 2026-08-26
  * 变更说明：
- *   1. M2 初版：节点创建（蓝图节点先建子图文件并刷新再落节点，见 graphStore 竞态说明）
+ *   1. M2 初版：节点创建按钮（蓝图节点先建子图文件并刷新再落节点，见 graphStore 竞态说明）
+ *   2. M3 交互调整：创建入口移入画布右键菜单；工具条保留状态指示/资源库；
+ *      handleCreate 增加可选 screen 参数（右键菜单传入=鼠标处落点）
  */
 
 import type { ReactElement } from 'react'
@@ -20,12 +23,13 @@ import { useNovelStore } from '@/store/novelStore'
 import { dialogConfirm } from '@/store/dialogStore'
 import { defaultTitle } from '@/services/naming'
 
-/** 节点创建按钮配置（顺序=工具条展示顺序） */
-const CREATE_BUTTONS: Array<{ type: NodeType; label: string; hint: string }> = [
-  { type: 'blueprint', label: '+ 蓝图节点', hint: '创建可进入的子图节点（双击进入）' },
-  { type: 'text', label: '+ 文本节点', hint: '创建纯文本创作单元' },
-  { type: 'ref', label: '+ 引用节点', hint: '创建指向章节/蓝图的引用（右侧面板选择指向）' }
-]
+/**
+ * 创建桥（模块级）：右键菜单经此复用本组件的创建逻辑（单一实现，useReactFlow 上下文在工具条内）。
+ * 入参 screen 为可选的鼠标屏幕坐标——传入时节点落在鼠标处，否则落在视口中心
+ */
+export const canvasCreateBridge: { current: ((type: NodeType, screen?: { x: number; y: number }) => Promise<void>) | null } = {
+  current: null
+}
 
 export function CanvasToolbar(props: {
   bodyRef: RefObject<HTMLDivElement>
@@ -53,7 +57,7 @@ export function CanvasToolbar(props: {
     await dialogConfirm(`已达蓝图嵌套上限（${MAX_NESTING_DEPTH} 层），无法在当前层创建子蓝图节点`, '知道了')
   }
 
-  const handleCreate = async (type: NodeType): Promise<void> => {
+  const handleCreate = async (type: NodeType, screen?: { x: number; y: number }): Promise<void> => {
     const gs = useGraphStore.getState()
     const graphId = gs.route.slice(-1)[0]
     const graph = graphId ? gs.graphs[graphId] : undefined
@@ -65,6 +69,8 @@ export function CanvasToolbar(props: {
       (dir.children ?? []).filter((f) => f.kind === 'blueprint').map((f) => f.name.replace(/\.blueprint\.json$/, ''))
     )
     const title = defaultTitle(base, [...nodeTitles, ...fileTitles])
+    // 落点：右键菜单传入鼠标位置；未传则用视口中心
+    const position = screen ? screenToFlowPosition(screen) : centerPosition()
 
     if (type === 'blueprint') {
       // ADR-12：蓝图节点承载下一层子图，当前已在第 8 层时阻止并提示
@@ -86,23 +92,22 @@ export function CanvasToolbar(props: {
       useGraphStore.getState().addNode({
         type,
         title,
-        position: centerPosition(),
+        position,
         refGraphId: created.id
       })
       return
     }
 
-    useGraphStore.getState().addNode({ type, title, position: centerPosition() })
+    useGraphStore.getState().addNode({ type, title, position })
   }
+
+  // 暴露给右键菜单（每次渲染同步最新闭包；工具条常驻画布，生命周期一致）
+  canvasCreateBridge.current = handleCreate
 
   return (
     <div className="canvas-toolbar">
       <div className="canvas-toolbar-left">
-        {CREATE_BUTTONS.map((b) => (
-          <button key={b.type} className="left-tool-btn canvas-create-btn" title={b.hint} onClick={() => void handleCreate(b.type)}>
-            {b.label}
-          </button>
-        ))}
+        <span className="canvas-toolbar-tip">右键画布新建节点 · 拖端口连线 · Delete 删除选中</span>
       </div>
       <div className="canvas-toolbar-right">
         <span className={`save-state ${saving ? 'saving' : dirtyCount > 0 ? 'dirty' : 'saved'}`} title={saveError ?? undefined}>

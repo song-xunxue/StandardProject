@@ -16,12 +16,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
+import type { Editor } from '@tiptap/core'
 import type { ChatMessage, ProviderInfo } from '@shared/types'
 import { assembleContext, layerBudgetsOf } from '@/services/contextAssembly'
 import { StreamInserter } from '@/services/streamInsert'
 import { GenerationWriter } from '@/services/generationWriter'
 import { useAiStore } from '@/store/aiStore'
 import { useGraphStore } from '@/store/graphStore'
+import { useNovelStore } from '@/store/novelStore'
 import { dialogConfirm } from '@/store/dialogStore'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -142,6 +144,7 @@ export function AiPanel(): ReactElement {
   const generationError = useAiStore((s) => s.generationError)
   const editingDraft = useAiStore((s) => s.editingDraft)
   const chapterEditor = useAiStore((s) => s.chapterEditor)
+  const hasChapterTab = useNovelStore((s) => s.tabs.some((t) => t.kind === 'chapter'))
 
   const [editingProvider, setEditingProvider] = useState<'none' | 'new' | ProviderInfo['id']>('none')
   const [showPrompt, setShowPrompt] = useState(false)
@@ -207,8 +210,27 @@ export function AiPanel(): ReactElement {
     ]
   }
 
+  /** 无章节编辑器挂载时（如在蓝图页打开 AI 面板）：切换到最近章节 Tab 并等待编辑器与内容就绪 */
+  const ensureChapterEditor = async (): Promise<Editor | null> => {
+    const ns = useNovelStore.getState()
+    const chapterTabs = ns.tabs.filter((t) => t.kind === 'chapter')
+    if (chapterTabs.length === 0) {
+      await dialogConfirm('续写/改写需要先打开一个章节正文（在左侧文件树点击章节文件）', '知道了')
+      return null
+    }
+    const active = ns.tabs.find((t) => t.id === ns.activeTabId)
+    const target = active?.kind === 'chapter' ? active : chapterTabs[chapterTabs.length - 1]!
+    if (target.id !== ns.activeTabId) ns.openTab('chapter', target.path)
+    for (let i = 0; i < 30; i++) {
+      const ed = useAiStore.getState().chapterEditor
+      if (ed && useAiStore.getState().editingDraft?.path === target.path) return ed
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    return useAiStore.getState().chapterEditor
+  }
+
   const handleGenerate = async (mode: 'continue' | 'rewrite'): Promise<void> => {
-    const editor = chapterEditor
+    const editor = chapterEditor ?? (await ensureChapterEditor())
     if (!editor) return
     const { from, to } = editor.state.selection
     const selectedText = editor.state.doc.textBetween(from, to, '\n')
@@ -309,16 +331,16 @@ export function AiPanel(): ReactElement {
         <div className="ai-actions">
           <button
             className="left-tool-btn"
-            disabled={!chapterEditor || generation !== null || !activeProviderId}
-            title={chapterEditor ? '在正文末尾流式续写' : '先打开一个章节正文'}
+            disabled={generation !== null || !activeProviderId}
+            title={chapterEditor ? '在正文末尾流式续写' : hasChapterTab ? '自动切换到最近的章节正文续写' : '需要先创建并打开一个章节正文'}
             onClick={() => void handleGenerate('continue')}
           >
             ✍ 续写
           </button>
           <button
             className="left-tool-btn"
-            disabled={!chapterEditor || generation !== null || !activeProviderId}
-            title="改写正文中选中的文字"
+            disabled={generation !== null || !activeProviderId}
+            title="改写正文中选中的文字（无编辑器时自动切换到最近章节）"
             onClick={() => void handleGenerate('rewrite')}
           >
             ⟳ 改写选中

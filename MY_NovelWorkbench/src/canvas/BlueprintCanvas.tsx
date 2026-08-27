@@ -20,7 +20,7 @@
  *      画布工具条与资源库浮层挂载
  */
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from 'react'
 import {
   ReactFlow,
@@ -30,10 +30,11 @@ import {
   MiniMap,
   Controls,
   MarkerType,
+  applyNodeChanges,
   type Connection,
   type Edge,
   type Node,
-  type OnSelectionChangeParams
+  type NodeChange
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
@@ -45,7 +46,7 @@ import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
 import { dialogConfirm } from '@/store/dialogStore'
 import { Breadcrumb } from './Breadcrumb'
-import { CanvasToolbar } from './CanvasToolbar'
+import { CanvasToolbar, canvasCreateBridge } from './CanvasToolbar'
 import { ResourcePanel } from './ResourcePanel'
 
 /** 连线视觉映射（ADR-15 语义：箭头=因果/顺序，直线=关联，虚线=参考/伏笔） */
@@ -62,6 +63,13 @@ const isProxyId = (id: string): boolean => id.startsWith(PROXY_PREFIX)
 const remoteIdOf = (id: string): string => id.slice(PROXY_PREFIX.length)
 
 const basename = (path: string): string => path.split('/').pop() ?? path
+
+/** 右键菜单的节点创建项（M3 交互调整：创建入口移入画布右键菜单） */
+const CREATE_MENU_ITEMS: Array<{ type: NodeType; icon: string; label: string; hint: string }> = [
+  { type: 'blueprint', icon: '◆', label: '新建蓝图节点', hint: '可进入的子图（双击进入）' },
+  { type: 'text', icon: '¶', label: '新建文本节点', hint: '纯文本创作单元' },
+  { type: 'ref', icon: '§', label: '新建引用节点', hint: '指向章节/蓝图（属性面板选择指向）' }
+]
 
 /**
  * 节点样式：深色卡片；有标签时边框取主标签色（标签决定着色，FR-07），
@@ -120,23 +128,30 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
   const removeNodesAction = useGraphStore((s) => s.removeNodes)
   const removeEdgeAction = useGraphStore((s) => s.removeEdge)
   const tagLibrary = useNovelStore((s) => s.novel?.tagLibrary ?? [])
-  // 受控选中：store 数组回灌 selected，store 驱动的 props 全量重建不再丢 RF 内部选中态
-  const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds)
-  const selectedEdgeIds = useGraphStore((s) => s.selectedEdgeIds)
-  // useMemo 依赖用拼接键而非数组身份：内容不变时跳过全量重建，断开「回灌→通知→再重建」回环
-  const selectedNodeKey = selectedNodeIds.join(',')
-  const selectedEdgeKey = selectedEdgeIds.join(',')
 
   const currentGraphId = route[route.length - 1]
   const graph = graphs[currentGraphId]
 
+  // ---- 右键菜单（M3 交互调整：节点创建入口；创建逻辑经 canvasCreateBridge 复用工具条实现） ----
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
+
+  // ---- 拖拽跟手（受控节点镜像）：RF 受控模式下必须接 onNodesChange，否则拖拽变更被丢弃、
+  // 节点只在 dragStop 提交时跳变。镜像只承接 position/remove——dimensions（尺寸测量）与
+  // select 若回灌会与 RF 内部测量/选中形成「重建→再测量→再变更」无限循环打满主线程 ----
+  const [nodeMirror, setNodeMirror] = useState<Node[]>([])
+  const handleNodesChange = (changes: NodeChange[]): void => {
+    const relevant = changes.filter((c) => c.type === 'position' || c.type === 'remove')
+    if (relevant.length === 0) return
+    setNodeMirror((prev) => applyNodeChanges(relevant, prev))
+  }
+
   const { rfNodes, rfEdges } = useMemo(() => {
     if (!graph) return { rfNodes: [] as Node[], rfEdges: [] as Edge[] }
     const memberIds = new Set(graph.nodeIds)
-    const nodeSelected = new Set(selectedNodeIds)
-    const edgeSelected = new Set(selectedEdgeIds)
 
     // 本图节点（标签决定着色；内容为标题 + ref 指向 + 标签 chips）
+    // 选中态不回灌（非受控）：RF 内部维护视觉选中，store 选中只在用户点击时变化——
+    // 受控 selected 回灌会在结构变更（建节点/建边）时与 RF 内部状态形成无限渲染循环
     const rfNodes: Node[] = graph.nodeIds
       .map((id) => nodes[id])
       .filter((n): n is BlueprintNode => Boolean(n))
@@ -144,8 +159,7 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
         id: n.id,
         position: n.position,
         data: { label: renderNodeLabel(n, tagLibrary) },
-        style: nodeStyle(n.type, nodeAccentColor(tagLibrary, n)),
-        selected: nodeSelected.has(n.id)
+        style: nodeStyle(n.type, nodeAccentColor(tagLibrary, n))
       }))
 
     // 跨图边：另一端不在本图 → 生成代理节点（proxy:前缀），摆放于本图连出节点右侧
@@ -189,7 +203,6 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
         labelStyle: { fill: '#dcdfe3', fontSize: 11 },
         labelBgStyle: { fill: '#1c1d20' },
         markerEnd: visual.marker ? { type: MarkerType.ArrowClosed, color: visual.stroke } : undefined,
-        selected: edgeSelected.has(e.id),
         style: {
           stroke: visual.stroke,
           strokeWidth: 1.5,
@@ -199,14 +212,27 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
     }
 
     return { rfNodes: [...rfNodes, ...uniqueProxies], rfEdges }
-    // 依赖中的选中态用拼接键（内容语义）而非数组身份：内容不变时跳过全量重建，
-    // 断开「受控回灌 → RF onSelectionChange 再通知 → 再重建」的回环
-  }, [graph, nodes, edges, graphs, tagLibrary, selectedNodeKey, selectedEdgeKey])
+  }, [graph, nodes, edges, graphs, tagLibrary])
 
-  /** 选中变化（点击/框选/空白）：全量同步 store（代理节点映射回远端真实节点） */
-  const handleSelectionChange = ({ nodes: selNodes, edges: selEdges }: OnSelectionChangeParams): void => {
-    const nodeIds = selNodes.map((n) => (isProxyId(n.id) ? remoteIdOf(n.id) : n.id))
-    setSelection(nodeIds, selEdges.map((e) => e.id))
+  // store 派生结果同步进本地镜像（拖拽中间态由 handleNodesChange 维护，不受 store 重建打断）
+  useEffect(() => {
+    setNodeMirror(rfNodes)
+  }, [rfNodes])
+
+  /** 用户点击节点 → 选中（显式事件驱动，不随 props 重建波动；代理节点映射回远端） */
+  const handleNodeClick = (_e: unknown, node: Node): void => {
+    setSelection([isProxyId(node.id) ? remoteIdOf(node.id) : node.id], [])
+  }
+
+  /** 用户点击边 → 选中 */
+  const handleEdgeClick = (_e: unknown, edge: Edge): void => {
+    setSelection([], [edge.id])
+  }
+
+  /** 点击空白 → 清空选中并收起右键菜单 */
+  const handlePaneClick = (): void => {
+    setSelection([], [])
+    setCtxMenu(null)
   }
 
   /** 端口拖拽连线：默认创建箭头型（改型在属性面板）；目标为代理节点时即跨图边 */
@@ -285,19 +311,26 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
       {/* key=当前图 id：进入子图时强制重挂 ReactFlow 实例（路由式进入，M0 核心机制） */}
       <ReactFlow
         key={currentGraphId}
-        nodes={rfNodes}
+        nodes={nodeMirror}
         edges={rfEdges}
         fitView
         minZoom={0.2}
         maxZoom={2.5}
         deleteKeyCode={['Delete']}
         connectionLineStyle={{ stroke: '#6c9ef8', strokeWidth: 1.5 }}
-        onSelectionChange={handleSelectionChange}
+        onNodesChange={handleNodesChange}
+        onNodeClick={handleNodeClick}
+        onEdgeClick={handleEdgeClick}
+        onPaneClick={handlePaneClick}
         onConnect={handleConnect}
         onNodeDragStop={handleNodeDragStop}
         onNodesDelete={handleNodesDelete}
         onEdgesDelete={handleEdgesDelete}
         onNodeDoubleClick={handleNodeDoubleClick}
+        onPaneContextMenu={(e) => {
+          e.preventDefault()
+          setCtxMenu({ x: e.clientX, y: e.clientY })
+        }}
       >
         {/* 黑色点阵网格背景（ComfyUI 式） */}
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#3a3a3c" />
@@ -314,6 +347,33 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
       <div className="canvas-hint">
         双击 ◆ 进入子图 · 双击 § 引用打开指向 · 拖端口连线（拖到 ↗ 代理=跨图边） · Delete 删除选中
       </div>
+      {/* 右键菜单：节点创建（落点=鼠标位置） */}
+      {ctxMenu && (
+        <div
+          className="canvas-context-menu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          onMouseLeave={() => setCtxMenu(null)}
+        >
+          {CREATE_MENU_ITEMS.map((item) => (
+            <button
+              key={item.type}
+              type="button"
+              className="canvas-context-item"
+              onClick={() => {
+                const screen = ctxMenu
+                setCtxMenu(null)
+                void canvasCreateBridge.current?.(item.type, screen)
+              }}
+            >
+              <span className="canvas-context-icon">{item.icon}</span>
+              <span className="canvas-context-text">
+                <span className="canvas-context-title">{item.label}</span>
+                <span className="canvas-context-hint">{item.hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

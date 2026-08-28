@@ -10,6 +10,10 @@
  *   2. M1：fs 通道与目录变化订阅的完整类型（复用 shared 契约类型）
  *   3. M2：新增元信息读写与资源库通道类型
  *   4. M3：新增 provider 组（Provider CRUD/测试）与 llm 组（流式生成/中断 + 分块订阅）
+ *
+ * 2026-08-28
+ * 变更说明：
+ *   1. M5：新增快照四通道类型（创建/列表/删除/恢复）
  */
 
 import type {
@@ -23,6 +27,7 @@ import type {
   ProviderInfo,
   RecentNovel,
   ResourceTemplate,
+  SnapshotInfo,
   TreeNode
 } from '@shared/types'
 
@@ -54,6 +59,10 @@ export interface Api {
     listResources: () => Promise<Array<{ path: string; template: ResourceTemplate }>>
     saveResource: (template: ResourceTemplate) => Promise<{ path: string }>
     deleteResource: (path: string) => Promise<void>
+    snapshotCreate: (note: string) => Promise<SnapshotInfo>
+    snapshotList: () => Promise<SnapshotInfo[]>
+    snapshotDelete: (id: string) => Promise<void>
+    snapshotRestore: (id: string) => Promise<void>
   }
   onNovelChanged: (callback: (payload: NovelChangedPayload) => void) => () => void
   provider: {

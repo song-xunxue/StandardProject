@@ -10,12 +10,18 @@
  *   2. M2：新增元信息读写（readMeta/saveMeta）与资源库（listResources/saveResource/deleteResource）
  *   3. M3：新增 AI Provider（provider:*）与 LLM 流式生成（llm:*，chunk 经 llm:chunk 推送）
  *   4. M4-B：资源库三通道路由至 resourceService（全局目录跨小说，不依赖打开小说）
+ *
+ * 2026-08-28
+ * 变更说明：
+ *   1. M5：新增快照四通道（snapshotService）；restore 在本层编排
+ *    停监听 → closeIndex（释放 SQLite 句柄，Windows 删除/覆盖前置条件）
+ *    → 恢复文件 → openNovel → startWatching（增量校对对齐索引）
  */
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import { IPC } from '../shared/types'
 import type { ProviderConfig } from '../shared/types'
-import { createNovel, openNovel, readMeta, recentNovels, saveMeta } from './services/novelService'
+import { createNovel, currentNovel, openNovel, readMeta, recentNovels, saveMeta } from './services/novelService'
 import {
   createFile,
   createVolume,
@@ -29,10 +35,11 @@ import {
   saveChapter
 } from './services/fileService'
 import { deleteResource, listResources, saveResource } from './services/resourceService'
+import { createSnapshot, deleteSnapshot, listSnapshots, restoreSnapshot } from './services/snapshotService'
 import { deleteProvider, listProviders, saveProvider, testProvider } from './services/providerService'
 import { startGeneration, stopGeneration } from './services/llmService'
 import { indexStats, rebuildIndex, closeIndex } from './services/indexService'
-import { startWatching } from './watcher'
+import { startWatching, stopWatching } from './watcher'
 
 /** 注册全部 IPC 处理器（应用启动时调用一次） */
 export function registerIpcHandlers(win: BrowserWindow): void {
@@ -103,6 +110,54 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     opened(() => saveResource(p.template as Parameters<typeof saveResource>[0]))
   )
   ipcMain.handle(IPC.deleteResource, (_e, p: { path: string }) => opened(() => deleteResource(p.path)))
+
+  // M5：快照（依赖已打开小说——所有操作以 currentNovel().dir 为根）
+  ipcMain.handle(IPC.snapshotCreate, (_e, p: { note?: string }) =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      return createSnapshot(novel.dir, p.note ?? '')
+    })
+  )
+  ipcMain.handle(IPC.snapshotList, () =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      return listSnapshots(novel.dir)
+    })
+  )
+  ipcMain.handle(IPC.snapshotDelete, (_e, p: { id: string }) =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      deleteSnapshot(novel.dir, p.id)
+    })
+  )
+  ipcMain.handle(IPC.snapshotRestore, (_e, p: { id: string }) =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      // 顺序至关重要：停监听（防回写事件风暴/索引抖动）→ 关库（Windows 句柄）
+      // → 换内容 → 重开监听（内部增量校对，恢复后的 mtime 变化自动重索引）
+      stopWatching()
+      closeIndex()
+      try {
+        restoreSnapshot(novel.dir, p.id)
+      } catch (err) {
+        // 恢复失败兜底（M5 审查修复）：尽力回到可编辑状态——否则监听永久停止、
+        // 索引关闭，后续编辑静默不刷新（novel.json 缺失等极端情形重开失败则保持原始错误上抛）
+        try {
+          openNovel(novel.dir)
+          startWatching(win)
+        } catch {
+          /* 二次失败：上抛原始错误，用户重开小说自愈 */
+        }
+        throw err
+      }
+      openNovel(novel.dir)
+      startWatching(win)
+    })
+  )
 
   // M3：AI Provider（ADR-9/16）与 LLM 流式生成（ADR-10）
   ipcMain.handle(IPC.providerList, () => opened(() => listProviders()))

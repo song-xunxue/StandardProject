@@ -119,8 +119,11 @@ export const useAiStore = create<AiState>()((set, get) => ({
   stopGeneration: async () => {
     const gen = get().generation
     if (!gen) return
-    await api().llm.stop(gen.requestId)
+    // 先同步摘除会话再通知主进程：generation 置 null 后 handleChunk 按 requestId 失配
+    // 丢弃迟到分块——否则 IPC 往返期间流式文本可能写入已切换的新章节（M5 审查修复）
     set({ generation: null })
+    deltaHandler = null
+    await api().llm.stop(gen.requestId)
   },
 
   handleChunk: (chunk, onDelta) => {

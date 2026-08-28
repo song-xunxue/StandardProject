@@ -10,7 +10,43 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:icon": "node scripts/gen-icon.mjs",
+    "pack:win": "electron-vite build && electron-builder --win --dir",
+    "dist:win": "electron-vite build && electron-builder --win nsis",
+    "smoke:packaged": "node scripts/smoke-packaged.mjs"
+  },
+  "build": {
+    "appId": "com.liwenyu.novelworkbench",
+    "productName": "MY NovelWorkbench",
+    "directories": {
+      "output": "release"
+    },
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
+    "files": [
+      "out/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-${version}-setup.${ext}",
+      "shortcutName": "MY NovelWorkbench"
+    }
   },
   "dependencies": {
     "@antv/g6": "^5.1.1",
@@ -35,6 +71,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "@vitest/coverage-v8": "^2.1.9",
     "electron": "^35.0.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "jsdom": "^29.1.1",
     "typescript": "^5.5.4",

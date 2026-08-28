@@ -10,6 +10,11 @@
  *   1. M1 初版：init/创建/打开小说、树刷新+图水合、Tab 管理、文件 CRUD、变化订阅
  *   2. M2：新增 createTag（自定义标签写入 novel.json 标签库）
  *   3. M4-B：新增 removeTag（删除自定义标签；仅删库不动节点——节点残留标签渲染回退灰色，可手动摘除）
+ *
+ * 2026-08-28
+ * 变更说明：
+ *   1. M5：新增 restoreSnapshot（快照恢复的前序编排：落盘挂起编辑→清草稿→关 Tab
+ *      卸载章节编辑器（触发其卸载冲刷保存）→ 等 IPC 到达顺序 → 主进程恢复 → 复用 openNovel 水合）
  */
 
 import { create } from 'zustand'
@@ -42,6 +47,8 @@ interface NovelState {
   createNovel: (dir: string, title: string) => Promise<void>
   /** 打开小说并水合 */
   openNovel: (dir: string) => Promise<void>
+  /** 恢复快照：前序落盘/清态后交主进程换内容，再复用 openNovel 全套水合（M5） */
+  restoreSnapshot: (id: string) => Promise<void>
   /** 刷新文件树 + 重新水合图数据；传入变更蓝图清单时走增量合并（watcher 推送路径） */
   refreshTree: (changedBlueprints?: string[]) => Promise<void>
   /** 创建蓝图/章节文件（章节可指定卷目录名） */
@@ -121,6 +128,29 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     // 默认打开第一张蓝图（树的第一层是 blueprints/chapters 两个目录节点，需下钻一层）
     const firstBlueprint = (get().tree[0]?.children ?? []).flatMap((c) => c.children ?? []).find((c) => c.kind === 'blueprint')
     if (firstBlueprint) get().openTab('blueprint', firstBlueprint.path)
+  },
+
+  restoreSnapshot: async (id) => {
+    const dir = get().novel?.dir
+    if (!dir) return
+    // 前序与 openNovel 相同，但必须在主进程替换文件【之前】完成：
+    // 1. 蓝图属性/位置的防抖挂起写盘
+    await useGraphStore.getState().flushDirty()
+    // 落盘存在失败（脏集合非空）则中止恢复（M5 审查修复）：残留脏图会经 hydrate 的
+    // 「脏图保护」用恢复前内存版顶掉磁盘恢复结果，且后续防抖重试还会把旧内容写回
+    const dirtyLeft = useGraphStore.getState().dirtyGraphIds
+    if (dirtyLeft.length > 0) {
+      throw new Error('部分蓝图尚未保存成功，请稍后重试恢复（避免未落盘内容覆盖恢复结果）')
+    }
+    // 2. 清 AI 草稿（防旧正文在恢复后参与上下文组装）
+    useAiStore.getState().setDraft(null)
+    // 3. 关全部 Tab：章节编辑器卸载会冲刷其 600ms 防抖保存（旧内容先落盘，恢复随后覆盖）
+    set({ tabs: [], activeTabId: null })
+    // 4. 等冲刷保存的 IPC 先于恢复指令到达主进程（invoke 到达顺序=发送顺序，150ms 裕量）
+    await new Promise((r) => setTimeout(r, 150))
+    await api().fs.snapshotRestore(id)
+    // 5. 复用完整打开流程：flush 空转 → IPC openNovel（主进程已重开监听）→ 全量水合 → 开第一张蓝图
+    await get().openNovel(dir)
   },
 
   refreshTree: async (changedBlueprints) => {

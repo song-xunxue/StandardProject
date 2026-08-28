@@ -9,6 +9,10 @@
  *   1. M1 初版：小说元信息/文件树/章节文档/最近列表 + fs 通道 IPC 契约
  *   2. M2：新增 novel.json 元信息读写与资源库通道；节点补充 refTarget 字段
  *   3. M3：新增 AI Provider 配置与 LLM 流式生成契约（provider:* / llm:* 通道 + llm:chunk 推送）
+ *
+ * 2026-08-28
+ * 变更说明：
+ *   1. M5：新增快照契约（SnapshotInfo 类型 + fs:snapshot* 四通道，ADR-14 评估通过后实现）
  */
 
 /** 小说元信息（novel.json） */
@@ -27,6 +31,20 @@ export interface RecentNovel {
   dir: string
   title: string
   openedAt: string
+}
+
+/**
+ * 小说快照信息（novelDir/.snapshots/<id>/manifest.json，M5）
+ * id 形如 snap-YYYYMMDD-HHmmss-SSS，字典序=时间序；manifest 存在即快照完整
+ */
+export interface SnapshotInfo {
+  id: string
+  createdAt: string
+  /** 用户备注（创建时可选填写） */
+  note: string
+  novelTitle: string
+  /** 快照包含的文件数（不含排除项与 manifest 自身） */
+  fileCount: number
 }
 
 /** 文件树节点 */
@@ -73,6 +91,11 @@ export const IPC = {
   listResources: 'fs:listResources', // () => Array<{ path, template }>（path=相对全局资源目录的文件名）
   saveResource: 'fs:saveResource', // (payload: { template }) => { path }（全局资源目录内新建/覆盖）
   deleteResource: 'fs:deleteResource', // (payload: { path }) => void（path 为 listResources 返回的相对路径）
+  // M5：小说快照（ADR-14）——.snapshots/ 目录拷贝；restore 在主进程内完成 停监听→备份→换内容→重开监听
+  snapshotCreate: 'fs:snapshotCreate', // (payload: { note? }) => SnapshotInfo
+  snapshotList: 'fs:snapshotList', // () => SnapshotInfo[]（新→旧；残缺快照不显示）
+  snapshotDelete: 'fs:snapshotDelete', // (payload: { id }) => void
+  snapshotRestore: 'fs:snapshotRestore', // (payload: { id }) => void（当前内容自动备份后覆盖恢复）
 
   // M3：AI Provider（ADR-9/16）
   providerList: 'provider:list', // () => ProviderInfo[]

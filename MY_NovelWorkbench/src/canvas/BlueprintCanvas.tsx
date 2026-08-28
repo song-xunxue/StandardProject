@@ -18,6 +18,13 @@
  *      （onConnect，连到代理节点即跨图边）、拖拽结束坐标回写（onNodeDragStop）、
  *      Delete 键删除（onNodesDelete/onEdgesDelete）、选中态通知（onSelectionChange）、
  *      画布工具条与资源库浮层挂载
+ *
+ * 2026-08-28
+ * 变更说明：
+ *   1. M5：开启 onlyRenderVisibleElements 视口虚拟化（大画布只渲染可见节点/边）。
+ *      安全性依据（@xyflow 源码 getNodesInside）：未测量节点 forceInitialRender
+ *      必定渲染——首帧全渲染完成测量后裁剪才生效，fitView/拖拽/选中机制不受影响；
+ *      未测量节点的存在也保证 dimensions 回灌陷阱（见下方镜像注释）不因虚拟化加剧
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -361,6 +368,7 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
         fitView
         minZoom={0.2}
         maxZoom={2.5}
+        onlyRenderVisibleElements
         deleteKeyCode={['Delete']}
         connectionLineStyle={{ stroke: '#6c9ef8', strokeWidth: 1.5 }}
         onNodesChange={handleNodesChange}

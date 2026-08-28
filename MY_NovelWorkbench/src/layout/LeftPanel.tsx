@@ -15,6 +15,10 @@
  *   2. M1：真实文件树（novelStore.tree）、新建/打开小说、新建蓝图/章节、重命名/删除
  *   3. M3 交互增强：蓝图按 owner 关系呈现嵌套层级（父级可折叠）
  *   4. M3+ 批次：双击打开 / 目录右键创建（卷与章节自动序号）/ 章节拖动交换
+ *
+ * 2026-08-28
+ * 变更说明：
+ *   1. M5：footer 新增「快照」入口（SnapshotPanel 浮层：创建/列表/恢复/删除，ADR-14）
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -27,6 +31,7 @@ import { defaultTitle, nextNumberedName } from '@/services/naming'
 import { volumeOfChapter } from '@/services/chapterTree'
 import { pathToGraph } from '@/services/graphTraversal'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
+import { SnapshotPanel } from './SnapshotPanel'
 
 const displayTitle = (name: string): string => name.replace(/\.blueprint\.json$/, '').replace(/\.md$/, '')
 
@@ -274,6 +279,7 @@ export function LeftPanel(): ReactElement {
   const versions = typeof window !== 'undefined' ? window.api?.versions : undefined
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  const [snapOpen, setSnapOpen] = useState(false)
   const [menu, setMenu] = useState<{ x: number; y: number; area: MenuArea } | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
@@ -510,6 +516,14 @@ export function LeftPanel(): ReactElement {
           <span className="left-footer-ver">Electron {versions.electron} · Node {versions.node}</span>
           <button
             className="left-footer-btn"
+            title="快照：把当前小说存为可回滚的完整拷贝（.snapshots/，最多 10 份）"
+            disabled={!novel}
+            onClick={() => setSnapOpen(true)}
+          >
+            快照
+          </button>
+          <button
+            className="left-footer-btn"
             title="重建 .index 索引（索引异常时的兜底手段；大目录可能短暂卡顿）"
             disabled={!novel}
             onClick={() => void handleRebuildIndex()}
@@ -518,6 +532,7 @@ export function LeftPanel(): ReactElement {
           </button>
         </div>
       )}
+      {snapOpen && <SnapshotPanel onClose={() => setSnapOpen(false)} />}
       {/* 目录右键菜单：按区域提供创建项（自动序号预填） */}
       {menu && (
         <div ref={menuRef} className="canvas-context-menu tree-context-menu" style={{ left: menu.x, top: menu.y }}>

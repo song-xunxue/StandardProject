@@ -11,6 +11,7 @@
  *   2. M1：新增 fs 通道（小说/文件树/蓝图/章节 CRUD/索引）与目录变化订阅
  *   3. M2：新增元信息读写与资源库通道
  *   4. M3：新增 provider 组（Provider CRUD/测试）与 llm 组（流式生成/中断 + llm:chunk 订阅）
+ *   5. M5：新增快照四通道（创建/列表/删除/恢复）
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
@@ -44,7 +45,11 @@ const api = {
     saveMeta: (meta: unknown) => ipcRenderer.invoke(IPC.saveMeta, { meta }),
     listResources: () => ipcRenderer.invoke(IPC.listResources),
     saveResource: (template: unknown) => ipcRenderer.invoke(IPC.saveResource, { template }),
-    deleteResource: (path: string) => ipcRenderer.invoke(IPC.deleteResource, { path })
+    deleteResource: (path: string) => ipcRenderer.invoke(IPC.deleteResource, { path }),
+    snapshotCreate: (note: string) => ipcRenderer.invoke(IPC.snapshotCreate, { note }),
+    snapshotList: () => ipcRenderer.invoke(IPC.snapshotList),
+    snapshotDelete: (id: string) => ipcRenderer.invoke(IPC.snapshotDelete, { id }),
+    snapshotRestore: (id: string) => ipcRenderer.invoke(IPC.snapshotRestore, { id })
   },
   /** 订阅小说目录变化（返回取消订阅函数）；负载 { tree, changed } */
   onNovelChanged: (callback: (payload: unknown) => void): (() => void) => {

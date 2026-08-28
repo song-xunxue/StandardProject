@@ -8,6 +8,13 @@
  * 2026-08-25
  * 变更说明：
  *   1. M1 初版：300ms 防抖；忽略 .index/ 自身变化；应用内保存触发的重扫幂等
+ *
+ * 2026-08-28
+ * 变更说明：
+ *   1. M5：打开小说改走 syncIndex 增量校对（原全量 rebuildIndex 会清空 mtime+size
+ *      基线，第二次打开仍重读全部文件，冷启动不达标）；全量重建保留给手动命令兜底。
+ *      附耗时日志（ms + 变更/清理计数），为大画布性能问题提供第一手数据
+ *   2. M5：忽略 .snapshots/ 自身变化（快照创建/恢复是整目录拷贝，会引发事件风暴）
  */
 
 import { watch, type FSWatcher } from 'node:fs'
@@ -15,7 +22,7 @@ import type { BrowserWindow } from 'electron'
 import { IPC_PUSH, type TreeNode } from '../shared/types'
 import { currentNovel } from './services/novelService'
 import { readTree } from './services/fileService'
-import { indexBlueprint, indexChapter, rebuildIndex } from './services/indexService'
+import { indexBlueprint, indexChapter, syncIndex } from './services/indexService'
 
 const DEBOUNCE_MS = 300
 
@@ -29,17 +36,23 @@ export function startWatching(win: BrowserWindow): void {
   stopWatching()
   const novel = currentNovel()
   if (!novel) return
-  // 切换小说后索引库指向新目录，先全量重建一次保证基线正确
+  // 增量校对建立基线：切换小说后索引库指向新目录，未变文件（mtime+size 一致）零重读；
+  // 全量重建由「重建索引」命令兜底（索引损坏/怀疑漂移时使用）
+  const t0 = Date.now()
   try {
-    rebuildIndex()
+    const stats = syncIndex()
+    console.log(
+      `[watcher] 索引校对完成 ${Date.now() - t0}ms（重索引 ${stats.changed}，清理 ${stats.removed}，` +
+        `当前 ${stats.nodes} 节点 / ${stats.edges} 边）`
+    )
   } catch (err) {
     console.error('[watcher] 初始索引失败:', err)
   }
   watcher = watch(novel.dir, { recursive: true }, (_event, filename) => {
     const rel = String(filename ?? '').replace(/\\/g, '/')
     if (rel === '') return
-    // 忽略索引目录自身的抖动
-    if (rel.startsWith('.index/')) return
+    // 忽略索引目录与快照目录自身的抖动（快照创建/恢复=整目录拷贝，会引发事件风暴）
+    if (rel === '.index' || rel === '.snapshots' || rel.startsWith('.index/') || rel.startsWith('.snapshots/')) return
     pendingPaths.add(rel)
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {

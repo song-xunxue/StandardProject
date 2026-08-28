@@ -174,6 +174,12 @@ export function ChapterEditor(props: { path: string }): ReactElement {
   // 编辑器实例登记（AI 面板流式写入用）+ 卸载冲刷未保存编辑
   useEffect(() => {
     if (!editor) return
+    // 换章/重挂载即中断进行中的生成（M5 审查修复）：generationWriter 实时取
+    // chapterEditor，不中断的话旧会话的流式分块会写进新章节并随防抖保存持久化。
+    // 先 stop 再登记——stop 内部先同步置 generation=null（迟到分块按 requestId 丢弃，
+    // finalize 落在 editor=null 窗口），已生成部分保留在原章节的卸载冲刷里
+    const ai = useAiStore.getState()
+    if (ai.generation !== null) void ai.stopGeneration()
     setChapterEditor(editor)
     return () => {
       setChapterEditor(null)

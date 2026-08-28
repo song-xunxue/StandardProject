@@ -2,10 +2,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v1.1 |
+| 文档版本 | v2.1 |
 | 作者 | 李文煜 |
-| 日期 | 2026-08-25 |
-| 状态 | 已确认（技术栈与全部 Open Questions 已闭环，见 ADR-1~16） |
+| 日期 | 2026-08-28 |
+| 状态 | **M0-M5 全部完成**（快照已实现，ADR-14 闭环；全部 Open Questions 已闭环，见 ADR-1~16） |
 | 配套文档 | [docs/01-产品需求文档.md](docs/01-产品需求文档.md) · [docs/02-技术调研报告.md](docs/02-技术调研报告.md) |
 
 ---
@@ -47,7 +47,7 @@ AI 辅助的小说创作工作台（桌面应用）：**ComfyUI 式节点工作�
 | ADR-11 | 开发流程 | **M0 PoC 先行** | 子图数据模型是第一技术风险，风险前置 | 直接开发（风险后置） |
 | ADR-12 | 蓝图嵌套深度上限（PRD Q5） | **上限 8 层** | 防无限递归与 UI 迷航（面包屑最多 8 级）；创建第 9 层蓝图节点时界面提示并阻止。8 层已远超「小说→内容→大纲→章节→场景」的实际深度（4-5 层） | 不设限（递归与迷航风险） |
 | ADR-13 | 多本小说同时打开（PRD Q6） | **v1 单本**：单窗口单小说目录 | 简化窗口/Tab/索引架构；「最近打开」列表快速切换 | 多本同时打开（M5 后评估多 Tab 架构） |
-| ADR-14 | 版本管理（PRD Q7） | **v1 不内置 git，纯文件天然 git 友好** | 用户可对小说目录自行 `git init`；应用内快照（复制目录到 .snapshots/）列为 M5 评估项 | 内置 git 集成（复杂度高，需求未验证） |
+| ADR-14 | 版本管理（PRD Q7） | **v1 不内置 git，纯文件天然 git 友好**；应用内快照 M5 已实现（.snapshots/ 目录拷贝，上限 10 份，恢复前自动备份） | 用户可对小说目录自行 `git init`；快照为应用内轻量回滚 | 内置 git 集成（复杂度高，需求未验证） |
 | ADR-15 | 语义连线映射表（PRD Q8） | **箭头=因果/顺序（展开、前后文推进）· 直线=并列关联（同类设定互指）· 虚线=参考/伏笔（弱关联、跨章呼应）** | 映射关系同时决定上下文注入权重（虚线参考边 < 实线关联边 < 箭头顺序边）；连线可附 label 说明具体语义 | 更多种类（用户认知负担，v2 扩展） |
 | ADR-16 | API Key 存储（NFR-04 落点） | **Electron safeStorage 加密后存 userData 目录** | 系统级密钥链加密，不明文落盘；`.env` 仅用于开发期联调，不分发 | 明文 JSON（不安全）；.env 分发（桌面应用无意义） |
 
@@ -167,14 +167,16 @@ MyNovel/
 | 图谱分析提示 | 孤立节点（无任何链接）与未回收「伏笔」标签节点可高亮提示 |
 | 资源库跨小说 | 资源库目录独立于单本小说，可跨小说引用 |
 
-### M5：打磨与发布（2 周，前置：全部）
+### M5：打磨与发布（2 周，前置：全部）✅ **已完成（2026-08-28，验收 4/4 PASS，CDP/打包冒烟全过）**
+
+**完成情况**：①**性能**——画布开 `onlyRenderVisibleElements` 视口虚拟化（源码级验证 @xyflow `getNodesInside` 对未测量节点 forceInitialRender 必渲染，首帧测量后裁剪，fitView/受控镜像机制不受影响；CDP 实测 500 节点：fitView 300 DOM → 2.5x 缩放 4 个 → 0.2x 回 300，右键创建/拖拽持久化/选中回归全过）；冷启动索引改 `syncIndex` 增量校对（原 `startWatching` 内嵌全量 `rebuildIndex` 清空 mtime+size 基线致每次打开重读全部文件——现保留基线跨会话生效，仅重读变化文件+清理删除残留；`indexChapter` 长章节只读头部 64KB 提取 frontmatter，闭合符不在头部回退全文读；**10 万字 51 文件冷启动实测 60ms**，目标 <5s 余量 83 倍，恢复相同内容因 Windows CopyFile 保留 mtime 实现零重索引）。②**快照（ADR-14 评估通过并实现）**——`snapshotService`（.snapshots/ 目录拷贝、manifest 最后写=完成标记、保留上限 10、id 正则防穿越、恢复=自动备份→清空应用内容→拷回、.git/.index 不动）；恢复编排主进程 `stopWatching→closeIndex→恢复→openNovel→startWatching`（增量校对自动对齐索引），渲染层 `restoreSnapshot` 前序 flushDirty/清草稿/关 Tab 卸载冲刷/150ms IPC 顺序保证；watcher 排除 .snapshots/；UI 左栏「快照」浮层（创建/列表/恢复/删除），CDP 冒烟全过。③**打包**——electron-builder 26.15.3（npmRebuild:false——better-sqlite3 v13 为 N-API prebuild 直装无需 rebuild，R5 以「prebuild 通用 ABI + 打包态实测」方式解除）；nsis 非一键安装包 102MB；`--smoke` 自检模式（better-sqlite3 内存库读写/渲染产物/userData 三项）+ `smoke-packaged.mjs` 驱动；**静默安装→已安装 exe smoke PASS→静默卸载**全链路验证；CSP 复检通过（script-src 'self'、connect-src 未放开 https——LLM 在主进程不受渲染层 CSP 约束，ws: 仅 dev HMR 生产无攻击面）；零依赖图标生成（PNG-in-ICO）。④**用户文档**——README 重写覆盖创建小说→蓝图→正文→AI→图谱→快照全流程 + Provider 配置表 + 数据结构 + 故障排查。
 
 | 任务 | 验收标准 |
 |---|---|
-| 性能优化 | 大画布视口虚拟化；索引增量更新（10 万字小说冷启动索引 < 5s） |
-| electron-builder 打包 | Windows nsis 安装包可安装运行；**better-sqlite3 原生模块 ABI 匹配冒烟测试通过**（见风险 R5）；CSP 收紧复检 |
-| 快照功能评估 | 评估目录快照方案，通过则实现（ADR-14） |
-| 用户文档 | README/使用说明覆盖创建小说到 AI 创作全流程 |
+| 性能优化 | 大画布视口虚拟化；索引增量更新（10 万字小说冷启动索引 < 5s）✅ 60ms |
+| electron-builder 打包 | Windows nsis 安装包可安装运行；**better-sqlite3 原生模块 ABI 匹配冒烟测试通过**（见风险 R5）✅；CSP 收紧复检 ✅ |
+| 快照功能评估 | 评估目录快照方案，通过则实现（ADR-14）✅ 已实现 |
+| 用户文档 | README/使用说明覆盖创建小说到 AI 创作全流程 ✅ |
 
 ## 5. 风险与对策
 
@@ -229,3 +231,4 @@ MY_NovelWorkbench/
 | 2026-08-27 | v1.8 | 章节连续性 + 左栏交互批次：① 前情提要——写第 N 章自动注入前 2 章正文尾部各 800 字（无需手动关联，解决「写第二章 AI 不知道第一章」）；② 蓝图 Tab/树点击同步画布路由（activateTab，修 Tab 切换无响应）；③ 卷（Volume）支持——chapters/ 一层卷目录（readTree/createFile/createVolume，.gitkeep 占位）；④ 左栏右键菜单（blueprints→新建蓝图 / chapters→新增卷·章节 / 卷→卷内新增章节），「第N卷/第N章」中文序号自动递增（numToCn/cnToNum/nextNumberedName）；⑤ 左栏统一双击打开（单击仅选中）；⑥ 章节树项拖动交换位置（fs:exchangeFiles 文件名互换=内容对调，章节/蓝图内部 title 同步）；⑦ 章节未链接蓝图的引导提示（含多章共享设定节点方法）。121 用例全绿 |
 | 2026-08-27 | v1.9 | 全量功能审查批次（五维 47 代理：验收复核/近期改动逻辑/回归/UX性能/测试缺口，26 PASS+5 PARTIAL，发现 19 项确认缺陷全修复）：**数据安全**——章节交换后已打开编辑器重挂载重读（chapterReloadSeq，防旧缓冲回写吞掉交换内容）、重命名后 ref 节点 refTarget 随迁；**正确性**——章节/卷排序改「第N章」数字序（shared/naming chapterNameCompare，zh-CN 拼音序乱序的系统性修复：前情提要不选错章/左栏顺序正确）、卷内章节接入 wikilink 补全/预览/跳转与 ref 指向候选（flattenChapterFiles 共享摊平）、rebuildIndex 递归卷目录、跨分组（顶层↔卷）拖动交换、中文序号 >99 回绕阿拉伯不撞车+畸形输入拒绝、蓝图 owner 成环左栏兜底显示；**性能**——watcher 推送变更清单→增量合并（graphStore.mergeRefresh：未变图对象引用稳定，保存后 IO 从 O(全蓝图) 降为 O(变更)）、Inspector 文本输入本地态失焦提交（消除每键 O(N) 全局扩散）、MiniMap 着色回调稳定化、拖拽中 hydrate 镜像重置守卫（draggingRef）；**UX**——两处右键菜单视口边缘钳制+Esc/外点关闭统一、卷行可折叠、创建失败弹窗反馈、confirm 对话框主按钮聚焦（Enter/Esc 可用）、nokey 类防画布外 Delete 误删节点、续写超时提示。131 用例全绿（+10） |
 | 2026-08-28 | v2.0 | M4-B 完成并通过审查修复（验收 3/3 PASS + CDP 冒烟 17 步全过）：①资源库跨小说——新 resourceService（userData/resources 全局目录，ADR-7 适用范围界定：应用级创作资产），旧小说 resources/ 自动迁移（tmp+rename 原子复制/同名跳过/.migrated 完成标记/目录级容错/撞车告警）；②别名编辑入口——AliasEditor 共用组件挂节点 Inspector 与章节元信息区（非法字符校验防 frontmatter 损坏），关键词兜底的数据入口补齐；③frontmatter 未知键与非键值行（注释/点号键/续行）原样保留，用户手写 YAML 不再保存即丢；④重建索引按钮（左栏 footer；rebuildIndex 强制重开连接加固）；⑤标签删除（removeTag 内置双层禁删 + 菜单删除入口 + 引用计数提示；标签名非法字符 M2 既有缺口补防）；顺带修 chapter-status 死 CSS。审查（4 代理 + 反驳式复核）：38 通过、1 中危（迁移后删除模板重开复活）+ 16 低危全修复含回归用例。152 用例全绿（+21：resourceService 12/novelStore 4/frontmatter 5） |
+| 2026-08-28 | v2.1 | M5 完成并通过审查（验收 4/4 PASS，详见 M5 完成情况）：①性能——画布 onlyRenderVisibleElements 视口虚拟化（CDP 实测 500 节点 300→4 DOM，交互回归全过）+ 冷启动 syncIndex 增量校对（mtime+size 基线跨会话保留 + 章节头部 64KB 读取；10 万字实测 60ms < 5s）+ 压力脚本支持长章节生成；②快照（ADR-14 闭环）——snapshotService + 四 IPC 通道 + 恢复编排（主进程停监听/关库/备份/换内容/重开；渲染层前序落盘与 IPC 顺序保证）+ SnapshotPanel UI，CDP 冒烟全过；③打包——electron-builder nsis 102MB 安装包，静默安装/运行 smoke（better-sqlite3 N-API prebuild 直用，R5 解除）/静默卸载全链路验证，--smoke 自检模式 + 零依赖图标生成；④README 重写为全流程用户文档。**排障记录**：本机 Node 24.11.1 Windows 下 `rmSync` 删除非 ASCII 文件名的单文件会硬崩进程（exit 127，无 JS 栈；unlinkSync/目录级 recursive rmSync/ASCII 均正常）——文件级删除统一改 unlinkSync 并在代码注释留档。167 用例全绿（+15：indexService 7/snapshotService 8） |

@@ -1864,3 +1864,27 @@
   flex: 1;
   min-height: 0;
 }
+
+/* ---- M5 快照浮层（复用 resource-panel 样式族，外层改为居中遮罩） ---- */
+.snapshot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+/* resource-panel 原为画布内绝对定位，浮层内改回流式（遮罩负责定位） */
+.snapshot-overlay .resource-panel {
+  position: relative;
+  top: auto;
+  right: auto;
+  width: 380px;
+  max-height: 70vh;
+}
+
+.snapshot-panel .snap-note {
+  color: var(--accent);
+}

@@ -44,6 +44,8 @@ export interface ChapterDoc {
   title: string
   tags: string[]
   aliases: string[]
+  /** frontmatter 未知键的原样行（date/status 等用户手写键，保存时原样回写不丢失） */
+  extraLines?: string[]
   content: string
 }
 
@@ -67,9 +69,10 @@ export const IPC = {
   indexStats: 'fs:indexStats', // () => { nodes: number; edges: number; lastBuiltAt: string | null }
   readMeta: 'fs:readMeta', // () => NovelMeta（当前小说的 novel.json）
   saveMeta: 'fs:saveMeta', // (payload: { meta }) => NovelMeta（标签库等元信息更新）
-  listResources: 'fs:listResources', // () => ResourceTemplate[]
-  saveResource: 'fs:saveResource', // (payload: { template }) => { path }（resources/ 下新建/覆盖）
-  deleteResource: 'fs:deleteResource', // (payload: { path }) => void
+  // M4-B 起资源库为全局目录（userData/resources），跨小说共享，不依赖打开小说
+  listResources: 'fs:listResources', // () => Array<{ path, template }>（path=相对全局资源目录的文件名）
+  saveResource: 'fs:saveResource', // (payload: { template }) => { path }（全局资源目录内新建/覆盖）
+  deleteResource: 'fs:deleteResource', // (payload: { path }) => void（path 为 listResources 返回的相对路径）
 
   // M3：AI Provider（ADR-9/16）
   providerList: 'provider:list', // () => ProviderInfo[]
@@ -138,7 +141,7 @@ export interface BlueprintFileNode {
 }
 
 /**
- * 资源库模板（resources/*.json，M2 v1 单本内；M4 评估跨小说独立目录）
+ * 资源库模板（userData/resources/*.json，M4-B 起全局目录跨小说共享；旧小说目录内 resources/ 打开时自动迁移）
  * - node：节点模板（保存时剥离 id/graphId/position/refGraphId/content，插入时重新生成）
  * - tagSet：标签组模板（一键为选中节点贴一组标签）
  */

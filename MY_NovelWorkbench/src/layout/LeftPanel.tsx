@@ -439,6 +439,17 @@ export function LeftPanel(): ReactElement {
     void exchangeFiles(pathA, pathB)
   }
 
+  /** 重建索引（M4-B 入口补齐：IPC 链路 M1 已通，此前仅无 UI）；主进程同步 IO，大目录可能短暂卡顿 */
+  const handleRebuildIndex = async (): Promise<void> => {
+    try {
+      const { nodes, edges } = await window.api.fs.rebuildIndex()
+      await dialogConfirm(`索引重建完成：节点 ${nodes} · 边 ${edges}`, '知道了')
+    } catch (err) {
+      console.error('[LeftPanel] 重建索引失败:', err)
+      await dialogConfirm(`索引重建失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+    }
+  }
+
   const menuItems: Array<{ key: string; label: string; run: () => Promise<void> }> =
     menu === null
       ? []
@@ -496,7 +507,15 @@ export function LeftPanel(): ReactElement {
       </div>
       {versions && (
         <div className="left-footer">
-          Electron {versions.electron} · Node {versions.node}
+          <span className="left-footer-ver">Electron {versions.electron} · Node {versions.node}</span>
+          <button
+            className="left-footer-btn"
+            title="重建 .index 索引（索引异常时的兜底手段；大目录可能短暂卡顿）"
+            disabled={!novel}
+            onClick={() => void handleRebuildIndex()}
+          >
+            重建索引
+          </button>
         </div>
       )}
       {/* 目录右键菜单：按区域提供创建项（自动序号预填） */}

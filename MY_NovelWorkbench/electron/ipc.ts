@@ -9,6 +9,7 @@
  *   1. M1 初版：fs:* 通道注册；打开/创建小说后自动启动监听与索引
  *   2. M2：新增元信息读写（readMeta/saveMeta）与资源库（listResources/saveResource/deleteResource）
  *   3. M3：新增 AI Provider（provider:*）与 LLM 流式生成（llm:*，chunk 经 llm:chunk 推送）
+ *   4. M4-B：资源库三通道路由至 resourceService（全局目录跨小说，不依赖打开小说）
  */
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
@@ -19,17 +20,15 @@ import {
   createFile,
   createVolume,
   deleteFile,
-  deleteResource,
   exchangeFiles,
-  listResources,
   readBlueprint,
   readChapter,
   readTree,
   renameFile,
   saveBlueprint,
-  saveChapter,
-  saveResource
+  saveChapter
 } from './services/fileService'
+import { deleteResource, listResources, saveResource } from './services/resourceService'
 import { deleteProvider, listProviders, saveProvider, testProvider } from './services/providerService'
 import { startGeneration, stopGeneration } from './services/llmService'
 import { indexStats, rebuildIndex, closeIndex } from './services/indexService'
@@ -97,6 +96,8 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.saveMeta, (_e, p: { meta: unknown }) =>
     opened(() => saveMeta(p.meta as Parameters<typeof saveMeta>[0]))
   )
+  // M4-B：资源库（全局目录跨小说，resourceService；三通道均不依赖打开小说，
+  // opened 仅作错误消息归一化器统一口径，并非「需打开小说」守卫）
   ipcMain.handle(IPC.listResources, () => opened(() => listResources()))
   ipcMain.handle(IPC.saveResource, (_e, p: { template: unknown }) =>
     opened(() => saveResource(p.template as Parameters<typeof saveResource>[0]))

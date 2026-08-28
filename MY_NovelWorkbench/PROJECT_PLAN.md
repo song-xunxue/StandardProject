@@ -155,9 +155,11 @@ MyNovel/
 | 上下文组装 v1 | 三层优先级 + 深度截断 + 预算分层 + 关键词兜底全部实现；组装逻辑纯函数单测覆盖 ≥ 90% 分支 |
 | Context Viewer | 面板可查看当前实际组装的 prompt 全文、各层 token 占用与预算命中率 |
 
-### M4：全局图谱 + 资源库完善（2 周，前置：M2 标签、M1 索引）✅ **M4-A 已完成（2026-08-27）；M4-B（资源库跨小说 + 审查遗留低危）待启动**
+### M4：全局图谱 + 资源库完善（2 周，前置：M2 标签、M1 索引）✅ **已完成（M4-A 2026-08-27；M4-B 2026-08-28，验收 3/3 PASS，CDP 冒烟 17 步全过）**
 
 **M4-A 完成情况**：AntV G6 5.1.1 全局图谱视图（`src/graph/GlobalGraphView.tsx`）——图标条 graph 项进入全宽覆盖层（再点同图标切换返回）；全部节点/边（跨蓝图）投影为 d3-force 力导向图；节点按标签着色（回退类型色：蓝图蓝/引用绿/文本灰），大小随度数增长；图例标签勾选过滤（不选=全部）；点击节点跳转其所在蓝图并选中（自动关闭图谱回工作区）；分析开关：**孤立节点（度=0）高亮**与**未回收「伏笔」标签节点高亮**（红底!图标）；边按语义着色（箭头蓝/直线灰/虚线紫+虚线样式）；拖拽平移/滚轮缩放/节点拖动；挂载取快照构建（观察视图，重开即刷新）。
+
+**M4-B 完成情况**：①**资源库跨小说**——新 `electron/services/resourceService.ts`，模板迁至全局目录 `userData/resources/`（FR-08「跨小说复用」；ADR-7 适用范围界定：真相源=小说内容，应用级创作资产与 providers.json/recent.json 同级），IPC 三通道与 UI 零结构改动；旧小说目录内 `resources/` 打开时自动迁移（幂等：tmp+rename 原子复制、同名跳过保全局版、`.migrated` 完成标记防已删模板复活、旧目录保留不删）；②**别名编辑入口**——共用 `AliasEditor`（chips + 非法字符校验）挂 InspectorPanel 节点态与 ChapterEditor 元信息区，补齐关键词兜底的数据入口；③**frontmatter 未知键保留**——非应用自管键与一切非键值行（注释/点号键/续行）原样行往返不再静默丢失；④**重建索引入口**——左栏 footer 按钮（M1 遗留：IPC 已通纯 UI 缺口），rebuildIndex 强制重开连接加固；⑤**标签删除**——`removeTag`（内置标签双层禁删，保护伏笔分析依赖）+ 标签下拉菜单删除入口（删前节点引用计数提示；M2 既有标签名非法字符缺口一并补防）。三视角审查（4 代理）+ 反驳式复核：38 项通过、1 中危（迁移复活）+ 16 低危确认，全部修复含回归用例。152 用例全绿（131→152）。
 
 | 任务 | 验收标准 |
 |---|---|
@@ -226,3 +228,4 @@ MY_NovelWorkbench/
 | 2026-08-27 | v1.7 | M3 人工联调修复批次（CDP 远程实测驱动）：① 撤受控选中回灌（M2 审查修复引入的结构变更无限渲染循环——建节点/建连线全黑崩溃的根因），改显式 onNodeClick/onEdgeClick/onPaneClick 事件；② 节点拖拽跟手（受控 nodes 必须接 onNodesChange：本地镜像承接 position/remove，dimensions/select 回灌会与 RF 测量形成主线程打满循环）；③ 三类节点创建移入画布右键菜单（落点=鼠标位置，canvasCreateBridge 单一实现）；④ 续写/改写无编辑器时自动切换最近章节并等待就绪；⑤ 左侧蓝图树按 owner 归属呈现目录式层级（父级可折叠，磁盘真相不变）；⑥ DeepSeek API 全链路联调通过（连接测试 + 流式续写 676 字端到端） |
 | 2026-08-27 | v1.8 | 章节连续性 + 左栏交互批次：① 前情提要——写第 N 章自动注入前 2 章正文尾部各 800 字（无需手动关联，解决「写第二章 AI 不知道第一章」）；② 蓝图 Tab/树点击同步画布路由（activateTab，修 Tab 切换无响应）；③ 卷（Volume）支持——chapters/ 一层卷目录（readTree/createFile/createVolume，.gitkeep 占位）；④ 左栏右键菜单（blueprints→新建蓝图 / chapters→新增卷·章节 / 卷→卷内新增章节），「第N卷/第N章」中文序号自动递增（numToCn/cnToNum/nextNumberedName）；⑤ 左栏统一双击打开（单击仅选中）；⑥ 章节树项拖动交换位置（fs:exchangeFiles 文件名互换=内容对调，章节/蓝图内部 title 同步）；⑦ 章节未链接蓝图的引导提示（含多章共享设定节点方法）。121 用例全绿 |
 | 2026-08-27 | v1.9 | 全量功能审查批次（五维 47 代理：验收复核/近期改动逻辑/回归/UX性能/测试缺口，26 PASS+5 PARTIAL，发现 19 项确认缺陷全修复）：**数据安全**——章节交换后已打开编辑器重挂载重读（chapterReloadSeq，防旧缓冲回写吞掉交换内容）、重命名后 ref 节点 refTarget 随迁；**正确性**——章节/卷排序改「第N章」数字序（shared/naming chapterNameCompare，zh-CN 拼音序乱序的系统性修复：前情提要不选错章/左栏顺序正确）、卷内章节接入 wikilink 补全/预览/跳转与 ref 指向候选（flattenChapterFiles 共享摊平）、rebuildIndex 递归卷目录、跨分组（顶层↔卷）拖动交换、中文序号 >99 回绕阿拉伯不撞车+畸形输入拒绝、蓝图 owner 成环左栏兜底显示；**性能**——watcher 推送变更清单→增量合并（graphStore.mergeRefresh：未变图对象引用稳定，保存后 IO 从 O(全蓝图) 降为 O(变更)）、Inspector 文本输入本地态失焦提交（消除每键 O(N) 全局扩散）、MiniMap 着色回调稳定化、拖拽中 hydrate 镜像重置守卫（draggingRef）；**UX**——两处右键菜单视口边缘钳制+Esc/外点关闭统一、卷行可折叠、创建失败弹窗反馈、confirm 对话框主按钮聚焦（Enter/Esc 可用）、nokey 类防画布外 Delete 误删节点、续写超时提示。131 用例全绿（+10） |
+| 2026-08-28 | v2.0 | M4-B 完成并通过审查修复（验收 3/3 PASS + CDP 冒烟 17 步全过）：①资源库跨小说——新 resourceService（userData/resources 全局目录，ADR-7 适用范围界定：应用级创作资产），旧小说 resources/ 自动迁移（tmp+rename 原子复制/同名跳过/.migrated 完成标记/目录级容错/撞车告警）；②别名编辑入口——AliasEditor 共用组件挂节点 Inspector 与章节元信息区（非法字符校验防 frontmatter 损坏），关键词兜底的数据入口补齐；③frontmatter 未知键与非键值行（注释/点号键/续行）原样保留，用户手写 YAML 不再保存即丢；④重建索引按钮（左栏 footer；rebuildIndex 强制重开连接加固）；⑤标签删除（removeTag 内置双层禁删 + 菜单删除入口 + 引用计数提示；标签名非法字符 M2 既有缺口补防）；顺带修 chapter-status 死 CSS。审查（4 代理 + 反驳式复核）：38 通过、1 中危（迁移后删除模板重开复活）+ 16 低危全修复含回归用例。152 用例全绿（+21：resourceService 12/novelStore 4/frontmatter 5） |

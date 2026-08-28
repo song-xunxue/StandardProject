@@ -1,14 +1,15 @@
 /**
- * 资源库面板（M2 v1，浮层）：节点模板 / 标签组模板的保存与插入
- * 存储于小说目录 resources/*.json（M4 评估跨小说独立目录）；
+ * 资源库面板（浮层）：节点模板 / 标签组模板的保存与插入
+ * M4-B 起存储于全局目录 userData/resources/*.json（跨小说共享，FR-08）；
  * 列表为打开时拉取 + 保存/删除后本地刷新（不依赖 watcher 推送）
  *
  * 作者: 李文煜
  * 日期: 2026-08-26
  *
- * 2026-08-26
+ * 2026-08-28
  * 变更说明：
  *   1. M2 初版
+ *   2. M4-B：存储迁全局目录（跨小说）；面板标题标注「跨小说」，模板标签不在当前小说标签库时回退灰色
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -124,7 +125,7 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
   return (
     <div className="resource-panel">
       <div className="resource-header">
-        <span>资源库</span>
+        <span>资源库（跨小说共享）</span>
         <button className="resource-close" title="关闭" onClick={props.onClose}>
           ×
         </button>

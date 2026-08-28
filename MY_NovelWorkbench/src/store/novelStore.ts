@@ -9,6 +9,7 @@
  * 变更说明：
  *   1. M1 初版：init/创建/打开小说、树刷新+图水合、Tab 管理、文件 CRUD、变化订阅
  *   2. M2：新增 createTag（自定义标签写入 novel.json 标签库）
+ *   3. M4-B：新增 removeTag（删除自定义标签；仅删库不动节点——节点残留标签渲染回退灰色，可手动摘除）
  */
 
 import { create } from 'zustand'
@@ -55,6 +56,8 @@ interface NovelState {
   deleteFile: (path: string) => Promise<void>
   /** 新建自定义标签（写回 novel.json 并更新本地元信息）；重名返回已有定义 */
   createTag: (name: string, color: string) => Promise<TagDef | null>
+  /** 删除自定义标签（内置标签禁删——全局图谱伏笔分析等硬依赖）；已贴节点的残留标签不动（回退灰色） */
+  removeTag: (name: string) => Promise<void>
   /** 打开 Tab（已打开则激活） */
   openTab: (kind: OpenTab['kind'], path: string, title?: string) => void
   /** 激活 Tab；蓝图 Tab 同步画布路由到该蓝图（Tab 栏点击与左栏树点击切换都走这里） */
@@ -215,6 +218,17 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     const meta = await api().fs.saveMeta({ ...novel, tagLibrary })
     set({ novel: meta })
     return meta.tagLibrary.find((t) => t.name === name) ?? null
+  },
+
+  removeTag: async (name) => {
+    const novel = get().novel
+    if (!novel) return
+    const tag = novel.tagLibrary.find((t) => t.name === name)
+    // 内置标签禁删（GlobalGraphView 未回收伏笔分析硬编码依赖「伏笔」等内置标签）
+    if (!tag || tag.builtin) return
+    const tagLibrary = novel.tagLibrary.filter((t) => t.name !== name)
+    const meta = await api().fs.saveMeta({ ...novel, tagLibrary })
+    set({ novel: meta })
   },
 
   openTab: (kind, path, title) => {

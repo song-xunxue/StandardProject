@@ -8,6 +8,7 @@
  * 变更说明：
  *   1. M1 初版：标准目录模板落盘、novel.json 校验、recent.json 维护（userData）
  *   2. M2：新增 readMeta/saveMeta（标签库等元信息的渲染层读写）
+ *   3. M4-B：打开小说时触发旧 resources/ 目录幂等迁移入全局资源库（resourceService）
  */
 
 import { app } from 'electron'
@@ -16,6 +17,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { builtinTagLibrary, novelFileMap } from '../../shared/novelTemplate'
 import { sanitizeFileName } from '../../shared/sanitize'
+import { migrateLegacyResources } from './resourceService'
 import type { NovelMeta, RecentNovel } from '../../shared/types'
 
 /** 当前打开的小说（模块级状态，主进程单例） */
@@ -94,6 +96,8 @@ export function openNovel(dir: string): NovelMeta {
   if (!Array.isArray(meta.tagLibrary)) {
     meta.tagLibrary = builtinTagLibrary()
   }
+  // M4-B 数据迁移：旧小说目录内 resources/ 幂等搬入全局资源库（内部逐文件容错，不阻断打开）
+  migrateLegacyResources(dir)
   current = { dir, meta: { ...meta, dir } }
   touchRecent(dir, meta.title)
   return current.meta

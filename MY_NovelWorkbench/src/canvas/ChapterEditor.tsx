@@ -6,11 +6,13 @@
  * 作者: 李文煜
  * 日期: 2026-08-25
  *
- * 2026-08-25
+ * 2026-08-28
  * 变更说明：
  *   1. M1 初版：读取章节 → 本地编辑态 → 600ms 防抖保存；标题/标签/别名存 frontmatter
  *   2. M3：重写为 Tiptap v3（StarterKit + Markdown 双向 + Placeholder + Wikilink）；
  *      正文经 editor.getMarkdown() 序列化落盘，加载经 setContent(contentType markdown)
+ *   3. M4-B：元信息区新增别名编辑（AliasEditor）；标题/别名共用 scheduleMetaSave 防抖
+ *      （元信息变更不发布草稿——正文未变）
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -22,6 +24,7 @@ import { Placeholder } from '@tiptap/extension-placeholder'
 import type { ChapterDoc } from '@shared/types'
 import { Wikilink } from './extensions/Wikilink'
 import type { WikilinkItem, WikilinkPreview } from './extensions/Wikilink'
+import { AliasEditor } from '@/canvas/AliasEditor'
 import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
 import { useAiStore } from '@/store/aiStore'
@@ -189,14 +192,30 @@ export function ChapterEditor(props: { path: string }): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
 
-  const updateTitle = (title: string): void => {
-    setDoc((prev) => (prev ? { ...prev, title } : prev))
+  /** 元信息变更（标题/别名）的防抖落盘：不发布草稿（正文未变，无需重组装上下文） */
+  const scheduleMetaSave = (): void => {
     setDirty(true)
     if (timerRef.current !== null) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       timerRef.current = null
       void persist()
     }, SAVE_DEBOUNCE_MS)
+  }
+
+  const updateTitle = (title: string): void => {
+    setDoc((prev) => (prev ? { ...prev, title } : prev))
+    scheduleMetaSave()
+  }
+
+  /** 别名增删（setDoc 函数式更新取最新态，AliasEditor 异步回调后闭包快照不参与计算） */
+  const addAlias = (alias: string): void => {
+    setDoc((prev) => (prev && !prev.aliases.includes(alias) ? { ...prev, aliases: [...prev.aliases, alias] } : prev))
+    scheduleMetaSave()
+  }
+
+  const removeAlias = (alias: string): void => {
+    setDoc((prev) => (prev ? { ...prev, aliases: prev.aliases.filter((a) => a !== alias) } : prev))
+    scheduleMetaSave()
   }
 
   if (loadError) {
@@ -219,6 +238,10 @@ export function ChapterEditor(props: { path: string }): ReactElement {
       <div className="chapter-meta">
         <input className="chapter-title" value={doc.title} title="章节标题" onChange={(e) => updateTitle(e.target.value)} />
         <span className={`chapter-status ${dirty ? '' : 'saved'}`}>{dirty ? '未保存' : '已保存'}</span>
+      </div>
+      <div className="chapter-aliases">
+        <span className="chapter-aliases-label">别名</span>
+        <AliasEditor values={doc.aliases} onAdd={addAlias} onRemove={removeAlias} addTitle="添加章节别名" />
       </div>
       <EditorContent editor={editor} className="chapter-body" />
       <div className="chapter-hint">[[ 触发双链补全 · 悬浮可预览 · 点击跳转 · 自动保存</div>

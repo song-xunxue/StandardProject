@@ -109,10 +109,35 @@
 }
 
 .left-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 6px 12px;
   font-size: 10.5px;
   color: var(--fg-muted);
   border-top: 1px solid var(--border-subtle);
+}
+
+.left-footer-btn {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.left-footer-btn:hover:not(:disabled) {
+  color: var(--fg-default);
+  border-color: var(--accent);
+}
+
+.left-footer-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* ---------- 分界线 ---------- */
@@ -546,11 +571,42 @@
 
 .chapter-status {
   font-size: 11px;
+  /* 未保存=橙（saved 类覆盖为绿；原 .saving 选择器与组件类名不符属 dead CSS，M4-B 修正） */
+  color: #e0a868;
+}
+
+.chapter-status.saved {
   color: #7ec98f;
 }
 
-.chapter-status.saving {
-  color: #e0a868;
+/* ---------- 章节别名行（M4-B，与标题同一信息带） ---------- */
+.chapter-aliases {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 20px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chapter-aliases-label {
+  flex: none;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+/* 别名 chip 复用 insp-tags-chips 布局；无色点（别名无标签色语义） */
+.chapter-aliases .insp-tags {
+  flex: 1;
+  min-width: 0;
+}
+
+.chapter-aliases .insp-tags-chips {
+  flex-wrap: wrap;
+}
+
+.alias-chip {
+  background: #242629;
 }
 
 .chapter-body {
@@ -1158,7 +1214,9 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  width: 100%;
+  /* 行内占满剩余宽度（与删除按钮并排，M4-B） */
+  flex: 1;
+  min-width: 0;
   padding: 6px 8px;
   font-size: 12px;
   color: var(--fg-default);
@@ -1167,6 +1225,29 @@
   border-radius: 5px;
   cursor: pointer;
   text-align: left;
+}
+
+/* 标签菜单行：主按钮（勾选）+ 删除按钮（HTML 不允许 button 嵌套） */
+.insp-tag-option-row {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+}
+
+.insp-tag-del {
+  flex: none;
+  width: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.insp-tag-del:hover {
+  background: #4a2526;
+  color: #e5737a;
 }
 
 .insp-tag-option:hover {
@@ -1191,6 +1272,8 @@
 }
 
 .insp-tag-new {
+  /* 该按钮不在 .insp-tag-option-row 行容器内（菜单直接子元素），补全宽保持整行视觉 */
+  width: 100%;
   color: var(--accent);
   border-top: 1px dashed var(--border-subtle);
   border-radius: 0 0 5px 5px;

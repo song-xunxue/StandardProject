@@ -1,14 +1,15 @@
 /**
  * 属性面板（右侧 Inspector）：选中节点/边/图三态
- * 节点态：标题/标签（含新建自定义标签）/prompt/summary/ref 指向/进入子图/删除
+ * 节点态：标题/标签（含新建自定义标签）/别名/prompt/summary/ref 指向/进入子图/删除
  * 边态：语义类型三选一（ADR-15）/label/删除；图态：当前图信息
  *
  * 作者: 李文煜
  * 日期: 2026-08-26
  *
- * 2026-08-26
+ * 2026-08-28
  * 变更说明：
  *   1. M2 初版
+ *   2. M4-B：节点态新增别名编辑（AliasEditor，审查遗留低危——此前 aliases 只能手改 JSON）
  */
 
 import { useEffect, useState } from 'react'
@@ -20,6 +21,7 @@ import type { TagDef } from '@shared/tags'
 import { nextPaletteColor, tagColorOf } from '@shared/tags'
 import { pathToGraph } from '@/services/graphTraversal'
 import { flattenChapterFiles } from '@/services/chapterTree'
+import { AliasEditor } from '@/canvas/AliasEditor'
 import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
 import { dialogConfirm, dialogPrompt } from '@/store/dialogStore'
@@ -54,6 +56,11 @@ function TagEditor(props: { node: BlueprintNode }): ReactElement {
     const name = await dialogPrompt('新建标签', '标签名称')
     if (name === null || name.trim() === '') return
     const trimmed = name.trim()
+    // 标签名与 frontmatter 内联数组裸值语法同限制：逗号/方括号/引号/换行会破坏 tags 往返（M2 既有缺口，M4-B 补防线）
+    if (/[,[\]'"\r\n]/.test(trimmed)) {
+      await dialogConfirm('标签名不能包含逗号、方括号、引号或换行（会破坏 frontmatter 往返），请换个写法', '知道了')
+      return
+    }
     if (!tagLibrary.some((t) => t.name === trimmed)) {
       // 自定义标签色按已有自定义标签数轮转色板（shared/tags.ts）
       const color = nextPaletteColor(tagLibrary.filter((t) => !t.builtin).length)
@@ -68,6 +75,25 @@ function TagEditor(props: { node: BlueprintNode }): ReactElement {
     }
     toggleTag(trimmed)
     setOpen(false)
+  }
+
+  /** 从标签库删除自定义标签（M4-B）：删除前统计节点引用数并提示残留表现 */
+  const handleDeleteTag = async (name: string): Promise<void> => {
+    const refCount = Object.values(useGraphStore.getState().nodes).filter((n) => n.tags.includes(name)).length
+    const residueNote = '已贴节点保留该标签（显示为灰色），可在属性面板逐个摘除；章节 frontmatter 中手写的同名 tags 同样失去配色。'
+    const message =
+      refCount > 0
+        ? `标签「${name}」正被 ${refCount} 个节点使用。删除后标签库不再包含它，${residueNote}确定删除？`
+        : `从标签库删除自定义标签「${name}」？${residueNote}`
+    const ok = await dialogConfirm(message, '删除')
+    if (!ok) return
+    try {
+      await useNovelStore.getState().removeTag(name)
+      setOpen(false)
+    } catch (err) {
+      console.error('[InspectorPanel] 删除标签失败:', err)
+      await dialogConfirm(`标签删除失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+    }
   }
 
   return (
@@ -93,17 +119,24 @@ function TagEditor(props: { node: BlueprintNode }): ReactElement {
       {open && (
         <div className="insp-tag-menu">
           {tagLibrary.map((t: TagDef) => (
-            <button
-              key={t.name}
-              className={`insp-tag-option ${node.tags.includes(t.name) ? 'on' : ''}`}
-              style={{ '--tag-color': t.color } as CSSProperties}
-              onClick={() => toggleTag(t.name)}
-            >
-              <span className="bp-node-tag-dot" />
-              {t.name}
-              {t.builtin ? <span className="insp-tag-builtin">内置</span> : null}
-              <span className="insp-tag-check">{node.tags.includes(t.name) ? '✓' : ''}</span>
-            </button>
+            // 行容器：主按钮（勾选/取消）+ 自定义标签的删除按钮（M4-B；HTML 不允许 button 嵌套）
+            <div key={t.name} className="insp-tag-option-row">
+              <button
+                className={`insp-tag-option ${node.tags.includes(t.name) ? 'on' : ''}`}
+                style={{ '--tag-color': t.color } as CSSProperties}
+                onClick={() => toggleTag(t.name)}
+              >
+                <span className="bp-node-tag-dot" />
+                {t.name}
+                {t.builtin ? <span className="insp-tag-builtin">内置</span> : null}
+                <span className="insp-tag-check">{node.tags.includes(t.name) ? '✓' : ''}</span>
+              </button>
+              {!t.builtin && (
+                <button className="insp-tag-del" title="从标签库删除" onClick={() => void handleDeleteTag(t.name)}>
+                  ×
+                </button>
+              )}
+            </div>
           ))}
           <button className="insp-tag-option insp-tag-new" onClick={() => void handleCreate()}>
             + 新建自定义标签…
@@ -172,6 +205,19 @@ function NodeInspector(props: { node: BlueprintNode }): ReactElement {
     useGraphStore.getState().removeNodes([node.id])
   }
 
+  /** 别名增删：读 store 最新状态解析（dialogPrompt 异步返回后 props 快照可能过期，同 toggleTag 约定） */
+  const addAlias = (alias: string): void => {
+    const fresh = useGraphStore.getState().nodes[node.id]
+    if (!fresh || fresh.aliases.includes(alias)) return
+    updateNode(node.id, { aliases: [...fresh.aliases, alias] })
+  }
+
+  const removeAlias = (alias: string): void => {
+    const fresh = useGraphStore.getState().nodes[node.id]
+    if (!fresh) return
+    updateNode(node.id, { aliases: fresh.aliases.filter((a) => a !== alias) })
+  }
+
   /** ref 指向候选：全部章节（含卷内）与蓝图文件（目录节点不进候选） */
   const candidates = [
     ...flattenChapterFiles(tree).map((c) => ({
@@ -201,6 +247,9 @@ function NodeInspector(props: { node: BlueprintNode }): ReactElement {
 
       <div className="insp-section">标签</div>
       <TagEditor node={node} />
+
+      <div className="insp-section">别名（关键词兜底匹配用）</div>
+      <AliasEditor values={node.aliases} onAdd={addAlias} onRemove={removeAlias} addTitle="添加节点别名" />
 
       {node.type === 'ref' && (
         <>

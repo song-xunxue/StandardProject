@@ -148,6 +148,8 @@ export function indexChapter(path: string): void {
 
 /** 全量重建：清空后按当前文件树索引（「重建索引」命令 / 删除 .index/ 后自动） */
 export function rebuildIndex(): { nodes: number; edges: number } {
+  // 强制重开连接：运行中 .index/ 被外部删除时旧句柄指向已消失的文件，重建须落在新库上
+  closeIndex()
   const database = openDb()
   database.exec('DELETE FROM nodes; DELETE FROM edges; DELETE FROM file_state;')
   // 深度优先遍历（卷目录递归下钻——chapters/卷/章.md 也是章节）

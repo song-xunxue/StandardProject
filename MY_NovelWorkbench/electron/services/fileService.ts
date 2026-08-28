@@ -9,6 +9,7 @@
  * 变更说明：
  *   1. M1 初版：树扫描、蓝图 JSON 读写、章节 frontmatter 读写、创建/重命名/删除
  *   2. M2：新增资源库（resources/ 目录的模板列表/保存/删除）
+ *   3. M4-B：资源库三函数迁出至 resourceService（全局目录跨小说共享），本服务回归小说目录内文件职责
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -18,8 +19,7 @@ import { currentNovel } from './novelService'
 import { parseFrontmatter, serializeFrontmatter } from '../../shared/frontmatter'
 import { sanitizeFileName } from '../../shared/sanitize'
 import { chapterNameCompare } from '../../shared/naming'
-import { isResourceTemplate } from '../../shared/resource'
-import type { BlueprintFile, ChapterDoc, ResourceTemplate, TreeNode } from '../../shared/types'
+import type { BlueprintFile, ChapterDoc, TreeNode } from '../../shared/types'
 
 /** 解析小说内相对路径为绝对路径，并拒绝越出小说目录的路径（防穿越） */
 function resolveInNovel(path: string): string {
@@ -86,7 +86,7 @@ export function saveBlueprint(path: string, file: BlueprintFile): void {
   writeFileSync(resolveInNovel(path), JSON.stringify(file, null, 2), 'utf-8')
 }
 
-/** 读取章节（frontmatter + 正文） */
+/** 读取章节（frontmatter + 正文；未知键以原样行透传） */
 export function readChapter(path: string): ChapterDoc {
   const raw = readFileSync(resolveInNovel(path), 'utf-8')
   const { data, content } = parseFrontmatter(raw)
@@ -95,13 +95,17 @@ export function readChapter(path: string): ChapterDoc {
     title: data.title ?? path.split('/').pop()?.replace(/\.md$/, '') ?? '未命名',
     tags: data.tags ?? [],
     aliases: data.aliases ?? [],
+    extraLines: data.extraLines,
     content
   }
 }
 
-/** 保存章节 */
+/** 保存章节（未知键原样行随 frontmatter 回写，不丢失用户手写键） */
 export function saveChapter(path: string, doc: ChapterDoc): void {
-  const raw = serializeFrontmatter({ title: doc.title, tags: doc.tags, aliases: doc.aliases }, doc.content)
+  const raw = serializeFrontmatter(
+    { title: doc.title, tags: doc.tags, aliases: doc.aliases, extraLines: doc.extraLines },
+    doc.content
+  )
   writeFileSync(resolveInNovel(path), raw, 'utf-8')
 }
 
@@ -214,64 +218,6 @@ export function deleteFile(path: string): void {
   const rel = relative(currentNovel()!.dir, abs).replace(/\\/g, '/')
   if (!rel.startsWith('blueprints/') && !rel.startsWith('chapters/')) {
     throw new Error(`仅允许删除蓝图或章节文件：${path}`)
-  }
-  unlinkSync(abs)
-}
-
-/** 资源库目录内相对路径（资源文件统一 resources/<名称>.<kind>.json） */
-function resourcePathOf(template: ResourceTemplate): string {
-  return `resources/${sanitizeFileName(template.name)}.${template.kind}.json`
-}
-
-/** 列出资源库全部模板（坏文件跳过并留日志，不阻断列表） */
-export function listResources(): Array<{ path: string; template: ResourceTemplate }> {
-  const novel = currentNovel()
-  if (!novel) return []
-  const dir = join(novel.dir, 'resources')
-  if (!existsSync(dir)) return []
-  const out: Array<{ path: string; template: ResourceTemplate }> = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith('.json')) continue
-    const path = `resources/${entry.name}`
-    try {
-      const parsed: unknown = JSON.parse(readFileSync(join(dir, entry.name), 'utf-8'))
-      if (isResourceTemplate(parsed)) out.push({ path, template: parsed })
-    } catch (err) {
-      console.error(`[fileService] 资源模板解析失败 ${path}:`, err)
-    }
-  }
-  out.sort((a, b) => a.template.name.localeCompare(b.template.name, 'zh-CN'))
-  return out
-}
-
-/** 保存资源模板（同名同类型覆盖；名称清洗后撞车但实际不同名时拒绝，防静默互相覆盖），返回相对路径 */
-export function saveResource(template: ResourceTemplate): { path: string } {
-  if (!isResourceTemplate(template)) throw new Error('资源模板结构不完整')
-  const path = resourcePathOf(template)
-  const abs = resolveInNovel(path)
-  if (existsSync(abs)) {
-    try {
-      const existing = JSON.parse(readFileSync(abs, 'utf-8')) as ResourceTemplate
-      if (existing.kind !== template.kind || existing.name !== template.name) {
-        throw new Error(`已存在名称清洗后与之相同的其他模板（${existing.name}），请换个名称`)
-      }
-    } catch (err) {
-      // 读不出/解析失败：按既有文件不可识别处理，允许覆盖（保守放开）
-      if (err instanceof Error && err.message.includes('请换个名称')) throw err
-      console.error('[fileService] 读取既有资源模板失败（将覆盖）:', err)
-    }
-  }
-  mkdirSync(join(abs, '..'), { recursive: true })
-  writeFileSync(abs, JSON.stringify(template, null, 2), 'utf-8')
-  return { path }
-}
-
-/** 删除资源模板（仅限 resources/ 目录内） */
-export function deleteResource(path: string): void {
-  const abs = resolveInNovel(path)
-  const rel = relative(currentNovel()!.dir, abs).replace(/\\/g, '/')
-  if (!rel.startsWith('resources/') || !rel.endsWith('.json')) {
-    throw new Error(`仅允许删除资源模板文件：${path}`)
   }
   unlinkSync(abs)
 }

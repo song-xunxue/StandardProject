@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { assembleContext, bfsDepths, estimateTokens, layerBudgetsOf } from './contextAssembly'
+import { assembleContext, bfsDepths, estimateTokens, KEYWORD_SCAN_TAIL_CHARS, layerBudgetsOf } from './contextAssembly'
 import type { BlueprintEdge, BlueprintNode, GraphData, GraphView } from '@/types/blueprint'
 
 // ---------- 测试数据工厂 ----------
@@ -230,6 +230,16 @@ describe('assembleContext 分支补齐（M3）', () => {
     expect(byTitle.segments.some((s) => s.nodeId === 'iso' && s.role === 'keyword')).toBe(true)
     const byTag = assembleContext(fixture(), 'a-1', { draft: '这段提到了设定 事项。' })
     expect(byTag.segments.some((s) => s.nodeId === 'iso' && s.role === 'keyword')).toBe(true)
+  })
+
+  it('关键词兜底只扫草稿尾部窗口（性能批次回归）：窗口外的旧文提及不命中', () => {
+    const filler = '水'.repeat(KEYWORD_SCAN_TAIL_CHARS)
+    // 提及在头部（窗口外）→ 不补入
+    const headOnly = assembleContext(fixture(), 'a-1', { draft: `他在剑冢边缘驻足。${filler}` })
+    expect(headOnly.segments.some((s) => s.nodeId === 'iso')).toBe(false)
+    // 同一提及在尾部（窗口内）→ 补入
+    const tailHit = assembleContext(fixture(), 'a-1', { draft: `${filler}他在剑冢边缘驻足。` })
+    expect(tailHit.segments.some((s) => s.nodeId === 'iso' && s.role === 'keyword')).toBe(true)
   })
 
   it('兜底候选放不下时跳过，更小的候选仍被补入', () => {

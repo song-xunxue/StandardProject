@@ -8,6 +8,11 @@
  * 2026-08-25
  * 变更说明：
  *   1. 初版：Pointer Events 拖动 + 双击复位 + 键盘方向键调整
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 性能批次：拖动位移 rAF 合帧（此前每个 pointermove 直接触发 App 级重渲，
+ *      高回报率鼠标下每秒数百次整树/画布/面板 reconcile）
  */
 
 import { useRef } from 'react'
@@ -23,6 +28,20 @@ export function Splitter({
   onReset: () => void
 }): ReactElement {
   const dragging = useRef(false)
+  // rAF 合帧：累计位移，每帧至多回调一次（丢帧无损失——增量已累积）
+  const accRef = useRef(0)
+  const rafRef = useRef<number | null>(null)
+
+  const flushAcc = (): void => {
+    if (rafRef.current !== null) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      if (accRef.current !== 0) {
+        onResize(accRef.current)
+        accRef.current = 0
+      }
+    })
+  }
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>): void => {
     dragging.current = true
@@ -30,12 +49,23 @@ export function Splitter({
   }
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>): void => {
-    if (dragging.current) onResize(e.movementX)
+    if (!dragging.current) return
+    accRef.current += e.movementX
+    flushAcc()
   }
 
   const stopDrag = (e: ReactPointerEvent<HTMLDivElement>): void => {
     dragging.current = false
     e.currentTarget.releasePointerCapture(e.pointerId)
+    // 松手即冲刷余量（不等下一帧），确保最终宽度精确
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    if (accRef.current !== 0) {
+      onResize(accRef.current)
+      accRef.current = 0
+    }
   }
 
   // 键盘可访问性：左右方向键调整分栏宽度

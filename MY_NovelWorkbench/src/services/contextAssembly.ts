@@ -13,6 +13,11 @@
  * 2026-08-25
  * 变更说明：
  *   1. M0 初版：BFS 深度计算、祖先链注入、预算截断、关键词兜底，全部纯函数可单测
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 性能批次：关键词兜底只扫草稿尾部 KEYWORD_SCAN_TAIL_CHARS 字（此前全文逐候选
+ *      includes，压力规模下随 300ms 草稿 tick 连续卡顿主线程）
  */
 
 import type { BlueprintEdge, BlueprintNode, EdgeType, GraphData } from '@/types/blueprint'
@@ -22,6 +27,8 @@ import { ancestorNodesOf } from './graphTraversal'
 export const DEFAULT_TOTAL_BUDGET = 8000
 /** 默认三层预算比例（60/25/15，见 PROJECT_PLAN.md 3.3） */
 export const DEFAULT_LAYER_RATIOS: [number, number, number] = [0.6, 0.25, 0.15]
+/** 关键词兜底的草稿扫描窗口（尾部字数）——超出部分（旧文）不参与命中 */
+export const KEYWORD_SCAN_TAIL_CHARS = 20000
 
 /** 由总预算与比例计算各层预算（面板与组装共用同一口径） */
 export function layerBudgetsOf(
@@ -239,9 +246,14 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
   const overallUsed = layerTokens[0] + layerTokens[1] + layerTokens[2]
   let remainingOverall = totalBudget - overallUsed
   if (draft && remainingOverall > 64) {
+    // 性能批次：只扫草稿尾部窗口（与续写取正文尾部的口径一致）——全文逐候选 includes
+    // 在压力规模（数百节点 × 十万字草稿）是每 300ms 的主线程热点，且头部旧文对
+    // 「就近补上下文」的语义贡献远低于尾部
+    const scanText =
+      draft.length > KEYWORD_SCAN_TAIL_CHARS ? draft.slice(-KEYWORD_SCAN_TAIL_CHARS) : draft
     for (const node of keywordCandidates(data, assigned)) {
       if (remainingOverall <= 64) break
-      const hit = [node.title, ...node.aliases, ...node.tags].some((k) => k && draft.includes(k))
+      const hit = [node.title, ...node.aliases, ...node.tags].some((k) => k && scanText.includes(k))
       if (!hit) continue
       const text = nodeText(node)
       const tokens = estimateTokens(text)

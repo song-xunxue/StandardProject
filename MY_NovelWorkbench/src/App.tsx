@@ -150,7 +150,7 @@ export default function App(): ReactElement {
           ) : activeTab?.kind === 'chapter' ? (
             <ChapterEditor key={`${activeTab.path}#${chapterReloadSeq}`} path={activeTab.path} />
           ) : (
-            <div className="placeholder-editor">在左侧点击蓝图或章节文件打开</div>
+            <div className="placeholder-editor">在左侧双击蓝图或章节文件打开</div>
           )}
           {activeStrip === 'ai' && <AiPanel />}
           {/* 全局图谱（FR-09）：全宽覆盖层，点击节点跳转回工作区 */}

@@ -7,6 +7,11 @@
  * 2026-08-25
  * 变更说明：
  *   1. 初版：静态图标占位（小说/搜索/蓝图/AI/图谱 + 底部设置），激活态高亮
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 审查修复：移除无对应功能的 search/blueprint 两项（点击只高亮无任何反应，
+ *      误导用户）；底部设置按钮接线到 AI 面板（Provider 管理入口在此），不再是摆设
  */
 
 import type { ReactElement, ReactNode } from 'react'
@@ -20,9 +25,7 @@ interface IconItem {
 
 const ICON_ITEMS: IconItem[] = [
   { key: 'novel', title: '小说项目', hint: '创建/打开小说目录' },
-  { key: 'search', title: '搜索', hint: '全库搜索节点与正文' },
-  { key: 'blueprint', title: '蓝图', hint: '节点工作流画布' },
-  { key: 'ai', title: 'AI 撰写', hint: 'AI 辅助创作面板' },
+  { key: 'ai', title: 'AI 撰写', hint: 'AI 辅助创作面板与 Provider 管理' },
   { key: 'graph', title: '全局图谱', hint: '双向链接图谱总览' }
 ]
 
@@ -31,22 +34,6 @@ const iconPath: Record<string, ReactNode> = {
   // 书本：小说项目
   novel: (
     <path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5v-15Zm0 15A1.5 1.5 0 0 0 5.5 21H19v-3M8 7h7M8 10.5h5" />
-  ),
-  // 放大镜：搜索
-  search: (
-    <>
-      <circle cx="10.5" cy="10.5" r="5.5" />
-      <path d="m15 15 4.5 4.5" />
-    </>
-  ),
-  // 节点连线：蓝图
-  blueprint: (
-    <>
-      <rect x="3.5" y="4" width="6" height="4.5" rx="1" />
-      <rect x="14.5" y="4" width="6" height="4.5" rx="1" />
-      <rect x="9" y="15.5" width="6" height="4.5" rx="1" />
-      <path d="M9.5 6.25h5M12.5 8.5v3.5h-3v3.5" />
-    </>
   ),
   // 波纹+对话气泡：AI 撰写（视觉参考 docs/assets/ai-write-icon-ref.png）
   ai: (
@@ -91,7 +78,11 @@ export function IconStrip({ active, onSelect }: { active: string; onSelect: (key
         </button>
       ))}
       <div style={{ flex: 1 }} />
-      <button className="strip-btn" title="设置 — AI Provider / 主题 / 标签库">
+      <button
+        className={`strip-btn${active === 'ai' ? ' active' : ''}`}
+        title="设置 — AI Provider 管理（打开 AI 撰写面板）"
+        onClick={() => onSelect('ai')}
+      >
         <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           {iconPath['settings']}
         </svg>

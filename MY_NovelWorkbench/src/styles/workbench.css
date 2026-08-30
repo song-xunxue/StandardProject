@@ -159,6 +159,23 @@
   align-items: stretch;
   background: var(--bg-right);
   border-bottom: 1px solid var(--border-subtle);
+  /* Tab 多时横向滚动而非压缩挤压（2026-08-30 体验优化）。
+   *  滚动条隐藏（VS Code Tab 条惯例）：经典滚动条会从固定行高中占 5px，
+   *  跨溢出阈值时整行 Tab 高度跳变；导航已由「滚轮纵转横 + 激活 Tab 自动滚入视野」覆盖 */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabbar::-webkit-scrollbar {
+  display: none;
+}
+
+.tabbar-empty {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 11.5px;
+  color: var(--fg-muted);
 }
 
 .tab {
@@ -172,6 +189,8 @@
   border: none;
   border-right: 1px solid var(--border-subtle);
   cursor: pointer;
+  flex: none; /* 保持自然宽度，交给滚动而非压缩标题 */
+  white-space: nowrap;
 }
 
 .tab.active {
@@ -197,11 +216,7 @@
 }
 
 /* ---------- 画布与占位 ---------- */
-.blueprint-canvas {
-  width: 100%;
-  height: 100%;
-  background: var(--canvas-bg);
-}
+/* .blueprint-canvas 的完整规则统一声明在「画布工具条（M2）」段（历史重复定义已合并） */
 
 /* React Flow 归属标识：依许可要求保留可见，仅做深色低调化 */
 .blueprint-canvas .react-flow__attribution {
@@ -528,14 +543,6 @@
   line-height: 1.6;
 }
 
-.tabbar-empty {
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  font-size: 11.5px;
-  color: var(--fg-muted);
-}
-
 /* ---------- 章节编辑器（M1） ---------- */
 .chapter-editor {
   width: 100%;
@@ -811,6 +818,8 @@
   flex-direction: column;
   min-width: 0;
   flex: 1;
+  width: 100%;
+  height: 100%;
   /* 锚定画布内浮层（资源库面板）：positioned 祖先若是 .content-area 会错位遮挡属性面板 */
   position: relative;
   background: var(--canvas-bg);
@@ -852,6 +861,12 @@
   padding: 4px;
   display: flex;
   flex-direction: column;
+}
+
+/* Tab 右键菜单（2026-08-30）：单行短条目用紧凑宽度（画布菜单 210px 是按两行富条目定的） */
+.tab-context-menu {
+  min-width: 132px;
+  width: max-content;
 }
 
 .canvas-context-item {
@@ -902,12 +917,6 @@
   font-size: 10.5px;
   color: var(--fg-muted);
   line-height: 1.2;
-}
-
-.canvas-create-btn {
-  flex: none;
-  padding: 4px 10px;
-  font-size: 12px;
 }
 
 .canvas-toolbar-right {
@@ -1442,7 +1451,7 @@
   cursor: pointer;
 }
 
-.resource-act:hover {
+.resource-act:hover:not(:disabled) {
   background: #2a2d33;
 }
 
@@ -1450,7 +1459,7 @@
   color: #e07a7a;
 }
 
-.resource-act.danger:hover {
+.resource-act.danger:hover:not(:disabled) {
   background: rgba(224, 122, 122, 0.12);
 }
 

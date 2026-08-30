@@ -10,9 +10,14 @@
  * 变更说明：
  *   1. M2 初版
  *   2. M4-B：节点态新增别名编辑（AliasEditor，审查遗留低危——此前 aliases 只能手改 JSON）
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 审查修复：标签下拉菜单补外点/Esc 关闭与切换节点重置（与其他菜单族行为统一，
+ *      此前打开后点击别处不收起、随选中节点漂移悬挂）
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { CSSProperties } from 'react'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
@@ -41,6 +46,28 @@ function TagEditor(props: { node: BlueprintNode }): ReactElement {
   const { node } = props
   const tagLibrary = useNovelStore((s) => s.novel?.tagLibrary ?? [])
   const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  // 菜单外点击 / Esc 关闭（审查修复：与其他菜单族一致）；切换选中节点时重置开合。
+  // 外点判定含「+ 标签」按钮所在容器（点击按钮由其 onClick 翻转，避免双重切换）
+  useEffect(() => {
+    setOpen(false)
+  }, [node.id])
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent): void => {
+      if (menuRef.current && !menuRef.current.contains(e.target as globalThis.Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
 
   /** 始终读 store 最新状态（异步回调后闭包可能过期） */
   const toggleTag = (name: string): void => {
@@ -97,7 +124,7 @@ function TagEditor(props: { node: BlueprintNode }): ReactElement {
   }
 
   return (
-    <div className="insp-tags">
+    <div className="insp-tags" ref={menuRef}>
       <div className="insp-tags-chips">
         {node.tags.length === 0 && <span className="insp-hint">无标签（标签决定节点着色）</span>}
         {node.tags.map((name) => {

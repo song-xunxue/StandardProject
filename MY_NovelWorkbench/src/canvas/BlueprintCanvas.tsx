@@ -33,6 +33,13 @@
  *   2. 审查修复存量缺陷：Delete 键删除改为自实现 window keydown（作用于 store 显式
  *      选中集 + dialogConfirm）——M3 联调起 select 变更不回灌镜像，RF 受控模式下
  *      永无内部选中集，deleteKeyCode 路径实际不可达（「Delete 删除选中」名存实亡）
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. 夜间性能重构：rfNodes/rfEdges 增量缓存（源对象引用未变即复用上次构建产物——
+ *      使 graphStore.mergeRefresh 的引用保护传导到 RF 层，无关保存回推不再重渲全图
+ *      可见节点）；nodeMirror 等价跳过（逐项 id/position/data/style 一致时不再 set，
+ *      消除 dragStop 与回推的第二轮全图渲染）
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -53,7 +60,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
-import type { BlueprintNode, EdgeType, NodeType } from '@shared/blueprint'
+import type { BlueprintEdge, BlueprintNode, EdgeType, NodeType } from '@shared/blueprint'
 import type { TagDef } from '@shared/tags'
 import { nodeAccentColor, tagColorOf } from '@shared/tags'
 import { pathToGraph } from '@/services/graphTraversal'
@@ -168,6 +175,13 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
   // select 若回灌会与 RF 内部测量/选中形成「重建→再测量→再变更」无限循环打满主线程 ----
   const [nodeMirror, setNodeMirror] = useState<Node[]>([])
   const draggingRef = useRef(false)
+  /** rfNodes/rfEdges 增量缓存（2026-08-30 夜间重构）：src=源对象（BlueprintNode/BlueprintEdge/代理输入元组），
+   *  rf=上次构建产物；源引用未变即复用，使 store 层的引用保护传导到 RF 层（见 memo 内注释） */
+  const buildCacheRef = useRef<{
+    tagLib: TagDef[]
+    rfNodes: Map<string, { src: unknown; rf: Node }>
+    rfEdges: Map<string, { src: BlueprintEdge; rf: Edge }>
+  }>({ tagLib: [], rfNodes: new Map(), rfEdges: new Map() })
   const handleNodesChange = (changes: NodeChange[]): void => {
     const relevant = changes.filter((c) => c.type === 'position' || c.type === 'remove')
     if (relevant.length === 0) return
@@ -178,53 +192,57 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
     if (!graph) return { rfNodes: [] as Node[], rfEdges: [] as Edge[] }
     const memberIds = new Set(graph.nodeIds)
 
-    // 本图节点（标签决定着色；内容为标题 + ref 指向 + 标签 chips）
-    // 选中态不回灌（非受控）：RF 内部维护视觉选中，store 选中只在用户点击时变化——
-    // 受控 selected 回灌会在结构变更（建节点/建边）时与 RF 内部状态形成无限渲染循环
-    const rfNodes: Node[] = graph.nodeIds
-      .map((id) => nodes[id])
-      .filter((n): n is BlueprintNode => Boolean(n))
-      .map((n) => ({
+    // ---- 增量缓存（2026-08-30 夜间重构）：源对象引用未变时复用上次构建的 RF 对象 ----
+    // 动机：graphStore.mergeRefresh 精心维持「未变节点对象引用稳定」，但此前 memo 每次
+    // 依赖变化（如无关保存回推换 nodes 全表引用）都重建全部 rfNode/rfEdge 新对象——
+    // RF 按对象身份 memo 的内部优化全部失效，当前图可见节点整体重渲。缓存把引用保护
+    // 真正传导到 RF 层：未变条目命中缓存 → RF diff 无 replace → NodeWrapper 跳过渲染
+    const cache = buildCacheRef.current
+    if (cache.tagLib !== tagLibrary) {
+      // 标签库影响全部节点的着色与标签 chips —— 整体失效（标签操作低频，代价可忽略）
+      cache.tagLib = tagLibrary
+      cache.rfNodes.clear()
+    }
+
+    /** 真实节点：BlueprintNode 引用未变 → 复用 */
+    const nodeOf = (n: BlueprintNode): Node => {
+      const hit = cache.rfNodes.get(n.id)
+      if (hit && hit.src === n) return hit.rf
+      const rf: Node = {
         id: n.id,
         position: n.position,
         data: { label: renderNodeLabel(n, tagLibrary) },
         style: nodeStyle(n.type, nodeAccentColor(tagLibrary, n))
-      }))
+      }
+      cache.rfNodes.set(n.id, { src: n, rf })
+      return rf
+    }
 
-    // 跨图边：另一端不在本图 → 生成代理节点（proxy:前缀），摆放于本图连出节点右侧
-    const proxies: Node[] = []
-    for (const e of Object.values(edges)) {
-      const fromIn = memberIds.has(e.from)
-      const toIn = memberIds.has(e.to)
-      if (fromIn === toIn) continue // 同图边（都进或都不进）不生成代理
-      const localId = fromIn ? e.from : e.to
-      const remoteId = fromIn ? e.to : e.from
-      const remote = nodes[remoteId]
-      const local = nodes[localId]
-      if (!remote || !local) continue
-      proxies.push({
-        id: `proxy:${remoteId}`,
+    /** 代理节点：远端/本地节点引用与所属图标题均未变 → 复用 */
+    const proxyOf = (remote: BlueprintNode, local: BlueprintNode, graphTitle: string): Node => {
+      const key = `proxy:${remote.id}`
+      const hit = cache.rfNodes.get(key)
+      if (hit) {
+        const src = hit.src as { remote: BlueprintNode; local: BlueprintNode; graphTitle: string }
+        if (src.remote === remote && src.local === local && src.graphTitle === graphTitle) return hit.rf
+      }
+      const rf: Node = {
+        id: key,
         position: { x: local.position.x + 280, y: local.position.y + 40 },
-        data: { label: `↗ ${remote.title}（${graphs[remote.graphId]?.title ?? '外部'}）` },
+        data: { label: `↗ ${remote.title}（${graphTitle}）` },
         style: nodeStyle('proxy'),
         draggable: true
-      })
+      }
+      cache.rfNodes.set(key, { src: { remote, local, graphTitle }, rf })
+      return rf
     }
-    // 去重（多条跨图边指向同一远端节点时只画一个代理）
-    const seen = new Set<string>()
-    const uniqueProxies = proxies.filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
 
-    // 本图边 + 跨图边（连到代理节点）
-    // 端点在本图 → 用真实节点 id；不在本图 → 用其代理节点 id（两个方向对称处理）
-    const rfEdges: Edge[] = []
-    for (const e of Object.values(edges)) {
-      const fromIn = memberIds.has(e.from)
-      const toIn = memberIds.has(e.to)
-      if (!fromIn && !toIn) continue // 两端都不在本图，不渲染
-      const source = fromIn ? e.from : `${PROXY_PREFIX}${e.from}`
-      const target = toIn ? e.to : `${PROXY_PREFIX}${e.to}`
+    /** 边：源边引用与端点映射（真实/代理）均未变 → 复用 */
+    const edgeOf = (e: BlueprintEdge, source: string, target: string): Edge => {
+      const hit = cache.rfEdges.get(e.id)
+      if (hit && hit.src === e && hit.rf.source === source && hit.rf.target === target) return hit.rf
       const visual = EDGE_VISUAL[e.type]
-      rfEdges.push({
+      const rf: Edge = {
         id: e.id,
         source,
         target,
@@ -237,16 +255,76 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
           strokeWidth: 1.5,
           ...(visual.dashed ? { strokeDasharray: '6 4' } : {})
         }
-      })
+      }
+      cache.rfEdges.set(e.id, { src: e, rf })
+      return rf
     }
 
-    return { rfNodes: [...rfNodes, ...uniqueProxies], rfEdges }
+    // 本图节点（标签决定着色；内容为标题 + ref 指向 + 标签 chips）
+    // 选中态不回灌（非受控）：RF 内部维护视觉选中，store 选中只在用户点击时变化——
+    // 受控 selected 回灌会在结构变更（建节点/建边）时与 RF 内部状态形成无限渲染循环
+    const rfNodes: Node[] = []
+    for (const id of graph.nodeIds) {
+      const n = nodes[id]
+      if (n) rfNodes.push(nodeOf(n))
+    }
+
+    // 跨图边：另一端不在本图 → 生成代理节点（proxy:前缀），摆放于本图连出节点右侧
+    // 去重（多条跨图边指向同一远端节点时只画一个代理）
+    const seenProxies = new Set<string>()
+    // 本图边 + 跨图边（连到代理节点）
+    // 端点在本图 → 用真实节点 id；不在本图 → 用其代理节点 id（两个方向对称处理）
+    const rfEdges: Edge[] = []
+    for (const e of Object.values(edges)) {
+      const fromIn = memberIds.has(e.from)
+      const toIn = memberIds.has(e.to)
+      if (!fromIn && !toIn) continue // 两端都不在本图，不渲染
+      if (fromIn !== toIn) {
+        // 跨图边：补代理节点
+        const localId = fromIn ? e.from : e.to
+        const remoteId = fromIn ? e.to : e.from
+        const remote = nodes[remoteId]
+        const local = nodes[localId]
+        if (remote && local && !seenProxies.has(`proxy:${remoteId}`)) {
+          seenProxies.add(`proxy:${remoteId}`)
+          rfNodes.push(proxyOf(remote, local, graphs[remote.graphId]?.title ?? '外部'))
+        }
+      }
+      rfEdges.push(edgeOf(e, fromIn ? e.from : `${PROXY_PREFIX}${e.from}`, toIn ? e.to : `${PROXY_PREFIX}${e.to}`))
+    }
+
+    // 缓存瘦身：清理本次未命中的陈旧条目（节点/边已删除），防跨图切换长期驻留
+    for (const key of cache.rfNodes.keys()) {
+      if (!seenProxies.has(key) && !memberIds.has(key)) cache.rfNodes.delete(key)
+    }
+    const liveEdgeIds = new Set(rfEdges.map((e) => e.id))
+    for (const key of cache.rfEdges.keys()) {
+      if (!liveEdgeIds.has(key)) cache.rfEdges.delete(key)
+    }
+
+    return { rfNodes, rfEdges }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph, nodes, edges, graphs, tagLibrary])
 
   // store 派生结果同步进本地镜像；拖拽进行中跳过——否则 watcher→hydrate 的重建
-  // 会把拖拽中间态整体重置（节点跳回原点并以错误基准继续）
+  // 会把拖拽中间态整体重置（节点跳回原点并以错误基准继续）。
+  // 等价跳过（2026-08-30 夜间重构）：镜像与新 rfNodes 逐项 id/position 一致且
+  // data/style 引用一致（缓存复用保证）时不再 set——消除 dragStop 与无关保存回推的
+  // 第二轮全图渲染
   useEffect(() => {
-    if (!draggingRef.current) setNodeMirror(rfNodes)
+    if (draggingRef.current) return
+    setNodeMirror((prev) => {
+      if (
+        prev.length === rfNodes.length &&
+        prev.every((m, i) => {
+          const n = rfNodes[i]!
+          return m.id === n.id && m.position.x === n.position.x && m.position.y === n.position.y && m.data === n.data && m.style === n.style
+        })
+      ) {
+        return prev // 内容等价：保持引用，跳过本次同步
+      }
+      return rfNodes
+    })
   }, [rfNodes])
 
   /** 用户点击节点 → 选中（显式事件驱动，不随 props 重建波动；代理节点映射回远端） */

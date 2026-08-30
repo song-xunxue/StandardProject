@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MY_NovelWorkbench（小说创作工作台）——**AI 辅助的小说编辑器**：ComfyUI 式节点工作流（蓝图/节点/语义连线）× Obsidian 式双向链接（全局图谱），AI 创作上下文由链接关系自动组装，支持多类 AI API。UI 参考 PyCharm（左侧创建栏 + 右侧内容区 + 顶部文件 Tab + 可拖分界线），深色主题。
 
-**当前状态：M0-M5 全部完成（2026-08-28）+ 体验优化与整体检测批次（2026-08-30，178 用例全绿）——本批新增：Tab 栏右键菜单（closeTabs 批量底座）+ 中键关闭 + 溢出滚动；chapterFlush 冲刷桥（交换/删除/重命名章节前置落盘，修 1 项 high 数据丢失）；Tab 树对账（watcher 外部删除清理失效 Tab）；画布 Delete 键自实现 + 确认框（存量缺陷修复，见交互机制）；文件树项/画布节点右键菜单补齐；性能四处（关键词扫描尾部窗口/组装 1s 去抖/markdown 序列化缓存/Splitter rAF 合帧/左栏 owner 签名订阅）；三处菜单抽共享 useContextMenu hook。**
+**当前状态：M0-M5 全部完成（2026-08-28）+ 体验优化与整体检测批次（2026-08-30，178 用例全绿）+ 夜间性能重构与调研批次（2026-08-31）——最新：画布 rfNodes 增量缓存（保存回推不再重渲全图）+ 全局图谱布局保留（过滤/开关不重跑力导向，坐标全程保留）；市面调研 24 产品完成，v2 规划提案见 `docs/03-下阶段优化方案.md`（待用户晨间审查拍板）。**
 
 **重要交互机制（2026-08-27 联调修复 + 2026-08-30 补充，改动画布前必读）**：
 - 画布选中为**显式事件驱动**（onNodeClick/onEdgeClick/onPaneClick → setSelection），勿回灌 `selected` 到 nodes/edges props——会与 RF 内部状态在结构变更时形成无限渲染循环（建节点/连线全黑崩溃）
@@ -64,12 +64,12 @@ node scripts/gen-stress-blueprint.mjs <小说目录> [节点数] [--chapters N -
 - `components/useContextMenu.ts` — 右键菜单共享 hook（2026-08-30：开合状态+外点 mousedown/Esc 关闭+视口边缘钳制；TabBar/LeftPanel/BlueprintCanvas 三处菜单单点维护）
 - `layout/` — 图标条/文件树/Tab 栏/分界线。左栏：**双击打开**（单击仅选中）、目录右键创建（卷/章节中文序号自动递增，>99 回绕阿拉伯数字）、**文件项右键**（打开/重命名/删除+创建项，2026-08-30）、章节拖动交换（含跨卷，经 exchangeFiles+chapterReloadSeq 重载编辑器）、蓝图按 owner 嵌套层级（成环兜底顶层；**owner 关系签名订阅**——节点拖动/属性变更不触发整树重算）、footer 快照/重建索引按钮；Tab 激活走 novelStore.activateTab（蓝图 Tab 同步画布路由）；全部容器带 nokey 类（画布外 Delete 不删节点）。TabBar：右键菜单（关闭/其他/右侧/所有，唯一 Tab 收敛单项）+中键关闭（mousedown 拦截自动滚动）+溢出横向滚动（滚轮纵转横/激活自动滚入视野/滚动条隐藏）；Splitter 拖动 rAF 合帧；IconStrip 仅 novel/ai/graph 三项（search/blueprint 死项已移除，设置按钮接 AI 面板）
 - `layout/SnapshotPanel.tsx` — 快照浮层（M5：创建/列表/恢复（confirm 含自动备份提示）/删除；复用 resource-panel 样式族 + .snapshot-overlay 居中遮罩）
-- `canvas/BlueprintCanvas.tsx` — 蓝图画布（子图进入+跨图代理+连线创建+拖拽持久化+受控选中+标签着色+**Delete 自实现 window keydown+确认框**（作用于 store 选中集；deleteKeyCode 路径在 select 不回灌模式下不可达，勿恢复）+**节点右键菜单**（删除（确认）/进入子图/打开指向）+**onlyRenderVisibleElements 视口虚拟化**——RF 对未测量节点 forceInitialRender 必渲染，首帧测量后裁剪）
+- `canvas/BlueprintCanvas.tsx` — 蓝图画布（子图进入+跨图代理+连线创建+拖拽持久化+受控选中+标签着色+**Delete 自实现 window keydown+确认框**（作用于 store 选中集；deleteKeyCode 路径在 select 不回灌模式下不可达，勿恢复）+**节点右键菜单**（删除（确认）/进入子图/打开指向）+**onlyRenderVisibleElements 视口虚拟化**——RF 对未测量节点 forceInitialRender 必渲染，首帧测量后裁剪；**rfNodes/rfEdges 增量缓存（2026-08-31 夜间）**：源对象引用未变即复用上次构建产物，mergeRefresh 的引用保护传导到 RF 层；nodeMirror 等价跳过）
 - `canvas/CanvasToolbar.tsx` — 画布工具条（三类节点创建/保存状态/层级指示/资源库入口）
 - `canvas/InspectorPanel.tsx` — 右侧属性面板（节点标题/标签（含新建自定义标签校验与删除入口）/别名/prompt/summary/refTarget/子图、边改型与 label、图信息）
 - `canvas/AliasEditor.tsx` — 别名编辑器（M4-B，节点与章节共用：chips + 非法字符校验，意图式 onAdd/onRemove 由消费方读最新态解析）
 - `canvas/ResourcePanel.tsx` — 资源库浮层（节点/标签组模板保存、插入、应用、删除；M4-B 起全局目录跨小说共享）
-- `graph/GlobalGraphView.tsx` — 全局图谱（M4-A，G6 5：d3-force 投影/标签着色过滤/点击跳转蓝图/孤立与伏笔高亮；图标条 graph 项全宽覆盖层）
+- `graph/GlobalGraphView.tsx` — 全局图谱（M4-A，G6 5：d3-force 投影/标签着色过滤/点击跳转蓝图/孤立与伏笔高亮；图标条 graph 项全宽覆盖层）。**2026-08-31 夜间重构：过滤/开关走 updateData 部分样式+visibility 与 draw()（不重排不丢用户布局），仅数据集变化才 render；清理走 stopLayout+延迟销毁+容错（防 G6 销毁竞态告警与清理异常白屏）**
 - `canvas/ChapterEditor.tsx` — 章节 Tiptap 编辑器（StarterKit+Markdown+Placeholder+Wikilink；600ms 防抖保存 getMarkdown 落盘+卸载冲刷；**markdown 序列化按 ProseMirror doc 引用缓存**——草稿发布与保存共用；**chapterFlush 冲刷桥注册**（见 aiStore）；**卸载即中断 AI 生成**；加载 emitUpdate:false；草稿节流发布；元信息区标题/别名经 scheduleMetaSave 防抖——元信息变更不发布草稿）
 - `canvas/extensions/Wikilink.ts` — [[wikilink]] Mark（inclusive:false；suggestion 补全 allowedPrefixes:null+isComposing 放行；markdown 自定义 token 双向；悬浮预览 floating-ui+点击跳转）
 - `canvas/AiPanel.tsx` — AI 撰写面板（Provider 管理/续写/改写选中/停止；**前情提要**：编辑第 N 章自动注入前 2 章正文尾部；Context Viewer：三层预算/prompt 全文与复制/丢弃记录；组装目标 ref→选中→首节点；续写无编辑器时自动切最近章节，**改写不自动切换**（新挂载编辑器必无选区）；**组装草稿输入 1s 尾随去抖**）
@@ -85,6 +85,7 @@ node scripts/gen-stress-blueprint.mjs <小说目录> [节点数] [--chapters N -
 - `PROJECT_PLAN.md` — 项目计划书（ADR-1~16 技术决策、里程碑 M0-M5 验收表、风险对策）
 - `docs/01-产品需求文档.md` — 需求（FR/NFR 编号、术语表、UI 规范含色值表、待讨论问题）
 - `docs/02-技术调研报告.md` — 竞品/开源项目/技术选型调研
+- `docs/03-下阶段优化方案.md` — v2 规划提案（2026-08-31 调研驱动：功能路线 F1-F21/性能路线/竞品对照/优先级矩阵/待拍板问题）
 - `docs/assets/` — UI 参考图（左侧工具条、AI 撰写图标）
 - `docs/archive/` — 原始需求存档
 

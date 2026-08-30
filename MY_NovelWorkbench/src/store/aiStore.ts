@@ -36,6 +36,14 @@ interface AiState {
   editingDraft: EditingDraft | null
   /** 正文编辑器实例（流式插入与改写需要；不入 zustand 响应式语义，仅引用存放） */
   chapterEditor: Editor | null
+  /**
+   * 章节冲刷桥（2026-08-30 审查修复）：ChapterEditor 挂载时注册的「立即落盘挂起编辑」回调。
+   * novelStore 的 exchangeFiles/deleteFile/renameFile 在改动文件系统【之前】调用它，
+   * 清掉编辑器的 600ms 防抖定时器——否则随后的重挂载卸载冲刷会用旧内存内容覆盖
+   * 交换/重命名后的文件（吞掉对方章节正文）或复活已删除文件。
+   * paths 传集合时仅当编辑器路径命中才冲刷；undefined = 无条件冲刷
+   */
+  chapterFlush: ((paths?: string[]) => Promise<void>) | null
 
   loadProviders: () => Promise<void>
   saveProvider: (config: Omit<ProviderInfo, 'hasKey'>, apiKey?: string) => Promise<void>
@@ -81,6 +89,7 @@ export const useAiStore = create<AiState>()((set, get) => ({
   generationError: null,
   editingDraft: null,
   chapterEditor: null,
+  chapterFlush: null,
 
   loadProviders: async () => {
     const providers = await api().provider.list()

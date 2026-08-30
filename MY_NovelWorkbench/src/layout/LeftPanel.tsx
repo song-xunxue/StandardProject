@@ -19,9 +19,16 @@
  * 2026-08-28
  * 变更说明：
  *   1. M5：footer 新增「快照」入口（SnapshotPanel 浮层：创建/列表/恢复/删除，ADR-14）
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 体验优化批次：文件项右键菜单补齐常用操作（打开/重命名/删除，与 hover 按钮
+ *      能力对齐）；菜单实现迁移共享 useContextMenu hook
+ *   2. 性能批次：蓝图层级展示改为「owner 关系签名」订阅（坐标/属性变更不再触发
+ *      buildBlueprintHierarchy 全量重算与整树重渲——签名仅由图 owner 链决定）
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { ReactElement, MouseEvent as ReactMouseEvent } from 'react'
 import type { TreeNode } from '@shared/types'
 import { useNovelStore } from '@/store/novelStore'
@@ -32,6 +39,7 @@ import { volumeOfChapter } from '@/services/chapterTree'
 import { pathToGraph } from '@/services/graphTraversal'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
 import { SnapshotPanel } from './SnapshotPanel'
+import { useContextMenu } from '@/components/useContextMenu'
 
 const displayTitle = (name: string): string => name.replace(/\.blueprint\.json$/, '').replace(/\.md$/, '')
 
@@ -40,8 +48,8 @@ type MenuArea =
   | 'blueprints'
   | 'chapters'
   | { volume: string } // 卷行：卷内新增章节
-  | { blueprintItem: string } // 蓝图项行：新建子蓝图（挂其内）/ 新建顶层蓝图
-  | { chapterItem: string } // 章节项行：同目录新增章节
+  | { blueprintItem: string; name: string } // 蓝图项行：打开/重命名/删除 + 新建子蓝图（挂其内）/ 新建顶层蓝图
+  | { chapterItem: string; name: string } // 章节项行：打开/重命名/删除 + 同目录新增章节
 
 /**
  * 把 blueprints/ 的平铺文件按 owner 归属关系重排为层级：
@@ -273,48 +281,30 @@ export function LeftPanel(): ReactElement {
   const createFile = useNovelStore((s) => s.createFile)
   const createVolume = useNovelStore((s) => s.createVolume)
   const exchangeFiles = useNovelStore((s) => s.exchangeFiles)
-  const graphs = useGraphStore((s) => s.graphs)
-  const gnodes = useGraphStore((s) => s.nodes)
-  const graphPaths = useGraphStore((s) => s.graphPaths)
   const versions = typeof window !== 'undefined' ? window.api?.versions : undefined
+
+  // 性能批次：不再整表订阅 graphs/nodes——层级结构只依赖 owner 归属关系，改订阅其「签名」
+  // （字符串比较稳定），节点坐标拖动/属性提交不再触发 buildBlueprintHierarchy 重算与整树重渲
+  const ownerSignature = useGraphStore((s) => {
+    const owner = Object.values(s.graphs)
+      .map((g) => `${g.id}>${g.ownerNodeId ?? ''}>${g.ownerNodeId !== null ? (s.nodes[g.ownerNodeId]?.graphId ?? '?') : ''}`)
+      .sort()
+      .join('|')
+    const paths = Object.entries(s.graphPaths).sort().map(([gid, p]) => `${gid}@${p}`).join(';')
+    return `${owner}##${paths}`
+  })
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [snapOpen, setSnapOpen] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number; area: MenuArea } | null>(null)
-  const menuRef = useRef<HTMLDivElement | null>(null)
-
-  // 菜单外点击 / Esc 关闭
-  useEffect(() => {
-    if (!menu) return
-    const onDown = (e: MouseEvent): void => {
-      if (menuRef.current && !menuRef.current.contains(e.target as globalThis.Node)) setMenu(null)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setMenu(null)
-    }
-    window.addEventListener('mousedown', onDown, true)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onDown, true)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [menu])
-
-  // 视口边缘钳制（靠右/下缘右键时菜单收回屏内）
-  useLayoutEffect(() => {
-    if (!menu || !menuRef.current) return
-    const el = menuRef.current
-    const x = Math.min(menu.x, Math.max(8, window.innerWidth - el.offsetWidth - 8))
-    const y = Math.min(menu.y, Math.max(8, window.innerHeight - el.offsetHeight - 8))
-    if (x !== menu.x || y !== menu.y) setMenu({ ...menu, x, y })
-  }, [menu])
+  const { menu, setMenu, menuRef } = useContextMenu<{ area: MenuArea }>()
 
   /** 展示树：blueprints/ 平铺列表 → owner 嵌套层级（磁盘真相不变，仅展示重排） */
   const displayTree = useMemo<TreeNode[]>(() => {
     if (tree.length === 0) return tree
     const bpDir = tree[0]?.children?.find((c) => c.kind === 'dir' && c.path === 'blueprints')
     if (!bpDir || !bpDir.children || bpDir.children.length === 0) return tree
-    const hierarchical = buildBlueprintHierarchy(bpDir.children, graphs, gnodes, graphPaths)
+    const gs = useGraphStore.getState()
+    const hierarchical = buildBlueprintHierarchy(bpDir.children, gs.graphs, gs.nodes, gs.graphPaths)
     return [
       {
         ...tree[0]!,
@@ -324,7 +314,8 @@ export function LeftPanel(): ReactElement {
         ]
       }
     ]
-  }, [tree, graphs, gnodes, graphPaths])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree, ownerSignature])
 
   const openFile = (node: TreeNode): void => {
     if (node.kind === 'blueprint' || node.kind === 'chapter') {
@@ -336,15 +327,15 @@ export function LeftPanel(): ReactElement {
   const onContextArea = (e: ReactMouseEvent, area: MenuArea): void => {
     e.preventDefault()
     e.stopPropagation()
-    setMenu({ x: e.clientX, y: e.clientY, area })
+    setMenu({ x: e.clientX, y: e.clientY, target: { area } })
   }
 
-  /** 文件项右键：蓝图→新建（子）蓝图；章节→同目录新增章节 */
+  /** 文件项右键：蓝图/章节行——打开/重命名/删除 + 各自的创建项 */
   const onContextItem = (e: ReactMouseEvent, node: TreeNode): void => {
     e.preventDefault()
     e.stopPropagation()
-    if (node.kind === 'blueprint') setMenu({ x: e.clientX, y: e.clientY, area: { blueprintItem: node.path } })
-    else if (node.kind === 'chapter') setMenu({ x: e.clientX, y: e.clientY, area: { chapterItem: node.path } })
+    if (node.kind === 'blueprint') setMenu({ x: e.clientX, y: e.clientY, target: { area: { blueprintItem: node.path, name: node.name } } })
+    else if (node.kind === 'chapter') setMenu({ x: e.clientX, y: e.clientY, target: { area: { chapterItem: node.path, name: node.name } } })
   }
 
   /** 章节所在卷（chapterTree 共享实现：chapters/卷/章.md → 卷名；直下 → undefined） */
@@ -456,31 +447,49 @@ export function LeftPanel(): ReactElement {
     }
   }
 
+  /** 右键菜单的文件通用动作（与 hover 行内按钮同能力——审查补齐右键覆盖面） */
+  const openByPath = (path: string): void => {
+    useNovelStore.getState().openTab(path.endsWith('.md') ? 'chapter' : 'blueprint', path)
+  }
+  const renameByPath = async (path: string, name: string): Promise<void> => {
+    const cur = displayTitle(name)
+    const next = await dialogPrompt('重命名', '新名称', cur)
+    if (next && next !== cur) void useNovelStore.getState().renameFile(path, next)
+  }
+  const deleteByPath = async (path: string, name: string): Promise<void> => {
+    const ok = await dialogConfirm(`删除「${displayTitle(name)}」？`, '删除')
+    if (ok) void useNovelStore.getState().deleteFile(path)
+  }
+
+  const menuArea = menu?.target.area ?? null
   const menuItems: Array<{ key: string; label: string; run: () => Promise<void> }> =
-    menu === null
+    menuArea === null
       ? []
-      : menu.area === 'blueprints'
+      : menuArea === 'blueprints'
         ? [{ key: 'bp', label: '◆ 新建蓝图', run: handleCreateBlueprint }]
-        : menu.area === 'chapters'
+        : menuArea === 'chapters'
           ? [
               { key: 'vol', label: '📕 新增卷', run: handleCreateVolume },
               { key: 'ch', label: '▪ 新增章节', run: () => handleCreateChapter() }
             ]
-          : 'volume' in menu.area
-            ? [{ key: 'ch', label: `▪ 在「${menu.area.volume}」新增章节`, run: () => handleCreateChapter((menu!.area as { volume: string }).volume) }]
-            : 'blueprintItem' in menu.area
+          : 'volume' in menuArea
+            ? [{ key: 'ch', label: `▪ 在「${menuArea.volume}」新增章节`, run: () => handleCreateChapter(menuArea.volume) }]
+            : 'blueprintItem' in menuArea
               ? [
-                  { key: 'sub', label: `◆ 在此蓝图内新建子蓝图`, run: () => handleCreateSubBlueprint((menu!.area as { blueprintItem: string }).blueprintItem) },
+                  { key: 'open', label: '◆ 打开', run: async () => openByPath(menuArea.blueprintItem) },
+                  { key: 'ren', label: '✎ 重命名', run: () => renameByPath(menuArea.blueprintItem, menuArea.name) },
+                  { key: 'del', label: '✕ 删除', run: () => deleteByPath(menuArea.blueprintItem, menuArea.name) },
+                  { key: 'sub', label: '◆ 在此蓝图内新建子蓝图', run: () => handleCreateSubBlueprint(menuArea.blueprintItem) },
                   { key: 'bp', label: '◆ 新建蓝图（顶层）', run: handleCreateBlueprint }
                 ]
               : [
+                  { key: 'open', label: '▪ 打开', run: async () => openByPath(menuArea.chapterItem) },
+                  { key: 'ren', label: '✎ 重命名', run: () => renameByPath(menuArea.chapterItem, menuArea.name) },
+                  { key: 'del', label: '✕ 删除', run: () => deleteByPath(menuArea.chapterItem, menuArea.name) },
                   {
                     key: 'ch',
                     label: '▪ 同目录新增章节',
-                    run: () => {
-                      const vol = volumeOfChapter((menu!.area as { chapterItem: string }).chapterItem)
-                      return handleCreateChapter(vol)
-                    }
+                    run: () => handleCreateChapter(volumeOfChapter(menuArea.chapterItem))
                   }
                 ]
 
@@ -533,9 +542,14 @@ export function LeftPanel(): ReactElement {
         </div>
       )}
       {snapOpen && <SnapshotPanel onClose={() => setSnapOpen(false)} />}
-      {/* 目录右键菜单：按区域提供创建项（自动序号预填） */}
+      {/* 目录右键菜单：按区域提供创建项（自动序号预填）+ 文件项通用操作 */}
       {menu && (
-        <div ref={menuRef} className="canvas-context-menu tree-context-menu" style={{ left: menu.x, top: menu.y }}>
+        <div
+          ref={menuRef}
+          className="canvas-context-menu tree-context-menu"
+          style={{ left: menu.x, top: menu.y }}
+          onMouseLeave={() => setMenu(null)}
+        >
           {menuItems.map((item) => (
             <button
               key={item.key}

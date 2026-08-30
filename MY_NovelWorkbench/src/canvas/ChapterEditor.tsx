@@ -13,6 +13,14 @@
  *      正文经 editor.getMarkdown() 序列化落盘，加载经 setContent(contentType markdown)
  *   3. M4-B：元信息区新增别名编辑（AliasEditor）；标题/别名共用 scheduleMetaSave 防抖
  *      （元信息变更不发布草稿——正文未变）
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 审查修复/性能批次：
+ *      - markdown 序列化缓存（ProseMirror doc 不可变，引用未变直接复用上次结果——
+ *        消除草稿发布 300ms + 防抖保存 600ms 的重复全文序列化）
+ *      - 注册 aiStore.chapterFlush 冲刷桥（交换/删除/重命名章节前的落盘钩子）
+ *      - 卸载时中断进行中的 AI 生成（面板未挂载时此前无人中断，token 白烧且输出全损）
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -105,8 +113,17 @@ export function ChapterEditor(props: { path: string }): ReactElement {
     editorProps: { attributes: { class: 'chapter-tiptap', spellcheck: 'false' } }
   })
 
-  /** 取当前 markdown 全文（v3 运行时挂载的 getMarkdown） */
-  const markdownOf = (): string => (editor as MarkdownEditor | null)?.getMarkdown?.() ?? ''
+  /** 取当前 markdown 全文（v3 运行时挂载的 getMarkdown）。
+   *  序列化缓存（性能批次）：ProseMirror 文档不可变，doc 引用未变时直接复用上次结果——
+   *  草稿发布（300ms）与防抖保存（600ms）两条路径不再各自全文序列化 */
+  const mdCacheRef = useRef<{ doc: unknown; text: string } | null>(null)
+  const markdownOf = (): string => {
+    const docNow = editor?.state.doc
+    if (docNow && mdCacheRef.current && mdCacheRef.current.doc === docNow) return mdCacheRef.current.text
+    const text = (editor as MarkdownEditor | null)?.getMarkdown?.() ?? ''
+    mdCacheRef.current = docNow ? { doc: docNow, text } : null
+    return text
+  }
 
   /** 保存（frontmatter 元数据 + 编辑器 markdown），成功后清 dirty */
   const persist = async (): Promise<void> => {
@@ -171,7 +188,7 @@ export function ChapterEditor(props: { path: string }): ReactElement {
     }
   }, [path, editor])
 
-  // 编辑器实例登记（AI 面板流式写入用）+ 卸载冲刷未保存编辑
+  // 编辑器实例登记（AI 面板流式写入用）+ 冲刷桥注册 + 卸载冲刷未保存编辑
   useEffect(() => {
     if (!editor) return
     // 换章/重挂载即中断进行中的生成（M5 审查修复）：generationWriter 实时取
@@ -181,7 +198,23 @@ export function ChapterEditor(props: { path: string }): ReactElement {
     const ai = useAiStore.getState()
     if (ai.generation !== null) void ai.stopGeneration()
     setChapterEditor(editor)
+    // 冲刷桥（审查修复）：交换/删除/重命名等文件系统变更前的「立即落盘挂起编辑」入口。
+    // 关键在清掉 timerRef——防抖定时器为空时，本组件卸载清理不会再次持久化，
+    // 从而避免旧内存内容覆盖交换/重命名后的文件或复活已删除文件
+    const flush = async (paths?: string[]): Promise<void> => {
+      if (paths && !paths.includes(path)) return
+      if (timerRef.current === null) return
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+      await persist()
+    }
+    useAiStore.setState({ chapterFlush: flush })
     return () => {
+      // 卸载即中断生成（审查修复）：面板未挂载时此前无人中断——主进程 fetch 持续烧 token
+      // 而流式输出因编辑器已销毁全部丢弃。挂载侧的 stop 仍保留（双保险，幂等）
+      const cur = useAiStore.getState()
+      if (cur.generation !== null) void cur.stopGeneration()
+      if (cur.chapterFlush === flush) useAiStore.setState({ chapterFlush: null })
       setChapterEditor(null)
       // 章节关闭后草稿同步清除（避免 Context Viewer 继续以旧章节为组装目标/草稿源）
       setDraft(null)

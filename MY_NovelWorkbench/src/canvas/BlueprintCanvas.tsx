@@ -25,9 +25,17 @@
  *      安全性依据（@xyflow 源码 getNodesInside）：未测量节点 forceInitialRender
  *      必定渲染——首帧全渲染完成测量后裁剪才生效，fitView/拖拽/选中机制不受影响；
  *      未测量节点的存在也保证 dimensions 回灌陷阱（见下方镜像注释）不因虚拟化加剧
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 体验优化批次：节点右键菜单（删除（确认）/ 进入子图 / 打开指向，与空白处
+ *      创建菜单同族）；菜单实现迁移共享 useContextMenu hook
+ *   2. 审查修复存量缺陷：Delete 键删除改为自实现 window keydown（作用于 store 显式
+ *      选中集 + dialogConfirm）——M3 联调起 select 变更不回灌镜像，RF 受控模式下
+ *      永无内部选中集，deleteKeyCode 路径实际不可达（「Delete 删除选中」名存实亡）
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from 'react'
 import {
   ReactFlow,
@@ -55,6 +63,7 @@ import { dialogConfirm } from '@/store/dialogStore'
 import { Breadcrumb } from './Breadcrumb'
 import { CanvasToolbar, canvasCreateBridge } from './CanvasToolbar'
 import { ResourcePanel } from './ResourcePanel'
+import { useContextMenu } from '@/components/useContextMenu'
 
 /** 连线视觉映射（ADR-15 语义：箭头=因果/顺序，直线=关联，虚线=参考/伏笔） */
 const EDGE_VISUAL: Record<EdgeType, { stroke: string; dashed: boolean; marker: boolean }> = {
@@ -136,7 +145,6 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
   const addEdge = useGraphStore((s) => s.addEdge)
   const moveNodes = useGraphStore((s) => s.moveNodes)
   const removeNodesAction = useGraphStore((s) => s.removeNodes)
-  const removeEdgeAction = useGraphStore((s) => s.removeEdge)
   const tagLibrary = useNovelStore((s) => s.novel?.tagLibrary ?? [])
 
   const currentGraphId = route[route.length - 1]
@@ -148,37 +156,12 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
     [tagLibrary, nodes]
   )
 
-  // ---- 右键菜单（M3 交互调整：节点创建入口；创建逻辑经 canvasCreateBridge 复用工具条实现） ----
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
-  const ctxMenuRef = useRef<HTMLDivElement | null>(null)
-
-  // Esc / 菜单外按下鼠标关闭（与左栏菜单行为一致）
-  useEffect(() => {
-    if (!ctxMenu) return
-    const onDown = (e: MouseEvent): void => {
-      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as globalThis.Node)) setCtxMenu(null)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setCtxMenu(null)
-    }
-    window.addEventListener('mousedown', onDown, true)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onDown, true)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [ctxMenu])
-
-  // 视口边缘钳制：靠右/下缘打开时收回到屏内（菜单条目始终可达）
-  useLayoutEffect(() => {
-    if (!ctxMenu || !ctxMenuRef.current) return
-    const el = ctxMenuRef.current
-    const maxX = window.innerWidth - el.offsetWidth - 8
-    const maxY = window.innerHeight - el.offsetHeight - 8
-    const x = Math.min(ctxMenu.x, Math.max(8, maxX))
-    const y = Math.min(ctxMenu.y, Math.max(8, maxY))
-    if (x !== ctxMenu.x || y !== ctxMenu.y) setCtxMenu({ x, y })
-  }, [ctxMenu])
+  // ---- 右键菜单（useContextMenu 共享实现；target 区分 空白创建 / 节点操作 两类） ----
+  const { menu: ctxMenu, setMenu: setCtxMenu, menuRef: ctxMenuRef } = useContextMenu<
+    { kind: 'pane' } | { kind: 'node'; id: string }
+  >()
+  /** 节点菜单目标（菜单开着时节点被外部删除则不渲染菜单） */
+  const menuNode = ctxMenu?.target.kind === 'node' ? (nodes[ctxMenu.target.id] ?? null) : null
 
   // ---- 拖拽跟手（受控节点镜像）：RF 受控模式下必须接 onNodesChange，否则拖拽变更被丢弃、
   // 节点只在 dragStop 提交时跳变。镜像只承接 position/remove——dimensions（尺寸测量）与
@@ -311,15 +294,33 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
     if (moves.length > 0) moveNodes(moves)
   }
 
-  /** Delete 键删除（代理节点跳过——它由跨图边派生） */
-  const handleNodesDelete = (deleted: Node[]): void => {
-    const ids = deleted.filter((n) => !isProxyId(n.id)).map((n) => n.id)
-    if (ids.length > 0) removeNodesAction(ids)
-  }
-
-  const handleEdgesDelete = (deleted: Edge[]): void => {
-    for (const e of deleted) removeEdgeAction(e.id)
-  }
+  /**
+   * Delete 键删除（自实现，审查修复存量缺陷）：M3 联调起镜像只承接 position/remove
+   * 变更（select 回灌会与 RF 测量形成无限循环），RF 受控模式下因此永无内部选中集，
+   * deleteKeyCode 路径实际不可达——改为监听 window keydown 作用于 store 显式选中集
+   * （selectedNodeIds，与 Inspector 同源），带确认（与属性面板删除一致）。
+   * 防线：输入控件与 .nokey 容器（AI 面板/Tab 栏/对话框等）内不拦截
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Delete') return
+      const target = e.target as HTMLElement | null
+      if (target?.closest('.nokey, input, textarea, [contenteditable="true"]')) return
+      const gs = useGraphStore.getState()
+      const ids = gs.selectedNodeIds
+      if (ids.length === 0) return
+      e.preventDefault()
+      void (async () => {
+        const label =
+          ids.length === 1
+            ? `删除节点「${gs.nodes[ids[0]]?.title ?? ids[0]}」？相连的边将一并删除`
+            : `删除选中的 ${ids.length} 个节点？相连的边将一并删除`
+        if (await dialogConfirm(label, '删除')) gs.removeNodes(ids)
+      })()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   /** 双击：蓝图节点进入子图（8 层上限拦截）；代理节点跳转远端；引用节点打开指向 */
   const handleNodeDoubleClick = (_event: unknown, node: Node): void => {
@@ -369,7 +370,6 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
         minZoom={0.2}
         maxZoom={2.5}
         onlyRenderVisibleElements
-        deleteKeyCode={['Delete']}
         connectionLineStyle={{ stroke: '#6c9ef8', strokeWidth: 1.5 }}
         onNodesChange={handleNodesChange}
         onNodeClick={handleNodeClick}
@@ -378,12 +378,15 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
         onConnect={handleConnect}
         onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
-        onNodesDelete={handleNodesDelete}
-        onEdgesDelete={handleEdgesDelete}
         onNodeDoubleClick={handleNodeDoubleClick}
         onPaneContextMenu={(e) => {
           e.preventDefault()
-          setCtxMenu({ x: e.clientX, y: e.clientY })
+          setCtxMenu({ x: e.clientX, y: e.clientY, target: { kind: 'pane' } })
+        }}
+        onNodeContextMenu={(e, node) => {
+          e.preventDefault()
+          // 代理节点映射回远端真实节点（菜单动作作用于真实数据）
+          setCtxMenu({ x: e.clientX, y: e.clientY, target: { kind: 'node', id: isProxyId(node.id) ? remoteIdOf(node.id) : node.id } })
         }}
       >
         {/* 黑色点阵网格背景（ComfyUI 式） */}
@@ -401,8 +404,8 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
       <div className="canvas-hint">
         双击 ◆ 进入子图 · 双击 § 引用打开指向 · 拖端口连线（拖到 ↗ 代理=跨图边） · Delete 删除选中
       </div>
-      {/* 右键菜单：节点创建（落点=鼠标位置） */}
-      {ctxMenu && (
+      {/* 右键菜单：空白处=节点创建（落点=鼠标位置）；节点上=节点操作（审查补齐覆盖面） */}
+      {ctxMenu?.target.kind === 'pane' && (
         <div
           ref={ctxMenuRef}
           className="canvas-context-menu"
@@ -427,6 +430,66 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
               </span>
             </button>
           ))}
+        </div>
+      )}
+      {ctxMenu?.target.kind === 'node' && menuNode && (
+        <div
+          ref={ctxMenuRef}
+          className="canvas-context-menu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          onMouseLeave={() => setCtxMenu(null)}
+        >
+          {menuNode.type === 'blueprint' && menuNode.refGraphId && (
+            <button
+              type="button"
+              className="canvas-context-item"
+              onClick={() => {
+                setCtxMenu(null)
+                enterGraph(menuNode.refGraphId!)
+              }}
+            >
+              <span className="canvas-context-icon">◆</span>
+              <span className="canvas-context-text">
+                <span className="canvas-context-title">进入子图</span>
+                <span className="canvas-context-hint">打开「{menuNode.title}」的子蓝图</span>
+              </span>
+            </button>
+          )}
+          {menuNode.type === 'ref' && menuNode.refTarget && (
+            <button
+              type="button"
+              className="canvas-context-item"
+              onClick={() => {
+                setCtxMenu(null)
+                const kind = menuNode.refTarget!.endsWith('.md') ? 'chapter' : 'blueprint'
+                useNovelStore.getState().openTab(kind, menuNode.refTarget!)
+              }}
+            >
+              <span className="canvas-context-icon">§</span>
+              <span className="canvas-context-text">
+                <span className="canvas-context-title">打开指向</span>
+                <span className="canvas-context-hint">{basename(menuNode.refTarget!)}</span>
+              </span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="canvas-context-item"
+            onClick={() => {
+              setCtxMenu(null)
+              void (async () => {
+                if (await dialogConfirm(`删除节点「${menuNode.title}」？相连的边将一并删除`, '删除')) {
+                  removeNodesAction([menuNode.id])
+                }
+              })()
+            }}
+          >
+            <span className="canvas-context-icon">✕</span>
+            <span className="canvas-context-text">
+              <span className="canvas-context-title">删除节点</span>
+              <span className="canvas-context-hint">与属性面板删除一致（二次确认）</span>
+            </span>
+          </button>
         </div>
       )}
     </div>

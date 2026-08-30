@@ -12,6 +12,13 @@
  * 变更说明：
  *   1. M3 初版（承接 ContextPreviewPanel 的组装展示，草稿源从 DEMO_DRAFT 换成
  *      aiStore.editingDraft——正在编辑章节的真实文本）
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 审查修复：改写模式不再自动切换编辑器（新挂载编辑器必无选区，切换后必然
+ *      失败还打断当前视图——改为原地提示）
+ *   2. 性能批次：上下文组装的草稿输入改 1s 尾随去抖（此前随 300ms 草稿 tick 重算，
+ *      关键词兜底全文扫描在压力规模下连续卡顿主线程）
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -201,10 +208,18 @@ export function AiPanel(): ReactElement {
     return first ?? Object.keys(nodes)[0] ?? ''
   }, [editingDraft, nodes, selectedNodeId, route, graphs])
 
-  /** 上下文组装（草稿 = 正在编辑章节的真实文本） */
+  /** 上下文组装（草稿 = 正在编辑章节的真实文本）。
+   *  性能批次：草稿输入走 1s 尾随去抖快照——连续输入时不再随每个 300ms 草稿 tick
+   *  重算（关键词兜底对全文做逐候选扫描，压力规模下是主线程热点） */
+  const [draftForAssembly, setDraftForAssembly] = useState('')
+  useEffect(() => {
+    const text = editingDraft?.text ?? ''
+    const t = setTimeout(() => setDraftForAssembly(text), 1000)
+    return () => clearTimeout(t)
+  }, [editingDraft?.text])
   const result = useMemo(
-    () => assembleContext({ nodes, edges, graphs }, targetId, { draft: editingDraft?.text ?? '' }),
-    [nodes, edges, graphs, targetId, editingDraft?.text]
+    () => assembleContext({ nodes, edges, graphs }, targetId, { draft: draftForAssembly }),
+    [nodes, edges, graphs, targetId, draftForAssembly]
   )
   const target = nodes[targetId]
   const promptFullText = useMemo(() => result.segments.map((s) => s.text).join('\n\n'), [result.segments])
@@ -259,7 +274,7 @@ export function AiPanel(): ReactElement {
     const ns = useNovelStore.getState()
     const chapterTabs = ns.tabs.filter((t) => t.kind === 'chapter')
     if (chapterTabs.length === 0) {
-      await dialogConfirm('续写/改写需要先打开一个章节正文（在左侧文件树点击章节文件）', '知道了')
+      await dialogConfirm('续写需要先打开一个章节正文（在左侧文件树双击章节文件）', '知道了')
       return null
     }
     const active = ns.tabs.find((t) => t.id === ns.activeTabId)
@@ -276,6 +291,12 @@ export function AiPanel(): ReactElement {
   }
 
   const handleGenerate = async (mode: 'continue' | 'rewrite'): Promise<void> => {
+    // 改写不自动切换编辑器（审查修复）：自动切换后新挂载的编辑器必无选区，流程注定失败
+    // 还打断了用户当前视图——原地提示让用户自行打开并选中
+    if (mode === 'rewrite' && !chapterEditor) {
+      await dialogConfirm('改写需要先打开章节正文并选中一段文字（在左侧文件树双击章节文件）', '知道了')
+      return
+    }
     const editor = chapterEditor ?? (await ensureChapterEditor())
     if (!editor) return
     const { from, to } = editor.state.selection
@@ -386,7 +407,7 @@ export function AiPanel(): ReactElement {
           <button
             className="left-tool-btn"
             disabled={generation !== null || !activeProviderId}
-            title="改写正文中选中的文字（无编辑器时自动切换到最近章节）"
+            title="改写正文中选中的文字（需先在正文中选中一段）"
             onClick={() => void handleGenerate('rewrite')}
           >
             ⟳ 改写选中

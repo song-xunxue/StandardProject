@@ -24,6 +24,7 @@ import { AiPanel } from './canvas/AiPanel'
 import { ChapterEditor } from './canvas/ChapterEditor'
 import { InspectorPanel } from './canvas/InspectorPanel'
 import { GlobalGraphView } from './graph/GlobalGraphView'
+import { TimelineView } from './graph/TimelineView'
 import { Dialog } from './components/Dialog'
 import { useNovelStore } from './store/novelStore'
 import { dialogPrompt } from './store/dialogStore'
@@ -153,6 +154,8 @@ export default function App(): ReactElement {
             <div className="placeholder-editor">在左侧双击蓝图或章节文件打开</div>
           )}
           {activeStrip === 'ai' && <AiPanel />}
+          {/* 时间线矩阵（v2-F4）：情节线×章节全宽覆盖层，点击格子跳章 */}
+          {activeStrip === 'timeline' && novel && <TimelineView onClose={() => setActiveStrip('novel')} />}
           {/* 全局图谱（FR-09）：全宽覆盖层，点击节点跳转回工作区 */}
           {activeStrip === 'graph' && novel && <GlobalGraphView onClose={() => setActiveStrip('novel')} />}
         </div>

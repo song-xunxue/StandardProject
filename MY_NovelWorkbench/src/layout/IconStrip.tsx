@@ -12,6 +12,10 @@
  * 变更说明：
  *   1. 审查修复：移除无对应功能的 search/blueprint 两项（点击只高亮无任何反应，
  *      误导用户）；底部设置按钮接线到 AI 面板（Provider 管理入口在此），不再是摆设
+ *
+ * 2026-09-01
+ * 变更说明：
+ *   1. v2-F4：新增 timeline 项（时间线矩阵——情节线×章节的 Plottr 式投影）
  */
 
 import type { ReactElement, ReactNode } from 'react'
@@ -26,7 +30,8 @@ interface IconItem {
 const ICON_ITEMS: IconItem[] = [
   { key: 'novel', title: '小说项目', hint: '创建/打开小说目录' },
   { key: 'ai', title: 'AI 撰写', hint: 'AI 辅助创作面板与 Provider 管理' },
-  { key: 'graph', title: '全局图谱', hint: '双向链接图谱总览' }
+  { key: 'graph', title: '全局图谱', hint: '双向链接图谱总览' },
+  { key: 'timeline', title: '时间线矩阵', hint: '情节线 × 章节的伏笔/支线排布' }
 ]
 
 /** 内联 SVG 图标集（单色线性风格） */
@@ -51,6 +56,16 @@ const iconPath: Record<string, ReactNode> = {
       <circle cx="18" cy="8" r="2.2" />
       <circle cx="9" cy="17.5" r="2.2" />
       <path d="m8 8 8.3-.7M7 8.6l1.4 6.7" />
+    </>
+  ),
+  // 网格矩阵：时间线（v2-F4）
+  timeline: (
+    <>
+      <rect x="4" y="4" width="5" height="5" rx="0.5" />
+      <rect x="11" y="4" width="5" height="5" rx="0.5" />
+      <rect x="4" y="11" width="5" height="5" rx="0.5" />
+      <rect x="11" y="11" width="5" height="5" rx="0.5" />
+      <path d="M9.5 6.5h1M9.5 13.5h1M6.5 9.5v1M13.5 9.5v1" />
     </>
   ),
   // 齿轮：设置

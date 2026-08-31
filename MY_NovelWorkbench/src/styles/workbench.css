@@ -1906,6 +1906,151 @@
   background: rgba(0, 0, 0, 0.45);
 }
 
+/* ---------- v2-F7 码字统计面板 ---------- */
+.stats-panel {
+  width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.stats-cards {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.stats-card {
+  flex: 1;
+  background: #26282b;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.stats-card-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.2;
+}
+
+.stats-card-label {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.stats-chart-title {
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  margin: 12px 0 6px;
+}
+
+.stats-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 130px;
+  padding: 8px;
+  background: #1c1d20;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.stats-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stats-bar {
+  width: 100%;
+  max-width: 26px;
+  background: linear-gradient(180deg, #6c9ef8, #4a7ecf);
+  border-radius: 3px 3px 0 0;
+}
+
+.stats-bar-date {
+  font-size: 9px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.stats-note {
+  margin-top: 10px;
+}
+
+/* ---------- v2-F6 敏感词面板 ---------- */
+.sensitive-panel {
+  width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.sensitive-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.sensitive-hit {
+  background: #26282b;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.sensitive-hit-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.sensitive-hit-word {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e08a8a;
+}
+
+.sensitive-hit-count {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.sensitive-hit-chapter {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--fg-default);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sensitive-hit-chapter:hover {
+  background: #2a2d33;
+}
+
+.sensitive-hit-sample {
+  display: block;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* resource-panel 原为画布内绝对定位，浮层内改回流式（遮罩负责定位） */
 .snapshot-overlay .resource-panel {
   position: relative;

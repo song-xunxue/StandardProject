@@ -51,8 +51,17 @@ export function startWatching(win: BrowserWindow): void {
   watcher = watch(novel.dir, { recursive: true }, (_event, filename) => {
     const rel = String(filename ?? '').replace(/\\/g, '/')
     if (rel === '') return
-    // 忽略索引目录与快照目录自身的抖动（快照创建/恢复=整目录拷贝，会引发事件风暴）
-    if (rel === '.index' || rel === '.snapshots' || rel.startsWith('.index/') || rel.startsWith('.snapshots/')) return
+    // 忽略索引目录与快照目录自身的抖动（快照创建/恢复=整目录拷贝，会引发事件风暴）；
+    // v2-F7：writing-stats.json 为保存时的统计入账写入（高频小文件），不触发树推送
+    if (
+      rel === '.index' ||
+      rel === '.snapshots' ||
+      rel === 'writing-stats.json' ||
+      rel.startsWith('.index/') ||
+      rel.startsWith('.snapshots/')
+    ) {
+      return
+    }
     pendingPaths.add(rel)
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {

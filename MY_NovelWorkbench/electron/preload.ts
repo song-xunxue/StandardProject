@@ -49,7 +49,16 @@ const api = {
     snapshotCreate: (note: string) => ipcRenderer.invoke(IPC.snapshotCreate, { note }),
     snapshotList: () => ipcRenderer.invoke(IPC.snapshotList),
     snapshotDelete: (id: string) => ipcRenderer.invoke(IPC.snapshotDelete, { id }),
-    snapshotRestore: (id: string) => ipcRenderer.invoke(IPC.snapshotRestore, { id })
+    snapshotRestore: (id: string) => ipcRenderer.invoke(IPC.snapshotRestore, { id }),
+    // v2-F7：码字统计
+    getWritingStats: () => ipcRenderer.invoke(IPC.getWritingStats)
+  },
+  /** v2-F6：敏感词词库（全局目录跨小说共享；扫描在渲染层 shared/sensitiveScan） */
+  wordbank: {
+    list: () => ipcRenderer.invoke(IPC.wordbankList),
+    save: (name: string, words: string[]) => ipcRenderer.invoke(IPC.wordbankSave, { name, words }),
+    remove: (name: string) => ipcRenderer.invoke(IPC.wordbankDelete, { name }),
+    importTxt: (name: string, merge: boolean) => ipcRenderer.invoke(IPC.wordbankImportTxt, { name, merge })
   },
   /** 订阅小说目录变化（返回取消订阅函数）；负载 { tree, changed } */
   onNovelChanged: (callback: (payload: unknown) => void): (() => void) => {

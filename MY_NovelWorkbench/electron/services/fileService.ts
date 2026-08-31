@@ -16,6 +16,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSyn
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { currentNovel } from './novelService'
+import { recordChapterSave, removeChapterStats } from './statsService'
 import { parseFrontmatter, serializeFrontmatter } from '../../shared/frontmatter'
 import { sanitizeFileName } from '../../shared/sanitize'
 import { chapterNameCompare } from '../../shared/naming'
@@ -107,6 +108,12 @@ export function saveChapter(path: string, doc: ChapterDoc): void {
     doc.content
   )
   writeFileSync(resolveInNovel(path), raw, 'utf-8')
+  // v2-F7：码字统计入账（章节保存是唯一正文写入口；统计失败不阻断保存）
+  try {
+    recordChapterSave(path, doc.content)
+  } catch (err) {
+    console.error('[statsService] 码字统计记录失败:', err)
+  }
 }
 
 /** 创建文件：蓝图（空图）或章节（空 frontmatter，可指定卷目录），返回相对路径 */
@@ -220,4 +227,12 @@ export function deleteFile(path: string): void {
     throw new Error(`仅允许删除蓝图或章节文件：${path}`)
   }
   unlinkSync(abs)
+  // v2-F7：章节删除同步清码字统计账（失败不阻断删除）
+  if (path.endsWith('.md')) {
+    try {
+      removeChapterStats(path)
+    } catch (err) {
+      console.error('[statsService] 章节删除统计清理失败:', err)
+    }
+  }
 }

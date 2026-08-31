@@ -26,6 +26,10 @@
  *      能力对齐）；菜单实现迁移共享 useContextMenu hook
  *   2. 性能批次：蓝图层级展示改为「owner 关系签名」订阅（坐标/属性变更不再触发
  *      buildBlueprintHierarchy 全量重算与整树重渲——签名仅由图 owner 链决定）
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. v2 阶段二：footer 新增「统计」（StatsPanel，F7）与「敏感词」（SensitivePanel，F6）入口
  */
 
 import { useMemo, useRef, useState } from 'react'
@@ -39,6 +43,8 @@ import { volumeOfChapter } from '@/services/chapterTree'
 import { pathToGraph } from '@/services/graphTraversal'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
 import { SnapshotPanel } from './SnapshotPanel'
+import { StatsPanel } from './StatsPanel'
+import { SensitivePanel } from './SensitivePanel'
 import { useContextMenu } from '@/components/useContextMenu'
 
 const displayTitle = (name: string): string => name.replace(/\.blueprint\.json$/, '').replace(/\.md$/, '')
@@ -296,6 +302,8 @@ export function LeftPanel(): ReactElement {
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [snapOpen, setSnapOpen] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(false)
+  const [sensitiveOpen, setSensitiveOpen] = useState(false)
   const { menu, setMenu, menuRef } = useContextMenu<{ area: MenuArea }>()
 
   /** 展示树：blueprints/ 平铺列表 → owner 嵌套层级（磁盘真相不变，仅展示重排） */
@@ -525,6 +533,22 @@ export function LeftPanel(): ReactElement {
           <span className="left-footer-ver">Electron {versions.electron} · Node {versions.node}</span>
           <button
             className="left-footer-btn"
+            title="码字统计：今日新增 / 总字数 / 连续天数 / 近 14 天趋势（v2-F7）"
+            disabled={!novel}
+            onClick={() => setStatsOpen(true)}
+          >
+            统计
+          </button>
+          <button
+            className="left-footer-btn"
+            title="敏感词检测：按投稿站点词库检测当前章/全本（纯本地，v2-F6）"
+            disabled={!novel}
+            onClick={() => setSensitiveOpen(true)}
+          >
+            敏感词
+          </button>
+          <button
+            className="left-footer-btn"
             title="快照：把当前小说存为可回滚的完整拷贝（.snapshots/，最多 10 份）"
             disabled={!novel}
             onClick={() => setSnapOpen(true)}
@@ -542,6 +566,8 @@ export function LeftPanel(): ReactElement {
         </div>
       )}
       {snapOpen && <SnapshotPanel onClose={() => setSnapOpen(false)} />}
+      {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
+      {sensitiveOpen && <SensitivePanel onClose={() => setSensitiveOpen(false)} />}
       {/* 目录右键菜单：按区域提供创建项（自动序号预填）+ 文件项通用操作 */}
       {menu && (
         <div

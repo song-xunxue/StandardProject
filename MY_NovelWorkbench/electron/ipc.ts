@@ -38,6 +38,8 @@ import { deleteResource, listResources, saveResource } from './services/resource
 import { createSnapshot, deleteSnapshot, listSnapshots, restoreSnapshot } from './services/snapshotService'
 import { deleteProvider, listProviders, saveProvider, testProvider } from './services/providerService'
 import { startGeneration, stopGeneration } from './services/llmService'
+import { getWritingStats } from './services/statsService'
+import { deleteWordbank, importWordbankTxt, listWordbanks, saveWordbank } from './services/wordbankService'
 import { indexStats, rebuildIndex, closeIndex } from './services/indexService'
 import { startWatching, stopWatching } from './watcher'
 
@@ -95,7 +97,25 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.exchangeFiles, (_e, p: { pathA: string; pathB: string }) => opened(() => exchangeFiles(p.pathA, p.pathB)))
   ipcMain.handle(IPC.deleteFile, (_e, p: { path: string }) => opened(() => deleteFile(p.path)))
 
-  ipcMain.handle(IPC.rebuildIndex, () => opened(() => rebuildIndex()))
+  // v2-F7：码字统计
+  ipcMain.handle(IPC.getWritingStats, () =>
+    opened(() => {
+      if (!currentNovel()) throw new Error('尚未打开小说')
+      return getWritingStats()
+    })
+  )
+
+  // v2-F6：敏感词词库（全局目录，不依赖打开小说；importTxt 弹系统文件框）
+  ipcMain.handle(IPC.wordbankList, () => opened(() => listWordbanks()))
+  ipcMain.handle(IPC.wordbankSave, (_e, p: { name: string; words: string[] }) =>
+    opened(() => saveWordbank(p.name, p.words))
+  )
+  ipcMain.handle(IPC.wordbankDelete, (_e, p: { name: string }) => opened(() => deleteWordbank(p.name)))
+  ipcMain.handle(IPC.wordbankImportTxt, (_e, p: { name: string; merge: boolean }) =>
+    opened(() => importWordbankTxt(win, p.name, p.merge))
+  )
+
+    ipcMain.handle(IPC.rebuildIndex, () => opened(() => rebuildIndex()))
   ipcMain.handle(IPC.indexStats, () => opened(() => indexStats()))
 
   // M2：元信息（标签库）与资源库

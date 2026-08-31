@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto'
 import { builtinTagLibrary, novelFileMap } from '../../shared/novelTemplate'
 import { sanitizeFileName } from '../../shared/sanitize'
 import { migrateLegacyResources } from './resourceService'
+import { initStats } from './statsService'
 import type { NovelMeta, RecentNovel } from '../../shared/types'
 
 /** 当前打开的小说（模块级状态，主进程单例） */
@@ -99,6 +100,13 @@ export function openNovel(dir: string): NovelMeta {
   // M4-B 数据迁移：旧小说目录内 resources/ 幂等搬入全局资源库（内部逐文件容错，不阻断打开）
   migrateLegacyResources(dir)
   current = { dir, meta: { ...meta, dir } }
+  // v2-F7：打开时全量对账码字统计（新章入账/删除清账/外部编辑计入当日；失败不阻断打开）。
+  // 必须在 current 赋值之后——statsService 经 currentNovel() 取小说目录
+  try {
+    initStats()
+  } catch (err) {
+    console.error('[statsService] 打开小说统计对账失败:', err)
+  }
   touchRecent(dir, meta.title)
   return current.meta
 }

@@ -14,6 +14,10 @@
  * 2026-08-28
  * 变更说明：
  *   1. M5：新增快照四通道类型（创建/列表/删除/恢复）
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. v2 阶段二：fs.getWritingStats（F7 码字统计）与 wordbank 组（F6 敏感词词库）
  */
 
 import type {
@@ -28,7 +32,9 @@ import type {
   RecentNovel,
   ResourceTemplate,
   SnapshotInfo,
-  TreeNode
+  TreeNode,
+  Wordbank,
+  WritingStatsView
 } from '@shared/types'
 
 export interface Api {
@@ -63,6 +69,16 @@ export interface Api {
     snapshotList: () => Promise<SnapshotInfo[]>
     snapshotDelete: (id: string) => Promise<void>
     snapshotRestore: (id: string) => Promise<void>
+    /** v2-F7：码字统计（主进程 writing-stats.json） */
+    getWritingStats: () => Promise<WritingStatsView>
+  }
+  /** v2-F6：敏感词词库（全局目录跨小说共享；扫描在渲染层 shared/sensitiveScan） */
+  wordbank: {
+    list: () => Promise<Wordbank[]>
+    save: (name: string, words: string[]) => Promise<Wordbank>
+    remove: (name: string) => Promise<void>
+    /** null=用户取消文件选择 */
+    importTxt: (name: string, merge: boolean) => Promise<Wordbank | null>
   }
   onNovelChanged: (callback: (payload: NovelChangedPayload) => void) => () => void
   provider: {

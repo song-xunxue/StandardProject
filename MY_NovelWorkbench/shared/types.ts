@@ -97,6 +97,15 @@ export const IPC = {
   snapshotDelete: 'fs:snapshotDelete', // (payload: { id }) => void
   snapshotRestore: 'fs:snapshotRestore', // (payload: { id }) => void（当前内容自动备份后覆盖恢复）
 
+  // v2-F7：码字统计（writing-stats.json 随小说走；openNovel 全量对账 + saveChapter 入账）
+  getWritingStats: 'fs:getWritingStats', // () => WritingStatsView
+
+  // v2-F6：敏感词词库（userData/sensitive-words，跨小说共享；扫描在渲染层 shared/sensitiveScan）
+  wordbankList: 'wordbank:list', // () => Wordbank[]
+  wordbankSave: 'wordbank:save', // (payload: { name, words }) => Wordbank（新建/覆盖，去空去重）
+  wordbankDelete: 'wordbank:delete', // (payload: { name }) => void
+  wordbankImportTxt: 'wordbank:importTxt', // (payload: { name, merge }) => Wordbank | null（null=用户取消；主进程弹 txt 选择框）
+
   // M3：AI Provider（ADR-9/16）
   providerList: 'provider:list', // () => ProviderInfo[]
   providerSave: 'provider:save', // (payload: { config: Omit<ProviderConfig,'apiKeyEnc'>, apiKey?: string }) => ProviderInfo（apiKey 明文仅经此通道进主进程加密）
@@ -115,6 +124,20 @@ export const IPC_PUSH = {
   /** LLM 流式分块：负载 { requestId, delta?, done, error? } */
   llmChunk: 'llm:chunk'
 } as const
+
+/** v2-F7 码字统计视图（getWritingStats 返回） */
+export interface WritingStatsView {
+  todayGain: number
+  totalChars: number
+  streakDays: number
+  recent: Array<{ date: string; total: number; gain: number }>
+}
+
+/** v2-F6 敏感词词库（userData/sensitive-words/<name>.json） */
+export interface Wordbank {
+  name: string
+  words: string[]
+}
 
 /** novel:changed 推送负载 */
 export interface NovelChangedPayload {

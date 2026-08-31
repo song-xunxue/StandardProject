@@ -18,10 +18,19 @@
  *   2. M5：indexChapter 长章节只读头部 64KB 提取 frontmatter（闭合符未在头部
  *      出现时回退全文读，容错超长 frontmatter）；indexBlueprint/indexChapter
  *      返回是否实际重建（syncIndex 统计用）
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. v2-P1 内容哈希变更检测：file_state 增加 hash 列（sha1 前 16 位）——mtime/size
+ *      变化触发后先比对内容哈希，内容未变（如 touch/复制保留时间戳被打乱）只刷新
+ *      基线不重解析（Notion per-span xxHash 思路的文件级实现）。章节为取哈希改读
+ *      全文（读是廉价 IO，跳过的 parse 才是贵操作）；等长替换的中后部内容变化
+ *      因此不再漏检
  */
 
 import Database from 'better-sqlite3'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { currentNovel } from './novelService'
 import { readTree } from './fileService'
@@ -30,10 +39,12 @@ import type { BlueprintFile } from '../../shared/types'
 
 type DB = Database.Database
 
-/** 章节索引头部读取上限：frontmatter 在文件头，10 万字长章节不必整读（M5 性能） */
-const FRONTMATTER_HEAD_BYTES = 64 * 1024
-
 let db: DB | null = null
+
+/** 内容哈希（sha1 前 16 位，十六进制）：文件级变更检测用 */
+function contentHash(text: string): string {
+  return createHash('sha1').update(text, 'utf-8').digest('hex').slice(0, 16)
+}
 
 function openDb(): DB {
   if (db) return db
@@ -58,9 +69,15 @@ function openDb(): DB {
       name TEXT PRIMARY KEY, color TEXT, builtin INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS file_state (
-      path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, size INTEGER NOT NULL
+      path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, size INTEGER NOT NULL, hash TEXT
     );
   `)
+  // v2-P1 迁移：旧库 file_state 无 hash 列时补列（已存在则忽略报错）
+  try {
+    db.exec('ALTER TABLE file_state ADD COLUMN hash TEXT')
+  } catch {
+    /* 列已存在 */
+  }
   return db
 }
 
@@ -70,18 +87,39 @@ export function closeIndex(): void {
   db = null
 }
 
-/** 文件是否需要重索引（st 由调用方 stat 一次后传入，避免双 stat 竞态；mtime 取整毫秒） */
-function needsReindex(database: DB, path: string, st: { mtimeMs: number; size: number }): boolean {
-  const row = database.prepare('SELECT mtime, size FROM file_state WHERE path = ?').get(path) as
-    | { mtime: number; size: number }
+/** 文件是否需要重索引（st 由调用方 stat 一次后传入，避免双 stat 竞态；mtime 取整毫秒）。
+ *  v2-P1：mtime/size 变化只触发「哈希复核」——返回 'same' 表示内容未变（调用方刷新
+ *  基线即可），'changed' 表示需要重索引，'skip' 表示 stat 层面未变直接过。
+ *  hash 基线缺失（v2-P1 之前的旧库行）视为基线不完整：强制重建一次以回填哈希 */
+function reindexState(
+  database: DB,
+  path: string,
+  st: { mtimeMs: number; size: number }
+): 'skip' | 'same' | 'changed' {
+  const row = database.prepare('SELECT mtime, size, hash FROM file_state WHERE path = ?').get(path) as
+    | { mtime: number; size: number; hash: string | null }
     | undefined
-  return !row || row.mtime !== Math.round(st.mtimeMs) || row.size !== st.size
+  if (!row) return 'changed'
+  if (row.hash === null) return 'changed' // 旧库迁移：无哈希基线，重建一次回填
+  if (row.mtime === Math.round(st.mtimeMs) && row.size === st.size) return 'skip'
+  return 'same' // mtime/size 变了但是否真变内容由哈希复核（调用方读取文件后调用 hashUnchanged）
 }
 
-function markIndexed(database: DB, path: string, st: { mtimeMs: number; size: number }): void {
+/** v2-P1：内容哈希复核——与基线一致则刷新 mtime/size 基线并返回 true（跳过重解析） */
+function hashUnchanged(database: DB, path: string, st: { mtimeMs: number; size: number }, text: string): boolean {
+  const row = database.prepare('SELECT hash FROM file_state WHERE path = ?').get(path) as { hash: string | null } | undefined
+  const hash = contentHash(text)
+  if (row && row.hash === hash) {
+    markIndexed(database, path, st, hash)
+    return true
+  }
+  return false
+}
+
+function markIndexed(database: DB, path: string, st: { mtimeMs: number; size: number }, hash?: string): void {
   database
-    .prepare('INSERT OR REPLACE INTO file_state (path, mtime, size) VALUES (?, ?, ?)')
-    .run(path, Math.round(st.mtimeMs), st.size)
+    .prepare('INSERT OR REPLACE INTO file_state (path, mtime, size, hash) VALUES (?, ?, ?, ?)')
+    .run(path, Math.round(st.mtimeMs), st.size, hash ?? null)
 }
 
 /** 删除文件的全部索引条目（节点 + 两端命中的边 + file_state）——删除/重命名残留清理 */
@@ -112,27 +150,23 @@ function statOrNull(novelDir: string, path: string): { mtimeMs: number; size: nu
   }
 }
 
-/** 读文件头部（至多 FRONTMATTER_HEAD_BYTES 字节）：indexChapter 只需 frontmatter */
-function readHead(novelDir: string, path: string): string {
-  const fd = openSync(join(novelDir, path), 'r')
-  try {
-    const buf = Buffer.alloc(FRONTMATTER_HEAD_BYTES)
-    // readSync：从位置 0 读至多 HEAD_BYTES 字节进缓冲区，返回实际读取数（文件更小时即全文）
-    const bytes = readSync(fd, buf, 0, FRONTMATTER_HEAD_BYTES, 0)
-    return buf.subarray(0, bytes).toString('utf-8')
-  } finally {
-    closeSync(fd)
-  }
-}
+/** 读文件头部（至多 FRONTMATTER_HEAD_BYTES 字节）：v2-P1 起 indexChapter 改读全文
+ *  取哈希，此函数无调用方已移除；常量留作单章节尺寸参考注释 */
+// （readHead 已于 2026-08-31 v2-P1 移除——哈希复核需要全文内容）
 
 /** 索引单个蓝图文件：替换该文件的节点与关联边；文件已删除时清理残留。
- *  返回是否实际重建（未变跳过/已删除清理均返回 false） */
+ *  返回是否实际重建（未变跳过/哈希未变/已删除清理均返回 false） */
 export function indexBlueprint(path: string): boolean {
   const database = openDb()
   const novel = currentNovel()!
   const st = statOrNull(novel.dir, path)
-  if (!st || !needsReindex(database, path, st)) return false
-  const file = JSON.parse(readFileSync(join(novel.dir, path), 'utf-8')) as BlueprintFile
+  if (!st) return false
+  const state = reindexState(database, path, st)
+  if (state === 'skip') return false
+  const raw = readFileSync(join(novel.dir, path), 'utf-8')
+  if (state === 'same' && hashUnchanged(database, path, st, raw)) return false
+  const file = JSON.parse(raw) as BlueprintFile
+  const hash = contentHash(raw)
 
   const replaceTx = database.transaction(() => {
     const oldIds = (database.prepare('SELECT id FROM nodes WHERE path = ?').all(path) as Array<{ id: string }>).map((r) => r.id)
@@ -145,7 +179,7 @@ export function indexBlueprint(path: string): boolean {
       'INSERT OR REPLACE INTO nodes (id, path, type, tags, mtime, hash) VALUES (?, ?, ?, ?, ?, ?)'
     )
     for (const n of file.nodes ?? []) {
-      insertNode.run(n.id, path, n.type, JSON.stringify(n.tags ?? []), Math.round(st.mtimeMs), `${st.size}`)
+      insertNode.run(n.id, path, n.type, JSON.stringify(n.tags ?? []), Math.round(st.mtimeMs), hash)
     }
     const insertEdge = database.prepare(
       'INSERT OR REPLACE INTO edges (id, source_id, target_id, type, anchor) VALUES (?, ?, ?, ?, NULL)'
@@ -153,30 +187,30 @@ export function indexBlueprint(path: string): boolean {
     for (const e of file.edges ?? []) {
       insertEdge.run(e.id, e.from, e.to, e.type)
     }
-    markIndexed(database, path, st)
+    markIndexed(database, path, st, hash)
   })
   replaceTx()
   return true
 }
 
 /** 索引单个章节文件：节点 id 采用章节相对路径；文件已删除时清理残留。
- *  返回是否实际重建；正文只读头部（frontmatter 在文件头，长章节不必整读） */
+ *  返回是否实际重建；v2-P1 起读全文取内容哈希（mtime/size 变但内容未变只刷基线
+ *  不重解析——读是廉价 IO，跳过的 frontmatter 解析才是贵操作） */
 export function indexChapter(path: string): boolean {
   const database = openDb()
   const novel = currentNovel()!
   const st = statOrNull(novel.dir, path)
-  if (!st || !needsReindex(database, path, st)) return false
-  let raw = readHead(novel.dir, path)
-  // 头部未出现闭合 ---（病态超长 frontmatter）时回退全文读，保证解析正确
-  if (st.size > FRONTMATTER_HEAD_BYTES && !/^---\n[\s\S]*?\n---\n?/.test(raw.replace(/\r\n/g, '\n'))) {
-    raw = readFileSync(join(novel.dir, path), 'utf-8')
-  }
+  if (!st) return false
+  const state = reindexState(database, path, st)
+  if (state === 'skip') return false
+  const raw = readFileSync(join(novel.dir, path), 'utf-8')
+  if (state === 'same' && hashUnchanged(database, path, st, raw)) return false
   const { data } = parseFrontmatter(raw)
   const upsert = database.prepare(
     'INSERT OR REPLACE INTO nodes (id, path, type, tags, mtime, hash) VALUES (?, ?, ?, ?, ?, ?)'
   )
-  upsert.run(path, path, 'chapter', JSON.stringify(data.tags ?? []), Math.round(st.mtimeMs), `${st.size}`)
-  markIndexed(database, path, st)
+  upsert.run(path, path, 'chapter', JSON.stringify(data.tags ?? []), Math.round(st.mtimeMs), contentHash(raw))
+  markIndexed(database, path, st, contentHash(raw))
   return true
 }
 

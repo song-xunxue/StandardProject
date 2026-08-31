@@ -158,6 +158,8 @@ export interface BlueprintFileNode {
   aliases: string[]
   prompt: string
   summary: string
+  /** AI 上下文可见性（v2-F1）：auto/always/never，缺省 auto */
+  aiVisibility?: 'auto' | 'always' | 'never'
   content?: string
   position: { x: number; y: number }
   size: { width: number; height: number }

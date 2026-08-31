@@ -18,6 +18,13 @@
  * 变更说明：
  *   1. 性能批次：关键词兜底只扫草稿尾部 KEYWORD_SCAN_TAIL_CHARS 字（此前全文逐候选
  *      includes，压力规模下随 300ms 草稿 tick 连续卡顿主线程）
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. v2-F1 AI 可见性：never 节点任何层不注入（含关键词兜底候选；目标自身 never
+ *      则整体不组装）；always 节点未被图遍历选中时进第 3 层常驻注入（role=always）
+ *   2. v2-F2 入选理由：每个片段生成 reason（邻居含最强连线类型、深层含跳数、
+ *      关键词含命中词与来源、祖先含级数），Context Viewer 展示
  */
 
 import type { BlueprintEdge, BlueprintNode, EdgeType, GraphData } from '@/types/blueprint'
@@ -48,8 +55,10 @@ export interface ContextSegment {
   title: string
   /** 1=当前+直接邻居 2=上级蓝图链 3=深层节点 */
   layer: 1 | 2 | 3
-  /** 片段角色：self 当前节点 / neighbor 直接邻居 / ancestor 上级蓝图 / deep 深层 / keyword 兜底 */
-  role: 'self' | 'neighbor' | 'ancestor' | 'deep' | 'keyword'
+  /** 片段角色：self 当前节点 / neighbor 直接邻居 / ancestor 上级蓝图 / deep 深层 / keyword 兜底 / always 常驻（v2-F1） */
+  role: 'self' | 'neighbor' | 'ancestor' | 'deep' | 'keyword' | 'always'
+  /** 入选理由（v2-F2，Context Viewer 展示）：为何该节点进入上下文 */
+  reason: string
   /** 实际注入的文本 */
   text: string
   tokens: number
@@ -78,6 +87,23 @@ export interface AssembleResult {
 
 /** 边语义权重：箭头（因果/顺序）> 直线（关联）> 虚线（参考/伏笔），见 ADR-15 */
 const EDGE_WEIGHT: Record<EdgeType, number> = { arrow: 3, line: 2, dashed: 1 }
+
+/** 边类型显示名（入选理由用，与画布/属性面板口径一致） */
+const EDGE_TYPE_LABEL: Record<EdgeType, string> = { arrow: '箭头·顺序', line: '直线·关联', dashed: '虚线·参考' }
+
+/** 两节点间权重最大的连线类型（邻居节点的入选理由用；无边返回 null） */
+function strongestEdgeBetween(data: GraphData, a: string, b: string): EdgeType | null {
+  let best: EdgeType | null = null
+  let bestWeight = 0
+  for (const e of Object.values(data.edges)) {
+    const touches = (e.from === a && e.to === b) || (e.from === b && e.to === a)
+    if (touches && EDGE_WEIGHT[e.type] > bestWeight) {
+      bestWeight = EDGE_WEIGHT[e.type]
+      best = e.type
+    }
+  }
+  return best
+}
 
 /**
  * token 估算（确定性近似）：CJK 字符约 0.65 token/字，其余 ASCII 词约 1.3 token/词
@@ -152,21 +178,25 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
     dropped: []
   }
   if (!target) return empty
+  // v2-F1：目标节点自身设为 never 时整体不组装（用户显式要求完全隐藏）
+  if (target.aiVisibility === 'never') return empty
 
   // ---- 分层收集（nodeId → layer/role，先到先得：self > neighbor > ancestor > deep）----
+  // v2-F1：never 节点在任何层都不注入（内容防剧透），但不妨碍 BFS 路径计算
+  const hidden = new Set(Object.values(data.nodes).filter((n) => n.aiVisibility === 'never').map((n) => n.id))
   const assigned = new Map<string, { layer: 1 | 2 | 3; role: ContextSegment['role'] }>()
   assigned.set(targetNodeId, { layer: 1, role: 'self' })
 
   const depths = bfsDepths(data, targetNodeId)
   for (const [nodeId, depth] of depths) {
     if (nodeId === targetNodeId) continue
-    if (depth === 1) assigned.set(nodeId, { layer: 1, role: 'neighbor' })
+    if (depth === 1 && !hidden.has(nodeId)) assigned.set(nodeId, { layer: 1, role: 'neighbor' })
   }
 
   // 上级蓝图链（共用 graphTraversal 的单一实现，自带防环；不覆盖已分配的）
   const ancestors = ancestorNodesOf(data, targetNodeId)
   for (const ancestor of ancestors) {
-    if (!assigned.has(ancestor.id)) assigned.set(ancestor.id, { layer: 2, role: 'ancestor' })
+    if (!assigned.has(ancestor.id) && !hidden.has(ancestor.id)) assigned.set(ancestor.id, { layer: 2, role: 'ancestor' })
   }
 
   // 深层节点：depth ≥2 且 ≤ maxDepth，未分配的进入第 3 层
@@ -177,7 +207,7 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
   }
   const deepCandidates: Array<{ node: BlueprintNode; weight: number }> = []
   for (const [nodeId, depth] of depths) {
-    if (depth < 2 || depth > maxDepth || assigned.has(nodeId)) continue
+    if (depth < 2 || depth > maxDepth || assigned.has(nodeId) || hidden.has(nodeId)) continue
     const node = data.nodes[nodeId]
     if (!node) continue
     deepCandidates.push({ node, weight: maxEdgeWeightToLayer1(data, nodeId, layer1Ids) })
@@ -185,12 +215,18 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
   deepCandidates.sort((a, b) => b.weight - a.weight || a.node.id.localeCompare(b.node.id))
   for (const { node } of deepCandidates) assigned.set(node.id, { layer: 3, role: 'deep' })
 
+  // v2-F1 常驻注入：always 节点未被图遍历选中时进第 3 层（占预算，字典序确定性）
+  const alwaysNodes = Object.values(data.nodes)
+    .filter((n) => n.aiVisibility === 'always' && !assigned.has(n.id))
+    .sort((a, b) => a.id.localeCompare(b.id))
+  for (const n of alwaysNodes) assigned.set(n.id, { layer: 3, role: 'always' })
+
   // ---- 分层预算填充 ----
   const layerBudgets: [number, number, number] = layerBudgetsOf(totalBudget, layerRatios)
   const segments: ContextSegment[] = []
   const layerTokens: [number, number, number] = [0, 0, 0]
   const dropped: AssembleResult['dropped'] = []
-  // 层内顺序：第 1 层 self 最先；第 3 层按权重；第 2 层自内向外
+  // 层内顺序：第 1 层 self 最先；第 3 层按权重（常驻 always 排其后）；第 2 层自内向外
   const roleOrder: Record<string, number> = { self: 0, neighbor: 1, ancestor: 0, deep: 0 }
   const layerEntries = (layer: 1 | 2 | 3): Array<[string, { layer: 1 | 2 | 3; role: ContextSegment['role'] }]> =>
     [...assigned.entries()].filter(([, info]) => info.layer === layer)
@@ -204,7 +240,32 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
         .filter((a) => assigned.get(a.id)?.layer === 2)
         .map((a) => [a.id, assigned.get(a.id)!] as [string, { layer: 1 | 2 | 3; role: ContextSegment['role'] }])
     }
-    return deepCandidates.map(({ node }) => [node.id, assigned.get(node.id)!] as [string, { layer: 1 | 2 | 3; role: ContextSegment['role'] }])
+    return [
+      ...deepCandidates.map(({ node }) => [node.id, assigned.get(node.id)!] as [string, { layer: 1 | 2 | 3; role: ContextSegment['role'] }]),
+      ...alwaysNodes.map((n) => [n.id, assigned.get(n.id)!] as [string, { layer: 1 | 2 | 3; role: ContextSegment['role'] }])
+    ]
+  }
+
+  /** v2-F2：按节点与角色生成入选理由（Context Viewer 展示） */
+  const reasonOf = (nodeId: string, role: ContextSegment['role']): string => {
+    switch (role) {
+      case 'self':
+        return '当前编辑章节的关联目标'
+      case 'neighbor': {
+        const et = strongestEdgeBetween(data, targetNodeId, nodeId)
+        return `直接连线（${et ? EDGE_TYPE_LABEL[et] : '关联'}）`
+      }
+      case 'ancestor': {
+        const idx = ancestors.findIndex((a) => a.id === nodeId)
+        return `上级蓝图链（第 ${idx + 1} 级摘要）`
+      }
+      case 'deep':
+        return `深层链接（${depths.get(nodeId) ?? 2} 跳）`
+      case 'always':
+        return '常驻注入（节点 AI 设置=始终）'
+      default:
+        return ''
+    }
   }
 
   for (const layer of [1, 2, 3] as const) {
@@ -216,7 +277,7 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
       const text = nodeText(node)
       const tokens = estimateTokens(text)
       if (used + tokens <= budget) {
-        segments.push({ nodeId, title: node.title, layer, role: info.role, text, tokens })
+        segments.push({ nodeId, title: node.title, layer, role: info.role, reason: reasonOf(nodeId, info.role), text, tokens })
         used += tokens
       } else {
         const remaining = budget - used
@@ -229,6 +290,7 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
             title: node.title,
             layer,
             role: info.role,
+            reason: reasonOf(nodeId, info.role),
             text: truncatedText,
             tokens: estimateTokens(truncatedText)
           })
@@ -251,14 +313,28 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
     // 「就近补上下文」的语义贡献远低于尾部
     const scanText =
       draft.length > KEYWORD_SCAN_TAIL_CHARS ? draft.slice(-KEYWORD_SCAN_TAIL_CHARS) : draft
-    for (const node of keywordCandidates(data, assigned)) {
+    for (const node of keywordCandidates(data, assigned, hidden)) {
       if (remainingOverall <= 64) break
-      const hit = [node.title, ...node.aliases, ...node.tags].some((k) => k && scanText.includes(k))
-      if (!hit) continue
+      // v2-F2：记录命中的具体词与来源（标题/别名/标签），作为入选理由展示
+      const keywords: Array<{ word: string; from: string }> = [
+        { word: node.title, from: '标题' },
+        ...node.aliases.map((a) => ({ word: a, from: '别名' })),
+        ...node.tags.map((t) => ({ word: t, from: '标签' }))
+      ]
+      const hitEntry = keywords.find((k) => k.word !== '' && scanText.includes(k.word))
+      if (!hitEntry) continue
       const text = nodeText(node)
       const tokens = estimateTokens(text)
       if (tokens > remainingOverall) continue // 放不下的候选跳过，继续找更小的
-      segments.push({ nodeId: node.id, title: node.title, layer: 3, role: 'keyword', text, tokens })
+      segments.push({
+        nodeId: node.id,
+        title: node.title,
+        layer: 3,
+        role: 'keyword',
+        reason: `草稿命中：「${hitEntry.word}」（${hitEntry.from}）`,
+        text,
+        tokens
+      })
       remainingOverall -= tokens
       // 兜底片段计入第 3 层统计，保证 layerTokens 之和 === totalTokens 口径一致
       layerTokens[2] += tokens
@@ -269,12 +345,13 @@ export function assembleContext(data: GraphData, targetNodeId: string, options: 
   return { segments, layerTokens, totalTokens, totalBudget, dropped }
 }
 
-/** 关键词兜底候选：未进入任何层级的节点（排除自身），确定性排序 */
+/** 关键词兜底候选：未进入任何层级的节点（排除自身与 never 隐藏节点，v2-F1），确定性排序 */
 function keywordCandidates(
   data: GraphData,
-  assigned: Map<string, { layer: 1 | 2 | 3; role: ContextSegment['role'] }>
+  assigned: Map<string, { layer: 1 | 2 | 3; role: ContextSegment['role'] }>,
+  hidden: Set<string>
 ): BlueprintNode[] {
   return Object.values(data.nodes)
-    .filter((n) => !assigned.has(n.id))
+    .filter((n) => !assigned.has(n.id) && !hidden.has(n.id))
     .sort((a, b) => a.id.localeCompare(b.id))
 }

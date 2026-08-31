@@ -10,9 +10,13 @@
  *   1. M1 初版：文件 → 图视图集合（owner 关系由父文件节点 refGraphId 推导）
  *   2. M2 审查修订：解析时对节点做字段归一化（缺 tags/position 等的外部手编文件
  *      不再让渲染层抛 TypeError）；type 非法或 id 缺失的节点跳过并告警
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. v2-F1：节点归一化补 aiVisibility（非法值回落 undefined=auto）
  */
 
-import type { BlueprintEdge, BlueprintNode, GraphData, GraphView, NodeType } from './blueprint'
+import type { AiVisibility, BlueprintEdge, BlueprintNode, GraphData, GraphView, NodeType } from './blueprint'
 import type { BlueprintFile, BlueprintFileNode } from './types'
 
 const VALID_NODE_TYPES: ReadonlySet<string> = new Set(['blueprint', 'text', 'ref'])
@@ -49,6 +53,8 @@ function normalizeNode(n: unknown, fileId: string): BlueprintNode | null {
     aliases: Array.isArray(raw.aliases) ? raw.aliases.filter((t): t is string => typeof t === 'string') : [],
     prompt: typeof raw.prompt === 'string' ? raw.prompt : '',
     summary: typeof raw.summary === 'string' ? raw.summary : '',
+    aiVisibility:
+      raw.aiVisibility === 'always' || raw.aiVisibility === 'never' ? (raw.aiVisibility as AiVisibility) : undefined,
     position:
       raw.position && typeof raw.position.x === 'number' && typeof raw.position.y === 'number'
         ? { x: raw.position.x, y: raw.position.y }

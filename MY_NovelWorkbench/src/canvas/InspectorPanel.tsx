@@ -328,6 +328,21 @@ function NodeInspector(props: { node: BlueprintNode }): ReactElement {
       />
       <div className="insp-hint">{summary.length} 字（失焦保存）</div>
 
+      {/* v2-F1：AI 上下文可见性三档（never 防剧透 / always 常驻 / auto 现行为），离散操作即时提交 */}
+      <div className="insp-section">AI 上下文注入</div>
+      <select
+        className="dialog-input"
+        value={node.aiVisibility ?? 'auto'}
+        title="never：该节点内容永不进入 AI 上下文（伏笔/未登场设定防剧透）；always：即使未被链接选中也常驻注入；auto：按图遍历与关键词兜底决定"
+        onChange={(e) =>
+          updateNode(node.id, { aiVisibility: e.target.value === 'auto' ? undefined : (e.target.value as BlueprintNode['aiVisibility']) })
+        }
+      >
+        <option value="auto">auto · 按链接与关键词自动决定</option>
+        <option value="always">always · 常驻注入（文风指南/全局设定）</option>
+        <option value="never">never · 永不注入（防剧透）</option>
+      </select>
+
       <div className="insp-footer">
         <button className="insp-danger-btn" onClick={() => void handleDelete()}>
           删除节点

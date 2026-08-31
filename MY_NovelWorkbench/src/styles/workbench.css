@@ -439,6 +439,14 @@
   color: var(--fg-muted);
 }
 
+/* v2-F2：片段入选理由（Context Viewer 透明度） */
+.ctx-seg-reason {
+  font-size: 10px;
+  color: #7f8ba0;
+  line-height: 1.3;
+  margin-top: 1px;
+}
+
 .ctx-seg-tokens {
   font-size: 10px;
   color: var(--fg-muted);
@@ -984,6 +992,19 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* v2-F1：节点 AI 可见性角标（⊘AI 永不注入 / ⊕AI 常驻注入） */
+.bp-node-aivis {
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 400;
+  color: #e08a8a;
+  vertical-align: 1px;
+}
+
+.bp-node-aivis.always {
+  color: #7ec9c0;
 }
 
 .bp-node-ref {

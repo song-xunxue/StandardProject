@@ -9,6 +9,10 @@
  *   1. M1 初版：graphId 剥离/回填、水合 owner 推导、导出边归属、孤儿边归属
  *   2. M2：ref 节点 refTarget 字段往返一致性
  *   3. M2 审查修订：外部手编文件的缺字段节点归一化、非法节点/边跳过不阻断
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. v2-F1：aiVisibility 合法档位解析/非法回落/水合导出往返
  */
 
 import { describe, expect, it } from 'vitest'
@@ -152,5 +156,39 @@ describe('字段归一化（M2 审查修订：外部手编文件容错）', () =
     })
     expect(Object.keys(data.edges).sort()).toEqual(['e-labeled', 'e-ok'])
     expect(data.edges['e-labeled']!.label).toBeUndefined()
+  })
+})
+
+describe('aiVisibility 编解码（v2-F1）', () => {
+  it('合法档位解析保留；非法值与缺省回落 undefined（=auto），不阻断解析', () => {
+    const file: BlueprintFile = {
+      id: 'g-1',
+      title: '测试图',
+      nodes: [
+        { ...fnode('n-1'), aiVisibility: 'never' },
+        { ...fnode('n-2'), aiVisibility: 'always' },
+        { ...fnode('n-3'), aiVisibility: 'sometimes' as unknown as 'never' },
+        fnode('n-4')
+      ],
+      edges: []
+    }
+    const { nodes } = parseBlueprintFile(file)
+    expect(nodes[0]!.aiVisibility).toBe('never')
+    expect(nodes[1]!.aiVisibility).toBe('always')
+    expect(nodes[2]!.aiVisibility).toBeUndefined()
+    expect(nodes[3]!.aiVisibility).toBeUndefined()
+  })
+
+  it('水合→导出往返：aiVisibility 保留在落盘节点上（graphId 照旧剥离）', () => {
+    const file: BlueprintFile = {
+      id: 'g-1',
+      title: '测试图',
+      nodes: [{ ...fnode('n-1', { title: '伏笔节点', summary: 's' }), aiVisibility: 'never' }],
+      edges: []
+    }
+    const data = hydrateGraphData([file])
+    const exported = exportBlueprintFile(data, 'g-1')!
+    expect(exported.nodes[0]!.aiVisibility).toBe('never')
+    expect('graphId' in exported.nodes[0]!).toBe(false)
   })
 })

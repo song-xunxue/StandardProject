@@ -14,6 +14,11 @@
  *      aliases（关键词兜底用别名）/ content（text 节点正文）；新增 GraphView 图视图
  *   4. M2：节点补充 refTarget（ref 节点指向的章节/蓝图相对路径）；
  *      新增 MAX_NESTING_DEPTH 蓝图嵌套深度上限常量（ADR-12）
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. v2-F1：节点补充 aiVisibility（AI 上下文可见性三档）——auto 现行为 /
+ *      always 常驻注入 / never 永不注入（伏笔防剧透，竞品 novelcrafter/Sudowrite 双验证）
  */
 
 /**
@@ -26,6 +31,14 @@ export type NodeType = 'blueprint' | 'text' | 'ref'
 
 /** 语义连线类型：箭头=因果/顺序，直线=并列关联，虚线=参考/伏笔（映射表见 PROJECT_PLAN.md ADR-15） */
 export type EdgeType = 'arrow' | 'line' | 'dashed'
+
+/**
+ * AI 上下文可见性（v2-F1）：节点内容是否参与 AI 组装
+ * - auto   现行为（图遍历/关键词兜底决定）
+ * - always 常驻注入（未被图遍历选中也进第 3 层，占预算）
+ * - never  永不注入（防剧透：伏笔/未登场设定等）
+ */
+export type AiVisibility = 'auto' | 'always' | 'never'
 
 /** 蓝图嵌套深度上限（ADR-12：route 最长 8 级；在第 8 层中创建蓝图节点时界面提示并阻止） */
 export const MAX_NESTING_DEPTH = 8
@@ -52,6 +65,8 @@ export interface BlueprintNode {
   prompt: string
   /** 摘要卡片：50-100 字压缩表示，专用于上级链路注入（与 prompt 是两个概念，见计划书 3.2） */
   summary: string
+  /** AI 上下文可见性（v2-F1）：缺省 auto；never 防剧透 / always 常驻注入 */
+  aiVisibility?: AiVisibility
   /** 仅 type=text：节点正文全文（PoC 内存版；M3 后持久化到 chapters/） */
   content?: string
   /** 画布坐标与尺寸 */

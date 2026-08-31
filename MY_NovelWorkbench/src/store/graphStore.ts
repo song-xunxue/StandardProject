@@ -36,9 +36,9 @@ const PROXY_PREFIX = 'proxy:'
 
 const stripProxy = (id: string): string => (id.startsWith(PROXY_PREFIX) ? id.slice(PROXY_PREFIX.length) : id)
 
-/** 节点属性可编辑字段（type 不可变：blueprint → text 会遗留孤儿子图） */
+/** 节点属性可编辑字段（type 不可变：blueprint → text 会遗留孤儿子图）；v2-F1 含 aiVisibility */
 export type NodeEditableFields = Partial<
-  Pick<BlueprintNode, 'title' | 'tags' | 'aliases' | 'prompt' | 'summary' | 'refTarget' | 'refGraphId' | 'size'>
+  Pick<BlueprintNode, 'title' | 'tags' | 'aliases' | 'prompt' | 'summary' | 'refTarget' | 'refGraphId' | 'size' | 'aiVisibility'>
 >
 
 /** 新建节点输入（落点坐标由画布层按当前视口计算） */

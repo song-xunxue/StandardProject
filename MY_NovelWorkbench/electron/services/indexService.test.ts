@@ -9,6 +9,11 @@
  * 2026-08-28
  * 变更说明：
  *   1. M5 初版
+ *
+ * 2026-08-31
+ * 变更说明：
+ *   1. v2-P1 内容哈希回归：touch 不重索引 / 等长替换必重索引 / 数据随重解析更新 /
+ *      旧库无 hash 列迁移可用
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
@@ -127,6 +132,61 @@ describe('syncIndex 增量校对（M5 冷启动路径）', () => {
     // 蓝图 2 节点 + 其 1 条边被清理，仅剩章节节点
     expect(stats.nodes).toBe(1)
     expect(stats.edges).toBe(0)
+  })
+})
+
+describe('内容哈希变更检测（v2-P1）', () => {
+  it('touch 场景：mtime 变但内容未变 → 只刷基线不重解析（changed=0）', () => {
+    writeChapter('第01章.md', '第一章正文内容。')
+    syncIndex()
+    // 重写同内容：mtime 变化、size 与内容不变（旧 mtime+size 判定会误判为需重索引）
+    writeChapter('第01章.md', '第一章正文内容。')
+    const stats = syncIndex()
+    expect(stats.changed).toBe(0)
+    expect(stats.nodes).toBe(1)
+  })
+
+  it('等长内容替换（mtime 与 size 均变但真实变更）→ 正常重索引并更新数据', () => {
+    writeChapter('第01章.md', '第一章正文：甲甲甲。')
+    syncIndex()
+    // 等长替换 '甲'→'乙'：内容真变，必须重解析
+    writeChapter('第01章.md', '第一章正文：乙乙乙。')
+    const stats = syncIndex()
+    expect(stats.changed).toBe(1)
+  })
+
+  it('内容变更后 frontmatter 数据随之更新（重解析确实发生）', () => {
+    writeChapter('第01章.md', '第一章正文内容。')
+    syncIndex()
+    expect(chapterTagsFromDb()).toEqual(['伏笔'])
+    // 重写：tags 改为「大纲」（内容与哈希变化）
+    writeFileSync(
+      join(novelDir, 'chapters', '第01章.md'),
+      '---\ntitle: 第01章\ntags: [大纲]\naliases: []\n---\n\n第一章正文内容。\n',
+      'utf-8'
+    )
+    syncIndex()
+    expect(chapterTagsFromDb()).toEqual(['大纲'])
+  })
+
+  it('旧库迁移：无 hash 列的既有 file_state 表可正常补列并回填哈希基线', () => {
+    // 模拟旧库：手动删列不可行，改为直接建旧结构表再跑 syncIndex（openDb 的 ALTER 补列）
+    writeChapter('第01章.md', '第一章正文内容。')
+    syncIndex()
+    closeIndex()
+    // 以旧 schema 重建 file_state（丢 hash 列），模拟 v2-P1 之前的库
+    const db = new Database(join(novelDir, '.index', 'index.db'))
+    db.exec('CREATE TABLE file_state_old (path TEXT PRIMARY KEY, mtime INTEGER NOT NULL, size INTEGER NOT NULL)')
+    db.exec("INSERT INTO file_state_old SELECT path, mtime, size FROM file_state")
+    db.exec('DROP TABLE file_state; ALTER TABLE file_state_old RENAME TO file_state')
+    db.close()
+    // 重新打开（触发 ALTER 补列）：哈希基线缺失 → 强制重建一次回填（changed=1，一次性成本）
+    const stats = syncIndex()
+    expect(stats.changed).toBe(1)
+    expect(stats.nodes).toBe(1)
+    // 基线建立后：同内容 touch 借哈希跳过
+    writeChapter('第01章.md', '第一章正文内容。')
+    expect(syncIndex().changed).toBe(0)
   })
 })
 

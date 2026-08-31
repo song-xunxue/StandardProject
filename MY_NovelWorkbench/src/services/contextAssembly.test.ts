@@ -242,6 +242,55 @@ describe('assembleContext 分支补齐（M3）', () => {
     expect(tailHit.segments.some((s) => s.nodeId === 'iso' && s.role === 'keyword')).toBe(true)
   })
 
+  it('v2-F1 never：任何层都不注入（邻居/深层/兜底候选全排除），目标自身 never 则整体为空', () => {
+    const data = fixture()
+    // a-2 是 a-1 的直接邻居 → 设 never 后应从 L1 消失
+    data.nodes['a-2']!.aiVisibility = 'never'
+    const r1 = assembleContext(data, 'a-1')
+    expect(r1.segments.some((s) => s.nodeId === 'a-2')).toBe(false)
+    // iso 孤立节点靠关键词兜底进入 → 设 never 后即使草稿命中也不补
+    data.nodes['iso']!.aiVisibility = 'never'
+    const r2 = assembleContext(data, 'a-1', { draft: '他在剑冢边缘驻足。' })
+    expect(r2.segments.some((s) => s.nodeId === 'iso')).toBe(false)
+    // 目标节点自身 never → 整体不组装
+    data.nodes['a-1']!.aiVisibility = 'never'
+    const r3 = assembleContext(data, 'a-1', { draft: '剑冢' })
+    expect(r3.segments).toHaveLength(0)
+  })
+
+  it('v2-F1 always：未被图遍历选中的常驻节点进第 3 层（role=always），已被选中的不重复', () => {
+    const data = fixture()
+    // iso 孤立不可达 → always 后应常驻注入
+    data.nodes['iso']!.aiVisibility = 'always'
+    const r = assembleContext(data, 'a-1')
+    const seg = r.segments.find((s) => s.nodeId === 'iso')
+    expect(seg?.role).toBe('always')
+    expect(seg?.layer).toBe(3)
+    // 邻居节点设 always：已被 L1 选中，不重复进 L3
+    data.nodes['a-2']!.aiVisibility = 'always'
+    const r2 = assembleContext(data, 'a-1')
+    expect(r2.segments.filter((s) => s.nodeId === 'a-2')).toHaveLength(1)
+    expect(r2.segments.find((s) => s.nodeId === 'a-2')?.role).toBe('neighbor')
+  })
+
+  it('v2-F2 入选理由：各角色 reason 内容正确（邻居含连线类型/祖先含级数/关键词含命中词与来源）', () => {
+    const data = fixture()
+    // a-1→a-2 为 arrow 边：邻居理由应含「箭头·顺序」
+    const r = assembleContext(data, 'a-1')
+    expect(r.segments.find((s) => s.nodeId === 'a-2')?.reason).toContain('箭头·顺序')
+    expect(r.segments.find((s) => s.nodeId === 'a-1')?.reason).toContain('关联目标')
+    expect(r.segments.find((s) => s.nodeId === 'bp-a')?.reason).toContain('上级蓝图链')
+    // b-1 经虚线跨图边直连 → 邻居理由为「虚线·参考」
+    expect(r.segments.find((s) => s.nodeId === 'b-1')?.reason).toContain('虚线·参考')
+    // 关键词兜底：命中别名「剑冢」→ 理由含命中词与来源
+    const rk = assembleContext(data, 'a-1', { draft: '他在剑冢边缘驻足。' })
+    expect(rk.segments.find((s) => s.nodeId === 'iso')?.reason).toBe('草稿命中：「剑冢」（别名）')
+    // 常驻注入理由
+    data.nodes['iso']!.aiVisibility = 'always'
+    const ra = assembleContext(data, 'a-1')
+    expect(ra.segments.find((s) => s.nodeId === 'iso')?.reason).toContain('常驻注入')
+  })
+
   it('兜底候选放不下时跳过，更小的候选仍被补入', () => {
     const data = fixture()
     // 大候选（远超剩余）在字典序最前；小候选 13 token 可放入

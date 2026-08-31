@@ -39,7 +39,8 @@ const ROLE_LABEL: Record<string, string> = {
   neighbor: '直接邻居',
   ancestor: '上级蓝图',
   deep: '深层(语义加权)',
-  keyword: '关键词兜底'
+  keyword: '关键词兜底',
+  always: '常驻注入'
 }
 
 const LAYER_LABEL = ['第1层 60%', '第2层 25%', '第3层 15%']
@@ -459,7 +460,7 @@ export function AiPanel(): ReactElement {
         </div>
       </div>
 
-      {/* 组装片段 */}
+      {/* 组装片段（v2-F2：入选理由一行展示） */}
       <div className="ctx-segments">
         {result.segments.map((seg, i) => (
           <div key={`${seg.nodeId}-${i}`} className={`ctx-seg layer-${seg.layer}`}>
@@ -471,6 +472,7 @@ export function AiPanel(): ReactElement {
                 {ROLE_LABEL[seg.role] ?? seg.role} · {seg.tokens}t
               </span>
             </div>
+            {seg.reason !== '' && <div className="ctx-seg-reason">↳ {seg.reason}</div>}
             <div className="ctx-seg-text">{seg.text}</div>
           </div>
         ))}

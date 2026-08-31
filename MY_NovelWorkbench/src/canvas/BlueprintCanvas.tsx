@@ -117,13 +117,15 @@ function nodeStyle(kind: NodeType | 'proxy', accent?: string): CSSProperties {
   return base
 }
 
-/** 节点内容：标题（◆ 蓝图 / § 引用 前缀）+ ref 指向 + 标签 chips */
+/** 节点内容：标题（◆ 蓝图 / § 引用 前缀）+ ref 指向 + AI 可见性标记 + 标签 chips */
 function renderNodeLabel(node: BlueprintNode, tagLibrary: TagDef[]): ReactNode {
   const prefix = node.type === 'blueprint' ? '◆ ' : node.type === 'ref' ? '§ ' : ''
   return (
     <div className="bp-node-label">
       <span className="bp-node-title">{prefix}
         {node.title}
+        {node.aiVisibility === 'never' && <span className="bp-node-aivis" title="AI 永不注入（防剧透）">⊘AI</span>}
+        {node.aiVisibility === 'always' && <span className="bp-node-aivis always" title="AI 常驻注入">⊕AI</span>}
       </span>
       {node.type === 'ref' && node.refTarget && <span className="bp-node-ref">→ {basename(node.refTarget)}</span>}
       {node.tags.length > 0 && (

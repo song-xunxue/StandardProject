@@ -64,8 +64,12 @@ describe('saveResource / listResources（全局目录）', () => {
     expect(items.map((i) => i.template.name)).toEqual(['标签组', '乙模板'])
   })
 
-  it('不依赖打开小说：无全局目录时 listResources 返回空表', () => {
-    expect(listResources()).toEqual([])
+  it('不依赖打开小说：无全局目录时种子写入内置结构模板（v2-F5）并返回', () => {
+    const items = listResources()
+    expect(items.map((i) => i.template.kind)).toEqual(['structure', 'structure', 'structure'])
+    expect(items.map((i) => i.template.name).sort()).toEqual(['三幕结构', '英雄之旅', '救猫咪节拍表'].sort())
+    // 二次调用不再重复种子（幂等）
+    expect(listResources()).toHaveLength(3)
   })
 
   it('同名同类型覆盖保存', () => {

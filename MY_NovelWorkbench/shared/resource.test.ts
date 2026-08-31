@@ -10,8 +10,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { isResourceTemplate, nodeToTemplate, tagSetTemplate, templateToNodeDraft } from './resource'
-import type { BlueprintNode } from './blueprint'
+import { graphToStructureTemplate, isResourceTemplate, normalizeStructureTemplate, nodeToTemplate, tagSetTemplate, templateToNodeDraft } from './resource'
+import type { BlueprintNode, GraphData } from './blueprint'
+import type { StructureTemplatePayload } from './types'
 
 const node = (over: Partial<BlueprintNode> = {}): BlueprintNode => ({
   id: 'n-x',
@@ -83,5 +84,71 @@ describe('isResourceTemplate', () => {
     expect(isResourceTemplate({ kind: 'other', name: 'x', payload: {} })).toBe(false)
     expect(isResourceTemplate({ kind: 'node', name: 'x', payload: { ...nodeToTemplate(node()), prompt: 1 } })).toBe(false)
     expect(isResourceTemplate({ kind: 'tagSet', name: 'x', payload: { tags: ['ok', 3] } })).toBe(false)
+  })
+})
+
+describe('结构模板（v2-F5）', () => {
+  const structure = (over: Partial<StructureTemplatePayload> = {}): StructureTemplatePayload => ({
+    nodes: [
+      { type: 'text', title: '开端', tags: ['大纲'], prompt: '', summary: '' },
+      { type: 'text', title: '转折', tags: ['伏笔'], prompt: '', summary: '' }
+    ],
+    edges: [{ from: 0, to: 1, type: 'arrow' }],
+    ...over
+  })
+
+  it('合法 structure 模板通过校验；空节点/越界索引/非法类型拒绝', () => {
+    expect(isResourceTemplate({ kind: 'structure', name: '三幕', payload: structure() })).toBe(true)
+    expect(isResourceTemplate({ kind: 'structure', name: 'x', payload: structure({ nodes: [] }) })).toBe(false)
+    expect(isResourceTemplate({ kind: 'structure', name: 'x', payload: structure({ edges: [{ from: 0, to: 9, type: 'arrow' }] }) })).toBe(false)
+    expect(
+      isResourceTemplate({
+        kind: 'structure',
+        name: 'x',
+        payload: structure({ nodes: [{ type: 'other' as never, title: 'a', tags: [] }] })
+      })
+    ).toBe(false)
+  })
+
+  it('normalizeStructureTemplate：损坏字段静默修正（prompt/summary 补空、越界边剔除）', () => {
+    const normalized = normalizeStructureTemplate({
+      nodes: [
+        { type: 'text', title: 'a', tags: ['设定'] },
+        { type: 'text', title: 'b', tags: [] as string[] }
+      ],
+      edges: [
+        { from: 0, to: 1, type: 'arrow' },
+        { from: 0, to: 5, type: 'line' }
+      ]
+    })
+    expect(normalized.nodes[0]).toMatchObject({ prompt: '', summary: '' })
+    expect(normalized.edges).toHaveLength(1)
+  })
+
+  it('graphToStructureTemplate：整图压骨架（索引映射正确、跨图边跳过、同向重复边去重）', () => {
+    const data: GraphData = {
+      nodes: {
+        a: { ...node({ id: 'a' }), graphId: 'g-1' },
+        b: { ...node({ id: 'b', title: '外部节点' }), graphId: 'g-other' },
+        c: { ...node({ id: 'c' }), graphId: 'g-1' }
+      },
+      edges: {
+        // 同图边（应保留为索引边）
+        e1: { id: 'e1', from: 'a', to: 'c', type: 'arrow' },
+        // 跨图边（c→b，b 不在 g-1，应跳过）
+        e2: { id: 'e2', from: 'c', to: 'b', type: 'dashed' },
+        // 同方向重复（应去重保第一条）
+        e3: { id: 'e3', from: 'a', to: 'c', type: 'line' }
+      },
+      graphs: {
+        'g-1': { id: 'g-1', title: 'T', nodeIds: ['a', 'c'], ownerNodeId: null },
+        'g-other': { id: 'g-other', title: 'O', nodeIds: ['b'], ownerNodeId: null }
+      }
+    }
+    const tpl = graphToStructureTemplate(data, 'g-1')!
+    expect(tpl.nodes.map((n) => n.title)).toEqual(['人物：林晚照', '人物：林晚照'])
+    expect(tpl.edges).toEqual([{ from: 0, to: 1, type: 'arrow' }])
+    // 空图返回 null
+    expect(graphToStructureTemplate({ nodes: {}, edges: {}, graphs: { 'g-1': { id: 'g-1', title: 'T', nodeIds: [], ownerNodeId: null } } }, 'g-1')).toBeNull()
   })
 })

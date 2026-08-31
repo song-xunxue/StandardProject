@@ -19,6 +19,11 @@
  *      失败还打断当前视图——改为原地提示）
  *   2. 性能批次：上下文组装的草稿输入改 1s 尾随去抖（此前随 300ms 草稿 tick 重算，
  *      关键词兜底全文扫描在压力规模下连续卡顿主线程）
+ *
+ * 2026-09-01
+ * 变更说明：
+ *   1. v2-F3 三路候选续写：同 prompt 并发三路（A/B/C），流式分栏展示、采纳一路
+ *      写入正文（光标处插入）、其余丢弃；与单会话互斥；全停/放弃
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -154,6 +159,8 @@ export function AiPanel(): ReactElement {
   const deleteProvider = useAiStore((s) => s.deleteProvider)
   const generation = useAiStore((s) => s.generation)
   const generationError = useAiStore((s) => s.generationError)
+  /** v2-F3 多候选会话组（三路 A/B/C） */
+  const multiGen = useAiStore((s) => s.multiGen)
   const editingDraft = useAiStore((s) => s.editingDraft)
   const chapterEditor = useAiStore((s) => s.chapterEditor)
   const hasChapterTab = useNovelStore((s) => s.tabs.some((t) => t.kind === 'chapter'))
@@ -246,12 +253,15 @@ export function AiPanel(): ReactElement {
     }
   }, [generation, generationError])
 
-  /** 生成中章节被关闭/切换（编辑器注销）：中断生成，避免 token 白烧与写入已销毁实例 */
+  /** 生成中章节被关闭/切换（编辑器注销）：中断生成，避免 token 白烧与写入已销毁实例（v2-F3 含多候选） */
   useEffect(() => {
     if (generation !== null && !chapterEditor) {
       void useAiStore.getState().stopGeneration()
     }
-  }, [generation, chapterEditor])
+    if (multiGen?.running && !chapterEditor) {
+      void useAiStore.getState().stopMultiGeneration()
+    }
+  }, [generation, multiGen, chapterEditor])
 
   /** 组装消息（system=上下文全文+前情提要；user=指令+正文） */
   const buildMessages = (mode: 'continue' | 'rewrite', selectedText: string): ChatMessage[] => {
@@ -322,6 +332,30 @@ export function AiPanel(): ReactElement {
       writer.finalize()
       writerRef.current = null
     }
+  }
+
+  /** v2-F3 三路候选续写：同 prompt 并发三路，流式分栏展示供挑选（彩云小梦验证的挑剧情交互） */
+  const handleMultiGenerate = async (): Promise<void> => {
+    const editor = chapterEditor ?? (await ensureChapterEditor())
+    if (!editor) return
+    try {
+      // 复用续写的组装口径（前情提要 + 上下文 + 正文尾部）；三路同 prompt，采样随机性天然带来差异
+      await useAiStore.getState().startMultiGeneration(3, buildMessages('continue', ''))
+    } catch (err) {
+      await dialogConfirm(`三路续写发起失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+    }
+  }
+
+  /** v2-F3 采纳一路候选：光标处插入该路文本（续写语义），其余路丢弃 */
+  const handleAdopt = async (index: number): Promise<void> => {
+    const mg = useAiStore.getState().multiGen
+    if (!mg) return
+    const cand = mg.candidates[index]
+    const editor = useAiStore.getState().chapterEditor
+    if (!cand || !editor || cand.text.trim() === '') return
+    editor.commands.focus()
+    editor.commands.insertContent(`${cand.text.trim()}\n\n`)
+    await useAiStore.getState().dismissMultiGeneration()
   }
 
   const activeProvider = providers.find((p) => p.id === activeProviderId) ?? null
@@ -399,7 +433,7 @@ export function AiPanel(): ReactElement {
         <div className="ai-actions">
           <button
             className="left-tool-btn"
-            disabled={generation !== null || !activeProviderId}
+            disabled={generation !== null || multiGen?.running === true || !activeProviderId}
             title={chapterEditor ? '在正文末尾流式续写' : hasChapterTab ? '自动切换到最近的章节正文续写' : '需要先创建并打开一个章节正文'}
             onClick={() => void handleGenerate('continue')}
           >
@@ -407,7 +441,15 @@ export function AiPanel(): ReactElement {
           </button>
           <button
             className="left-tool-btn"
-            disabled={generation !== null || !activeProviderId}
+            disabled={generation !== null || multiGen !== null || !activeProviderId}
+            title="v2-F3 三路候选续写：同提示词并发生成三个方向供挑选，采纳一路写入正文（v2-F3）"
+            onClick={() => void handleMultiGenerate()}
+          >
+            ⁂ 三路续写
+          </button>
+          <button
+            className="left-tool-btn"
+            disabled={generation !== null || multiGen?.running === true || !activeProviderId}
             title="改写正文中选中的文字（需先在正文中选中一段）"
             onClick={() => void handleGenerate('rewrite')}
           >
@@ -423,6 +465,37 @@ export function AiPanel(): ReactElement {
           </button>
         </div>
         {generation && <div className="insp-hint ai-streaming">生成中…（流式写入正文）</div>}
+        {/* v2-F3 三路候选区：分栏流式展示，采纳一路写入正文、其余丢弃 */}
+        {multiGen && (
+          <div className="ai-candidates nokey">
+            <div className="ai-candidates-head">
+              <span className="ai-candidates-title">三路候选（挑一个方向）</span>
+              <span className="insp-hint">{multiGen.running ? '生成中…' : '已结束'}</span>
+              {multiGen.running && (
+                <button className="left-tool-btn" title="中断未完成的路（保留已生成文本）" onClick={() => void useAiStore.getState().stopMultiGeneration()}>
+                  全停
+                </button>
+              )}
+              <button className="left-tool-btn" title="丢弃全部候选" onClick={() => void useAiStore.getState().dismissMultiGeneration()}>
+                放弃
+              </button>
+            </div>
+            <div className="ai-candidates-cols">
+              {multiGen.candidates.map((cand, i) => (
+                <div key={cand.requestId} className={`ai-candidate${cand.error ? ' error' : ''}`}>
+                  <div className="ai-candidate-head">
+                    <span className="ai-candidate-label">{cand.label}</span>
+                    <span className="insp-hint">{cand.error ?? (cand.done ? `${cand.text.length} 字` : '流式中…')}</span>
+                  </div>
+                  <pre className="ai-candidate-text left-scroll">{cand.text !== '' ? cand.text : cand.error ? '' : '等待输出…'}</pre>
+                  <button className="left-tool-btn" disabled={cand.text.trim() === ''} title="在正文光标处插入此路文本" onClick={() => void handleAdopt(i)}>
+                    采纳此路
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {generationError && <div className="insp-hint ai-error">生成失败：{generationError}</div>}
         {editingDraft && !chapterLinked && (
           <div className="insp-hint ai-unlinked">

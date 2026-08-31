@@ -21,6 +21,7 @@ import type { Dirent } from 'node:fs'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { sanitizeFileName } from '../../shared/sanitize'
 import { isResourceTemplate } from '../../shared/resource'
+import { BUILTIN_STRUCTURE_TEMPLATES } from '../../shared/structureTemplates'
 import type { ResourceTemplate } from '../../shared/types'
 
 /** 旧资源目录的迁移完成标记（隐藏文件，不参与 *.json 扫描） */
@@ -51,10 +52,16 @@ function resourceFileOf(template: ResourceTemplate): string {
   return `${sanitizeFileName(template.name)}.${template.kind}.json`
 }
 
-/** 列出资源库全部模板（坏文件跳过并留日志，不阻断列表；不依赖打开小说） */
+/** 列出资源库全部模板（坏文件跳过并留日志，不阻断列表；不依赖打开小说）。
+ *  v2-F5：首次使用（库内无任何 structure 模板）时种子写入内置情节结构骨架——
+ *  写入后即用户资产（可删可改），删除全部结构模板不再复活（与迁移标记同思路：
+ *  按「是否存在 structure 文件」判定，删光=用户明确不要） */
 export function listResources(): Array<{ path: string; template: ResourceTemplate }> {
   const dir = globalResourcesDir()
-  if (!existsSync(dir)) return []
+  if (!existsSync(dir)) {
+    // v2-F5：全新安装（目录尚不存在）时种子写入内置结构骨架，随后照常扫描返回
+    seedBuiltinStructures()
+  }
   const out: Array<{ path: string; template: ResourceTemplate }> = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue
@@ -66,7 +73,22 @@ export function listResources(): Array<{ path: string; template: ResourceTemplat
     }
   }
   out.sort((a, b) => a.template.name.localeCompare(b.template.name, 'zh-CN'))
+  // v2-F5 种子：库内已有任意 structure 模板（含用户自建）则视为已初始化；
+  // 库存在但一个 structure 都没有（全新安装或用户删光）时不复活——只在「从未有过」
+  // （目录不存在）时种子。上面 !existsSync 分支已覆盖全新安装；此处无需重复。
   return out
+}
+
+/** v2-F5：种子写入内置结构模板（仅在资源库目录不存在时由 listResources 调用；失败静默不影响列表） */
+function seedBuiltinStructures(): void {
+  try {
+    for (const tpl of BUILTIN_STRUCTURE_TEMPLATES) {
+      saveResource(tpl)
+    }
+    console.log(`[resourceService] 已种子写入 ${BUILTIN_STRUCTURE_TEMPLATES.length} 个内置结构模板`)
+  } catch (err) {
+    console.error('[resourceService] 内置结构模板种子写入失败:', err)
+  }
 }
 
 /** 保存资源模板（同名同类型覆盖；名称清洗后撞车但实际不同名时拒绝，防静默互相覆盖），返回相对全局资源目录的路径 */

@@ -196,6 +196,7 @@ export interface BlueprintFileNode {
 export type ResourceTemplate =
   | { kind: 'node'; name: string; payload: NodeTemplatePayload }
   | { kind: 'tagSet'; name: string; payload: TagSetTemplatePayload }
+  | { kind: 'structure'; name: string; payload: StructureTemplatePayload }
 
 /** 节点模板载荷：可安全复制到任意画布的节点字段 */
 export interface NodeTemplatePayload {
@@ -211,6 +212,19 @@ export interface NodeTemplatePayload {
 /** 标签组模板载荷 */
 export interface TagSetTemplatePayload {
   tags: string[]
+}
+
+/** v2-F5 结构模板载荷：节点序列 + 索引连线——插入时在当前图批量生成骨架（占位标题可编辑） */
+export interface StructureTemplatePayload {
+  nodes: Array<{
+    type: 'blueprint' | 'text' | 'ref'
+    title: string
+    tags: string[]
+    prompt?: string
+    summary?: string
+  }>
+  /** from/to 为 nodes 数组下标；插入时映射为真实节点 id */
+  edges: Array<{ from: number; to: number; type: 'arrow' | 'line' | 'dashed' }>
 }
 
 /**

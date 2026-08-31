@@ -8,6 +8,18 @@
  * 2026-08-26
  * 变更说明：
  *   1. M3 初版
+ *
+ * 2026-08-30
+ * 变更说明：
+ *   1. 审查修复：新增 chapterFlush 章节冲刷桥（ChapterEditor 注册，章节文件系统
+ *      变更前调用——防卸载冲刷覆盖/复活文件）
+ *
+ * 2026-09-01
+ * 变更说明：
+ *   1. v2-F3 多候选分支续写：delta 路由从模块级单变量改 Map<requestId, handler>
+ *      （单会话与三路并发候选共用同一路由表，互不串扰）；新增 multiGen 候选组
+ *      （同 prompt 三路并发、流式累积 80ms 节流批量 flush）、stopMultiGeneration
+ *      （中断未完成路保留文本）、dismissMultiGeneration（采纳/放弃后清空）
  */
 
 import { create } from 'zustand'
@@ -24,6 +36,15 @@ export interface EditingDraft {
 
 type GenerateMode = 'continue' | 'rewrite'
 
+/** v2-F3：一路候选（同 prompt 并发生成，A/B/C 标签供挑选） */
+export interface GenCandidate {
+  requestId: string
+  label: string
+  text: string
+  done: boolean
+  error: string | null
+}
+
 interface AiState {
   providers: ProviderInfo[]
   /** 当前选中的 Provider id */
@@ -32,6 +53,8 @@ interface AiState {
   generation: { requestId: string; mode: GenerateMode } | null
   /** 最近一次生成错误（done.error） */
   generationError: string | null
+  /** v2-F3 多候选会话组（与单会话互斥：任一进行中另一方禁发起） */
+  multiGen: { candidates: GenCandidate[]; running: boolean } | null
   /** 编辑中的章节草稿 */
   editingDraft: EditingDraft | null
   /** 正文编辑器实例（流式插入与改写需要；不入 zustand 响应式语义，仅引用存放） */
@@ -55,10 +78,15 @@ interface AiState {
   startGeneration: (mode: GenerateMode, messages: ChatMessage[], onDelta: (delta: string) => void) => Promise<string>
   /** 中断当前生成 */
   stopGeneration: () => Promise<void>
-  /** 内部：处理 llm:chunk 推送 */
-  handleChunk: (chunk: LlmChunkPayload, onDelta: (delta: string) => void) => void
-  /** 供 startGeneration 绑定的 delta 回调注册（模块级单订阅） */
-  bindDeltaHandler: (handler: ((delta: string) => void) | null) => void
+  /** 内部：处理 llm:chunk 推送（按 requestId 路由 delta 与会话状态） */
+  handleChunk: (chunk: LlmChunkPayload) => void
+
+  /** v2-F3：发起 count 路并发候选（同一 messages；各路独立 requestId 路由） */
+  startMultiGeneration: (count: number, messages: ChatMessage[]) => Promise<void>
+  /** v2-F3：中断未完成的路（保留已生成文本供采纳） */
+  stopMultiGeneration: () => Promise<void>
+  /** v2-F3：清空候选区（采纳/放弃后调用；会先中断未完成路） */
+  dismissMultiGeneration: () => Promise<void>
 
   setDraft: (draft: EditingDraft | null) => void
   setChapterEditor: (editor: Editor | null) => void
@@ -69,24 +97,52 @@ const api = (): typeof window.api => {
   return window.api
 }
 
-/** 模块级：当前生成的 delta 处理器（chunk 推送是全局通道，需路由到当前会话） */
-let deltaHandler: ((delta: string) => void) | null = null
+/** 模块级：delta 处理器按 requestId 路由（v2-F3 起多会话共用一张表） */
+const deltaHandlers = new Map<string, (delta: string) => void>()
 let unsubscribeChunks: (() => void) | null = null
+
+/** v2-F3：候选流的待落账文本（requestId → 累积增量），80ms 节流批量并入 state */
+const pendingMultiText = new Map<string, string>()
+let multiFlushTimer: ReturnType<typeof setTimeout> | null = null
 
 function ensureChunkSubscription(): void {
   if (unsubscribeChunks) return
   unsubscribeChunks = api().llm.onChunk((chunk) => {
-    useAiStore.getState().handleChunk(chunk, (delta) => deltaHandler?.(delta))
+    useAiStore.getState().handleChunk(chunk)
   })
 }
 
 const newRequestId = (): string => `gen-${crypto.randomUUID().slice(0, 8)}`
+
+/** 把累积的候选增量批量并入 multiGen（节流终点调用） */
+function flushMultiText(): void {
+  if (multiFlushTimer !== null) {
+    clearTimeout(multiFlushTimer)
+    multiFlushTimer = null
+  }
+  if (pendingMultiText.size === 0) return
+  const additions = [...pendingMultiText.entries()]
+  pendingMultiText.clear()
+  useAiStore.setState((s) => {
+    if (!s.multiGen) return s
+    return {
+      multiGen: {
+        ...s.multiGen,
+        candidates: s.multiGen.candidates.map((c) => {
+          const hit = additions.find(([id]) => id === c.requestId)
+          return hit ? { ...c, text: c.text + hit[1] } : c
+        })
+      }
+    }
+  })
+}
 
 export const useAiStore = create<AiState>()((set, get) => ({
   providers: [],
   activeProviderId: null,
   generation: null,
   generationError: null,
+  multiGen: null,
   editingDraft: null,
   chapterEditor: null,
   chapterFlush: null,
@@ -110,7 +166,7 @@ export const useAiStore = create<AiState>()((set, get) => ({
     await get().loadProviders()
   },
 
-  testProvider: async (id) => api().provider.test(id),
+  testProvider: (id) => api().provider.test(id),
 
   setActiveProvider: (id) => set({ activeProviderId: id }),
 
@@ -118,7 +174,7 @@ export const useAiStore = create<AiState>()((set, get) => ({
     const providerId = get().activeProviderId
     if (!providerId) throw new Error('未选择 AI Provider（先在面板中配置）')
     const requestId = newRequestId()
-    deltaHandler = onDelta
+    deltaHandlers.set(requestId, onDelta)
     ensureChunkSubscription()
     set({ generation: { requestId, mode }, generationError: null })
     await api().llm.generate({ requestId, providerId, messages })
@@ -131,27 +187,107 @@ export const useAiStore = create<AiState>()((set, get) => ({
     // 先同步摘除会话再通知主进程：generation 置 null 后 handleChunk 按 requestId 失配
     // 丢弃迟到分块——否则 IPC 往返期间流式文本可能写入已切换的新章节（M5 审查修复）
     set({ generation: null })
-    deltaHandler = null
+    deltaHandlers.delete(gen.requestId)
     await api().llm.stop(gen.requestId)
   },
 
-  handleChunk: (chunk, onDelta) => {
+  handleChunk: (chunk) => {
+    // ---- 单会话状态（续写/改写主流程）----
     const gen = get().generation
-    if (!gen || chunk.requestId !== gen.requestId) return
-    if (chunk.error) {
-      set({ generation: null, generationError: chunk.error })
-      deltaHandler = null
-      return
+    if (gen && chunk.requestId === gen.requestId) {
+      if (chunk.error) {
+        set({ generation: null, generationError: chunk.error })
+        deltaHandlers.delete(chunk.requestId)
+        return
+      }
+      if (chunk.done) {
+        set({ generation: null })
+        deltaHandlers.delete(chunk.requestId)
+        return
+      }
     }
-    if (chunk.delta) onDelta(chunk.delta)
-    if (chunk.done) {
-      set({ generation: null })
-      deltaHandler = null
+    // ---- 多候选状态（v2-F3）----
+    const mg = get().multiGen
+    if (mg) {
+      const cand = mg.candidates.find((c) => c.requestId === chunk.requestId)
+      if (cand) {
+        if (chunk.error) {
+          deltaHandlers.delete(chunk.requestId)
+          flushMultiText()
+          const cur = get().multiGen!
+          set({
+            multiGen: {
+              candidates: cur.candidates.map((c) => (c.requestId === chunk.requestId ? { ...c, done: true, error: chunk.error ?? '生成失败' } : c)),
+              running: cur.candidates.some((c) => c.requestId !== chunk.requestId && !c.done)
+            }
+          })
+          return
+        }
+        if (chunk.done) {
+          deltaHandlers.delete(chunk.requestId)
+          flushMultiText()
+          const cur = get().multiGen!
+          set({
+            multiGen: {
+              candidates: cur.candidates.map((c) => (c.requestId === chunk.requestId ? { ...c, done: true } : c)),
+              running: cur.candidates.some((c) => c.requestId !== chunk.requestId && !c.done)
+            }
+          })
+          return
+        }
+        if (chunk.delta) {
+          // 候选文本节流累积（80ms 批量并入 state，避免每 chunk 一次 setState × 三路）
+          pendingMultiText.set(chunk.requestId, (pendingMultiText.get(chunk.requestId) ?? '') + chunk.delta)
+          if (multiFlushTimer === null) {
+            multiFlushTimer = setTimeout(flushMultiText, 80)
+          }
+          return
+        }
+      }
+    }
+    // ---- delta 转发（单会话 StreamInserter；多候选不走此处——文本在上方累积）----
+    if (chunk.delta) deltaHandlers.get(chunk.requestId)?.(chunk.delta)
+  },
+
+  startMultiGeneration: async (count, messages) => {
+    const providerId = get().activeProviderId
+    if (!providerId) throw new Error('未选择 AI Provider（先在面板中配置）')
+    if (get().generation !== null || get().multiGen?.running) throw new Error('已有生成进行中')
+    const labels = ['A', 'B', 'C', 'D', 'E']
+    const candidates: GenCandidate[] = Array.from({ length: count }, (_, i) => ({
+      requestId: newRequestId(),
+      label: labels[i] ?? String(i + 1),
+      text: '',
+      done: false,
+      error: null
+    }))
+    ensureChunkSubscription()
+    set({ multiGen: { candidates, running: true }, generationError: null })
+    // 并发发起（fire-and-forget；结果全部经 chunk 推送按 requestId 路由回各候选）
+    for (const cand of candidates) {
+      void api().llm.generate({ requestId: cand.requestId, providerId, messages }).catch((err) => {
+        console.error('[aiStore] 候选发起失败:', cand.label, err)
+      })
     }
   },
 
-  bindDeltaHandler: (handler) => {
-    deltaHandler = handler
+  stopMultiGeneration: async () => {
+    const mg = get().multiGen
+    if (!mg?.running) return
+    for (const cand of mg.candidates) {
+      if (!cand.done) {
+        deltaHandlers.delete(cand.requestId)
+        void api().llm.stop(cand.requestId)
+      }
+    }
+    flushMultiText()
+    set({ multiGen: { ...mg, running: false, candidates: mg.candidates.map((c) => ({ ...c, done: true })) } })
+  },
+
+  dismissMultiGeneration: async () => {
+    await get().stopMultiGeneration()
+    pendingMultiText.clear()
+    set({ multiGen: null })
   },
 
   setDraft: (draft) => set({ editingDraft: draft }),

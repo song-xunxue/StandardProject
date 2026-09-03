@@ -9,7 +9,12 @@
  *   1. M1 初版：标准目录模板落盘、novel.json 校验、recent.json 维护（userData）
  *   2. M2：新增 readMeta/saveMeta（标签库等元信息的渲染层读写）
  *   3. M4-B：打开小说时触发旧 resources/ 目录幂等迁移入全局资源库（resourceService）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2-F7：openNovel 挂 initStats 全量对账（在 current 赋值后——statsService
+ *      经 currentNovel() 取目录）
+*/
 
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'

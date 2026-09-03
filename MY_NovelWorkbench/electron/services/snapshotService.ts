@@ -189,5 +189,7 @@ export function restoreSnapshot(novelDir: string, id: string): void {
   rmSync(join(novelDir, 'chapters'), { recursive: true, force: true })
   unlinkSync(join(novelDir, 'novel.json'))
   // 3. 快照内容逐项拷回（manifest 不拷；同为顶层枚举——快照目录在小说目录内，整体 cpSync 会被拒）
-  copyTopLevel(snapDir, novelDir, (name) => name === MANIFEST_NAME)
+  // 晨间审查修复：writing-stats.json 是累积写作日志（连续天数/趋势不可重建），
+  // 不随内容回滚——快照里的旧版统计拷回会清掉快照点之后的码字记录
+  copyTopLevel(snapDir, novelDir, (name) => name === MANIFEST_NAME || name === 'writing-stats.json')
 }

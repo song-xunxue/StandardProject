@@ -129,3 +129,26 @@ describe('多会话 delta 路由（v2-F3）', () => {
     expect(useAiStore.getState().multiGen).toBeNull()
   })
 })
+
+describe('晨间审查修复回归（F3）', () => {
+  it('节流窗口内直接全停：候选尾部文本不丢（原实现用停止前快照覆盖回滚 flush）', async () => {
+    await useAiStore.getState().startMultiGeneration(2, [])
+    const mg = useAiStore.getState().multiGen!
+    pushChunk({ requestId: mg.candidates[0]!.requestId, delta: '前段已落', done: false })
+    await new Promise((r) => setTimeout(r, 150)) // 前段落账
+    pushChunk({ requestId: mg.candidates[0]!.requestId, delta: '节流窗内的尾巴', done: false })
+    // 不等 80ms 节流——立即全停（原实现在此丢尾巴）
+    await useAiStore.getState().stopMultiGeneration()
+    const stopped = useAiStore.getState().multiGen!
+    expect(stopped.candidates[0]!.text).toBe('前段已落节流窗内的尾巴')
+    await useAiStore.getState().dismissMultiGeneration()
+  })
+
+  it('startGeneration 互斥守卫：已有生成进行中时拒绝再发起', async () => {
+    await useAiStore.getState().startGeneration('continue', [], () => {})
+    await expect(useAiStore.getState().startGeneration('continue', [], () => {})).rejects.toThrow('已有生成进行中')
+    await expect(useAiStore.getState().startMultiGeneration(2, [])).rejects.toThrow('已有生成进行中')
+    const gen = useAiStore.getState().generation!
+    pushChunk({ requestId: gen.requestId, done: true })
+  })
+})

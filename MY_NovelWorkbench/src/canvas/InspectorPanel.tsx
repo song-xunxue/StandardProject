@@ -15,7 +15,11 @@
  * 变更说明：
  *   1. 审查修复：标签下拉菜单补外点/Esc 关闭与切换节点重置（与其他菜单族行为统一，
  *      此前打开后点击别处不收起、随选中节点漂移悬挂）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2-F1：节点态新增「AI 上下文注入」三档下拉（离散即时提交）
+*/
 
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'

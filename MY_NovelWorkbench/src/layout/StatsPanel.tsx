@@ -21,6 +21,15 @@ export function StatsPanel(props: { onClose: () => void }): ReactElement {
   const [stats, setStats] = useState<WritingStatsView | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // Esc 关闭（浮层族统一交互）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') props.onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [props])
+
   useEffect(() => {
     void (async () => {
       try {

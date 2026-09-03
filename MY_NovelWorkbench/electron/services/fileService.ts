@@ -10,13 +10,18 @@
  *   1. M1 初版：树扫描、蓝图 JSON 读写、章节 frontmatter 读写、创建/重命名/删除
  *   2. M2：新增资源库（resources/ 目录的模板列表/保存/删除）
  *   3. M4-B：资源库三函数迁出至 resourceService（全局目录跨小说共享），本服务回归小说目录内文件职责
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2-F7 钩子：saveChapter 入账 / deleteFile 清账；晨间审查修复：renameFile
+ *      键迁移、exchangeFiles 账值对调（防统计双计与重启负增量）
+*/
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { currentNovel } from './novelService'
-import { recordChapterSave, removeChapterStats } from './statsService'
+import { exchangeChapterStats, recordChapterSave, removeChapterStats, renameChapterStats } from './statsService'
 import { parseFrontmatter, serializeFrontmatter } from '../../shared/frontmatter'
 import { sanitizeFileName } from '../../shared/sanitize'
 import { chapterNameCompare } from '../../shared/naming'
@@ -165,6 +170,14 @@ export function renameFile(path: string, newTitle: string): { path: string } {
   if (existsSync(newAbs)) throw new Error(`目标文件已存在：${newTitle}`)
   renameSync(abs, newAbs)
   syncInternalTitle(newPath, newTitle)
+  // v2-F7 晨间审查修复：码字统计按路径记账，键随文件名迁移（失败不阻断重命名）
+  if (path.endsWith('.md')) {
+    try {
+      renameChapterStats(path, newPath)
+    } catch (err) {
+      console.error('[statsService] 重命名统计迁移失败:', err)
+    }
+  }
   return { path: newPath }
 }
 
@@ -217,6 +230,14 @@ export function exchangeFiles(pathA: string, pathB: string): void {
   // 内容随文件走到对方名字下——内部标题同步为新文件名的 stem
   syncInternalTitle(pathA, stemOf(pathA))
   syncInternalTitle(pathB, stemOf(pathB))
+  // v2-F7 晨间审查修复：统计账值随内容对调（失败不阻断交换）
+  if (extOf(pathA) === '.md') {
+    try {
+      exchangeChapterStats(pathA, pathB)
+    } catch (err) {
+      console.error('[statsService] 交换统计迁移失败:', err)
+    }
+  }
 }
 
 /** 删除文件（仅限 blueprints/ 与 chapters/ 内；基于规范化后的路径判定，防 ../ 绕过） */

@@ -11,7 +11,11 @@
  *   2. M0：AI 图标切换上下文预览面板（assembleContext 实时结果）
  *   3. M1：novelStore 初始化、欢迎页（新建/打开/最近列表）、动态 Tab 分发画布/章节编辑器
  *   4. M2：蓝图 Tab 增加右侧属性面板（Inspector，可拖宽度 200-420px，复用 Splitter）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2-F4：TimelineView 路由（图标条 timeline 项全宽覆盖层）
+*/
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'

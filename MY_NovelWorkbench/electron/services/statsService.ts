@@ -14,7 +14,7 @@
  *      getWritingStats（今日新增/总字数/连续天数/近 14 天）
  */
 
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { currentNovel } from './novelService'
 import { parseFrontmatter } from '../../shared/frontmatter'
@@ -69,7 +69,12 @@ function loadStats(): StatsFile {
 }
 
 function saveStats(stats: StatsFile): void {
-  writeFileSync(statsPath(), JSON.stringify(stats), 'utf-8')
+  // tmp+rename 原子写（晨间审查修复）：days 是不可重建的历史记录，直写半途崩溃会被
+  // loadStats 的容错静默吞掉导致连续天数/趋势整体清零
+  const abs = statsPath()
+  const tmp = `${abs}.tmp`
+  writeFileSync(tmp, JSON.stringify(stats), 'utf-8')
+  renameSync(tmp, abs)
 }
 
 /** 遍历 chapters/（含一层卷目录）的全部章节相对路径 */
@@ -140,6 +145,31 @@ export function removeChapterStats(path: string): void {
   saveStats(stats)
 }
 
+/** 章节重命名钩子（晨间审查修复）：chapterChars 按路径记账，键随文件名迁移——
+ *  不迁移则会话内新旧键并存（总字数双计），下次 openNovel 对账又把旧键整章计入当日 */
+export function renameChapterStats(oldPath: string, newPath: string): void {
+  if (!currentNovel()) return
+  const stats = loadStats()
+  if (stats.chapterChars[oldPath] === undefined) return
+  stats.chapterChars[newPath] = stats.chapterChars[oldPath]!
+  delete stats.chapterChars[oldPath]
+  saveStats(stats)
+}
+
+/** 章节交换钩子（exchangeFiles 文件名互换=内容对调）：两键的账值随之互换 */
+export function exchangeChapterStats(pathA: string, pathB: string): void {
+  if (!currentNovel()) return
+  const stats = loadStats()
+  const a = stats.chapterChars[pathA]
+  const b = stats.chapterChars[pathB]
+  if (a === undefined && b === undefined) return
+  if (a !== undefined) stats.chapterChars[pathB] = a
+  else delete stats.chapterChars[pathB]
+  if (b !== undefined) stats.chapterChars[pathA] = b
+  else delete stats.chapterChars[pathA]
+  saveStats(stats)
+}
+
 /** 面板数据：今日新增 / 总字数 / 连续天数 / 近 N 天趋势 */
 export function getWritingStats(): WritingStatsView {
   const stats = loadStats()
@@ -168,12 +198,17 @@ export function getWritingStats(): WritingStatsView {
     } else break
   }
 
-  // 近 N 天（含今日；无记录的日期总量沿用前一记录日、增量 0）
+  // 近 N 天（含今日；无记录的日期总量沿用「窗口起点前最后一个记录日」的总量——晨间
+  // 审查修复：原实现误取「最近一个记录日」的总量，新用户前 13 天会显示今天的字数）
   const recent: WritingStatsView['recent'] = []
   const dayCursor = new Date()
   dayCursor.setDate(dayCursor.getDate() - (RECENT_DAYS - 1))
+  const windowStart = dateStrOf(dayCursor)
   let carry = 0
-  for (const key of dayKeys) carry = stats.days[key]!
+  for (const key of dayKeys) {
+    if (key >= windowStart) break
+    carry = stats.days[key]!
+  }
   for (let i = 0; i < RECENT_DAYS; i++) {
     const key = dateStrOf(dayCursor)
     if (stats.days[key] !== undefined) carry = stats.days[key]!

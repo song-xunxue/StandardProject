@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MY_NovelWorkbench（小说创作工作台）——**AI 辅助的小说编辑器**：ComfyUI 式节点工作流（蓝图/节点/语义连线）× Obsidian 式双向链接（全局图谱），AI 创作上下文由链接关系自动组装，支持多类 AI API。UI 参考 PyCharm（左侧创建栏 + 右侧内容区 + 顶部文件 Tab + 可拖分界线），深色主题。
 
-**当前状态：M0-M5 全部完成（2026-08-28）+ 体验优化与整体检测批次（2026-08-30，178 用例全绿）+ 夜间性能重构与调研批次（2026-08-31）——最新：画布 rfNodes 增量缓存（保存回推不再重渲全图）+ 全局图谱布局保留（过滤/开关不重跑力导向，坐标全程保留）；市面调研 24 产品完成，v2 规划提案见 `docs/03-下阶段优化方案.md`（待用户晨间审查拍板）。**
+**当前状态：v2 首批八项功能全部完成（2026-09-01 晨间批次收官，213 用例全绿）——F1 节点 AI 可见性三档 / F2 上下文入选理由 / P1 内容哈希增量 / F7 码字统计 / F6 敏感词 AC 自动机 / F5 情节结构模板 / F3 三路候选续写 / F4 时间线矩阵；晨间四维审查（44 代理）19 项确认缺陷全部修复（统计键迁移/全停丢尾/采纳 markdown 化与跨章校验/种子标记驱动/浮层族统一等）；v2 二批候选（F8-F16）见 `docs/03-下阶段优化方案.md` 待用户挑选。**
 
 **重要交互机制（2026-08-27 联调修复 + 2026-08-30 补充，改动画布前必读）**：
 - 画布选中为**显式事件驱动**（onNodeClick/onEdgeClick/onPaneClick → setSelection），勿回灌 `selected` 到 nodes/edges props——会与 RF 内部状态在结构变更时形成无限渲染循环（建节点/连线全黑崩溃）
@@ -21,7 +21,7 @@ MY_NovelWorkbench（小说创作工作台）——**AI 辅助的小说编辑器*
 npm install        # 安装依赖（Electron 二进制慢时: ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/）
 npm run dev        # 开发模式（Electron 窗口 + 热更新）
 npm run typecheck  # tsc --noEmit（web）+ tsconfig.node.json（主进程，无 DOM）
-npm run test       # vitest 单测（纯逻辑 + jsdom 编辑器桥接，当前 178 用例）
+npm run test       # vitest 单测（纯逻辑 + jsdom 编辑器桥接，当前 213 用例）
 npm run build      # electron-vite 三目标构建 → out/{main,preload,renderer}
 npm run pack:win   # 免安装目录包（release/win-unpacked）
 npm run dist:win   # NSIS 安装包（release/*-setup.exe；二进制下载慢时设 ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/）
@@ -42,33 +42,37 @@ node scripts/gen-stress-blueprint.mjs <小说目录> [节点数] [--chapters N -
 - `services/novelService.ts` — 小说目录创建/打开/最近列表（userData/recent.json）+ readMeta/saveMeta（novel.json 标签库，tmp+rename 原子写；openNovel 对旧目录回填 tagLibrary + 触发旧资源迁移）
 - `services/fileService.ts` — 文件树/蓝图/章节 CRUD（`resolveInNovel` 路径穿越防护）+ 卷支持（chapters/ 一层卷目录，章节按「第N章」数字序）+ exchangeFiles（文件名互换=章节排序）；rename 同步内部 title（蓝图 JSON / 章节 frontmatter）
 - `services/resourceService.ts` — 资源库（M4-B 全局目录 userData/resources，跨小说共享不依赖打开小说）：模板列表/保存（tmp+rename 原子写+清洗撞车拒写）/删除（防穿越）+ migrateLegacyResources（旧小说 resources/ 幂等迁移：.migrated 完成标记防已删模板复活）
+- `services/statsService.ts` — 码字统计（v2-F7）：writing-stats.json（chapterChars 按路径记账 + days 每日总量）；openNovel 全量对账/saveChapter 入账/deleteFile 清账/renameFile 键迁移/exchangeFiles 账值对调；tmp+rename 原子写
+- `services/wordbankService.ts` — 敏感词词库（v2-F6）：userData/sensitive-words/<名>.json，列表/保存（去空去重原子写）/删除/导入 txt（每行一词，覆盖或并入）；不内置词条
 - `services/snapshotService.ts` — 快照（M5，ADR-14）：.snapshots/<id>/ 目录拷贝（**顶层枚举逐项 copy**——整体 cpSync 因目标在源内被前置拒绝）+ manifest 最后写=完成标记 + 保留上限 10 + id 正则防穿越 + restore（自动备份→清空 blueprints/chapters/novel.json→拷回；.git/.index 不动）。**文件级删除一律 unlinkSync**（本机 Node rmSync 非 ASCII 坑）
 - `services/providerService.ts` — AI Provider 配置（userData/providers.json + safeStorage 加密 API Key；.env 三变量开发期回退 Provider 'env-default' 不入盘；GET /models 连接测试）
 - `services/llmService.ts` — OpenAI 兼容流式生成（主进程 fetch SSE → llm:chunk 推送；AbortController 中断；LLM 在主进程执行：sandbox 渲染层 CORS + 凭据不出主进程）
-- `services/indexService.ts` — SQLite 索引（better-sqlite3，`.index/index.db`，mtime+size 增量）；`syncIndex`（M5 冷启动增量校对：基线跨会话保留，仅重读变化+清理删除残留；watcher 打开小说走此路径，全量 rebuildIndex 留作手动兜底）；indexChapter 长章节只读头部 64KB
+- `services/indexService.ts` — SQLite 索引（better-sqlite3，`.index/index.db`，mtime+size 增量）；`syncIndex`（M5 冷启动增量校对：基线跨会话保留，仅重读变化+清理删除残留；watcher 打开小说走此路径，全量 rebuildIndex 留作手动兜底）；v2-P1 起内容哈希复核（file_state.hash，mtime/size 变但内容未变只刷基线）
 - `watcher.ts` — fs.watch recursive + 300ms 防抖 → 增量索引 + 推送文件树；排除 .index/ 与 .snapshots/（含裸目录名）；打开时 syncIndex 附耗时日志
 
 **共享层（shared/，两个 tsconfig 都引用，必须环境无关）**
 - `blueprint.ts` — 蓝图领域类型（含 refTarget、MAX_NESTING_DEPTH=8）；`blueprintCodec.ts` — 文件↔GraphData 水合/导出（节点/边字段归一化容错）
 - `novelTemplate.ts` — 新建小说标准目录模板（含内置标签库）；`frontmatter.ts` — 章节 YAML 子集编解码（未知键与非键值行以原样行 extraLines 保留往返）
 - `sanitize.ts` — 文件名清洗；`types.ts` — IPC 契约与 NovelMeta/TreeNode/ChapterDoc/ResourceTemplate/ProviderConfig/ChatMessage
-- `tags.ts` — 标签工具（tagColorOf/nodeAccentColor/自定义色板轮转）；`resource.ts` — 资源模板互转与校验
+- `sensitiveScan.ts` — 敏感词扫描 AC 自动机（v2-F6，O(text+words)，命中带上下文）；`structureTemplates.ts` — 内置情节结构骨架（三幕/英雄之旅/救猫咪，v2-F5）；`tags.ts` — 标签工具（tagColorOf/nodeAccentColor/自定义色板轮转）；`resource.ts` — 资源模板互转与校验
 - `sse.ts` — SSE 流解析纯函数（跨 chunk 半行缓冲/[DONE]/非 JSON 容错）
 
 **渲染层（src/，tsconfig.json）**
 - `App.tsx` — 三栏布局 + 欢迎页 + 画布行（画布+分界线+属性面板，200-420px 可拖）
 - `store/novelStore.ts` — 元信息/文件树/Tab/水合编排 + createTag/removeTag（标签库写回 novel.json，内置标签禁删；openNovel 清 aiStore.editingDraft）+ restoreSnapshot（M5：flushDirty→清草稿→关 Tab 卸载编辑器冲刷→150ms IPC 顺序→主进程恢复→复用 openNovel 水合）；2026-08-30 批次：closeTabs（Tab 右键菜单批量底座：激活回退链 fallbackId→剩余最后一个→空，蓝图回退经 activateTab 同步路由；closeTab/deleteFile/restoreSnapshot 统一走它）、exchangeFiles/deleteFile/renameFile 经 chapterFlush 前置冲刷、renameFile 重写 Tab id、reconcileTabs 树对账（onNovelChanged/refreshTree 清理失效 Tab）
 - `store/graphStore.ts` — 全局图数据+路由栈+**变更 action 与保存编排**：结构变更（增删节点/边、连线改型）立即落盘，属性/位置变更 600ms 防抖；脏图与保存中图受 hydrate 保护（自身保存触发的 watcher 回推不回滚内存）；受控选中数组（selectedNodeIds/selectedEdgeIds）；8 层嵌套拦截（ADR-12）
-- `store/aiStore.ts` — AI 工作区：Provider 列表/选择、流式生成会话（llm:chunk 全局单订阅按 requestId 路由）、editingDraft（ChapterEditor 节流 300ms 发布的正文草稿）、chapterEditor 实例引用、chapterFlush 冲刷桥（ChapterEditor 注册的「立即落盘挂起编辑」回调，章节文件系统变更前调用——清防抖定时器防卸载冲刷覆盖/复活）
+- `store/aiStore.ts` — AI 工作区：Provider 列表/选择、流式生成会话（llm:chunk 全局单订阅按 requestId 路由）、editingDraft（ChapterEditor 节流 300ms 发布的正文草稿）、chapterEditor 实例引用、chapterFlush 冲刷桥（ChapterEditor 注册的「立即落盘挂起编辑」回调，章节文件系统变更前调用——清防抖定时器防卸载冲刷覆盖/复活）；v2-F3 multiGen 三路候选会话（deltaHandlers Map 按 requestId 分路路由；80ms 节流累积；originPath 发起章节供采纳校验）
 - `store/dialogStore.ts` + `components/Dialog.tsx` — Promise 化 prompt/confirm（Electron 无原生）
 - `components/useContextMenu.ts` — 右键菜单共享 hook（2026-08-30：开合状态+外点 mousedown/Esc 关闭+视口边缘钳制；TabBar/LeftPanel/BlueprintCanvas 三处菜单单点维护）
-- `layout/` — 图标条/文件树/Tab 栏/分界线。左栏：**双击打开**（单击仅选中）、目录右键创建（卷/章节中文序号自动递增，>99 回绕阿拉伯数字）、**文件项右键**（打开/重命名/删除+创建项，2026-08-30）、章节拖动交换（含跨卷，经 exchangeFiles+chapterReloadSeq 重载编辑器）、蓝图按 owner 嵌套层级（成环兜底顶层；**owner 关系签名订阅**——节点拖动/属性变更不触发整树重算）、footer 快照/重建索引按钮；Tab 激活走 novelStore.activateTab（蓝图 Tab 同步画布路由）；全部容器带 nokey 类（画布外 Delete 不删节点）。TabBar：右键菜单（关闭/其他/右侧/所有，唯一 Tab 收敛单项）+中键关闭（mousedown 拦截自动滚动）+溢出横向滚动（滚轮纵转横/激活自动滚入视野/滚动条隐藏）；Splitter 拖动 rAF 合帧；IconStrip 仅 novel/ai/graph 三项（search/blueprint 死项已移除，设置按钮接 AI 面板）
+- `layout/` — 图标条/文件树/Tab 栏/分界线。左栏：**双击打开**（单击仅选中）、目录右键创建（卷/章节中文序号自动递增，>99 回绕阿拉伯数字）、**文件项右键**（打开/重命名/删除+创建项，2026-08-30）、章节拖动交换（含跨卷，经 exchangeFiles+chapterReloadSeq 重载编辑器）、蓝图按 owner 嵌套层级（成环兜底顶层；**owner 关系签名订阅**——节点拖动/属性变更不触发整树重算）、footer 快照/重建索引按钮；Tab 激活走 novelStore.activateTab（蓝图 Tab 同步画布路由）；全部容器带 nokey 类（画布外 Delete 不删节点）。TabBar：右键菜单（关闭/其他/右侧/所有，唯一 Tab 收敛单项）+中键关闭（mousedown 拦截自动滚动）+溢出横向滚动（滚轮纵转横/激活自动滚入视野/滚动条隐藏）；Splitter 拖动 rAF 合帧；IconStrip 四项：novel/ai/graph/timeline（search/blueprint 死项已移除，设置按钮接 AI 面板）；左栏 footer 两行布局（版本串+统计/敏感词/快照/重建索引四按钮）
 - `layout/SnapshotPanel.tsx` — 快照浮层（M5：创建/列表/恢复（confirm 含自动备份提示）/删除；复用 resource-panel 样式族 + .snapshot-overlay 居中遮罩）
 - `canvas/BlueprintCanvas.tsx` — 蓝图画布（子图进入+跨图代理+连线创建+拖拽持久化+受控选中+标签着色+**Delete 自实现 window keydown+确认框**（作用于 store 选中集；deleteKeyCode 路径在 select 不回灌模式下不可达，勿恢复）+**节点右键菜单**（删除（确认）/进入子图/打开指向）+**onlyRenderVisibleElements 视口虚拟化**——RF 对未测量节点 forceInitialRender 必渲染，首帧测量后裁剪；**rfNodes/rfEdges 增量缓存（2026-08-31 夜间）**：源对象引用未变即复用上次构建产物，mergeRefresh 的引用保护传导到 RF 层；nodeMirror 等价跳过）
 - `canvas/CanvasToolbar.tsx` — 画布工具条（三类节点创建/保存状态/层级指示/资源库入口）
 - `canvas/InspectorPanel.tsx` — 右侧属性面板（节点标题/标签（含新建自定义标签校验与删除入口）/别名/prompt/summary/refTarget/子图、边改型与 label、图信息）
 - `canvas/AliasEditor.tsx` — 别名编辑器（M4-B，节点与章节共用：chips + 非法字符校验，意图式 onAdd/onRemove 由消费方读最新态解析）
 - `canvas/ResourcePanel.tsx` — 资源库浮层（节点/标签组模板保存、插入、应用、删除；M4-B 起全局目录跨小说共享）
+- `layout/StatsPanel.tsx` — 码字统计浮层（今日/总量/连续天数三卡片+近14天柱图）；`layout/SensitivePanel.tsx` — 敏感词浮层（站点库管理/当前章与全本检测——激活章用编辑草稿/按词聚合命中+跳章）；浮层族统一遮罩点关+Esc
+- `graph/TimelineView.tsx` — 时间线矩阵（v2-F4：行=引用节点标签/列=章节数字序/格=交叉点亮，伏笔行红色；点格跳章即关覆盖层）
 - `graph/GlobalGraphView.tsx` — 全局图谱（M4-A，G6 5：d3-force 投影/标签着色过滤/点击跳转蓝图/孤立与伏笔高亮；图标条 graph 项全宽覆盖层）。**2026-08-31 夜间重构：过滤/开关走 updateData 部分样式+visibility 与 draw()（不重排不丢用户布局），仅数据集变化才 render；清理走 stopLayout+延迟销毁+容错（防 G6 销毁竞态告警与清理异常白屏）**
 - `canvas/ChapterEditor.tsx` — 章节 Tiptap 编辑器（StarterKit+Markdown+Placeholder+Wikilink；600ms 防抖保存 getMarkdown 落盘+卸载冲刷；**markdown 序列化按 ProseMirror doc 引用缓存**——草稿发布与保存共用；**chapterFlush 冲刷桥注册**（见 aiStore）；**卸载即中断 AI 生成**；加载 emitUpdate:false；草稿节流发布；元信息区标题/别名经 scheduleMetaSave 防抖——元信息变更不发布草稿）
 - `canvas/extensions/Wikilink.ts` — [[wikilink]] Mark（inclusive:false；suggestion 补全 allowedPrefixes:null+isComposing 放行；markdown 自定义 token 双向；悬浮预览 floating-ui+点击跳转）

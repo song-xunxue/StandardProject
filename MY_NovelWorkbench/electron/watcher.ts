@@ -15,7 +15,11 @@
  *      基线，第二次打开仍重读全部文件，冷启动不达标）；全量重建保留给手动命令兜底。
  *      附耗时日志（ms + 变更/清理计数），为大画布性能问题提供第一手数据
  *   2. M5：忽略 .snapshots/ 自身变化（快照创建/恢复是整目录拷贝，会引发事件风暴）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2-F7：忽略 writing-stats.json（保存高频小文件，不触发树推送）
+*/
 
 import { watch, type FSWatcher } from 'node:fs'
 import type { BrowserWindow } from 'electron'

@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
 }))
 
 import { openNovel } from './novelService'
-import { countChars, getWritingStats, initStats, recordChapterSave, removeChapterStats } from './statsService'
+import { countChars, exchangeChapterStats, getWritingStats, initStats, recordChapterSave, removeChapterStats, renameChapterStats } from './statsService'
 
 let novelDir = ''
 function makeNovel(): string {
@@ -103,5 +103,39 @@ describe('对账与入账（v2-F7）', () => {
     expect(view.todayGain).toBe(0)
     expect(view.streakDays).toBe(0)
     expect(view.recent.every((r) => r.total === 0 && r.gain === 0)).toBe(true)
+  })
+})
+
+describe('晨间审查修复回归', () => {
+  it('重命名章节：统计键随文件名迁移（不双计、重启不负增量）', () => {
+    writeChapter('第01章.md', '十个字的正文')
+    openNovel(novelDir)
+    renameChapterStats('chapters/第01章.md', 'chapters/序章.md')
+    const view = getWritingStats()
+    expect(view.totalChars).toBe(countChars('十个字的正文')) // 无双计
+    // 旧键不再存在（下次对账不会把旧键清出负增量）——以重命名后继续保存新路径稳定验证
+    recordChapterSave('chapters/序章.md', '十个字的正文再加字')
+    expect(getWritingStats().totalChars).toBe(countChars('十个字的正文再加字'))
+  })
+
+  it('交换章节：账值随内容对调', () => {
+    writeChapter('第01章.md', '短文')
+    writeChapter('第02章.md', '这一章的字数明显更多一些')
+    openNovel(novelDir)
+    exchangeChapterStats('chapters/第01章.md', 'chapters/第02章.md')
+    // 直接读文件验证键值互换
+    const raw = JSON.parse(readFileSync(join(novelDir, 'writing-stats.json'), 'utf-8')) as { chapterChars: Record<string, number> }
+    expect(raw.chapterChars['chapters/第01章.md']).toBe(countChars('这一章的字数明显更多一些'))
+    expect(raw.chapterChars['chapters/第02章.md']).toBe(countChars('短文'))
+  })
+
+  it('近 14 天窗口前段：无记录日显示 0 而非今日总量（carry 初值修复）', () => {
+    writeChapter('第01章.md', '今日首写')
+    openNovel(novelDir)
+    const view = getWritingStats()
+    expect(view.recent).toHaveLength(14)
+    // 只有今天一条记录：前 13 天应全部为 0（原先错误显示今天的总量）
+    expect(view.recent.slice(0, 13).every((r) => r.total === 0 && r.gain === 0)).toBe(true)
+    expect(view.recent[13]!.total).toBe(countChars('今日首写'))
   })
 })

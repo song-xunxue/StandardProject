@@ -16,12 +16,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { join } from 'node:path'
 import { app, dialog, type BrowserWindow } from 'electron'
 import { sanitizeFileName } from '../../shared/sanitize'
+import type { Wordbank } from '../../shared/types' // IPC 契约单一来源（晨间审查：原先本地重复声明）
 
-/** 词库视图（渲染层面板） */
-export interface Wordbank {
-  name: string
-  words: string[]
-}
 
 function bankDir(): string {
   const dir = join(app.getPath('userData'), 'sensitive-words')

@@ -21,7 +21,11 @@
  *        消除草稿发布 300ms + 防抖保存 600ms 的重复全文序列化）
  *      - 注册 aiStore.chapterFlush 冲刷桥（交换/删除/重命名章节前的落盘钩子）
  *      - 卸载时中断进行中的 AI 生成（面板未挂载时此前无人中断，token 白烧且输出全损）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2-F3：卸载守卫扩展多候选（multiGen 进行中即停）
+*/
 
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'

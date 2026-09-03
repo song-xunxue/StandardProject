@@ -530,39 +530,44 @@ export function LeftPanel(): ReactElement {
       </div>
       {versions && (
         <div className="left-footer">
-          <span className="left-footer-ver">Electron {versions.electron} · Node {versions.node}</span>
-          <button
-            className="left-footer-btn"
-            title="码字统计：今日新增 / 总字数 / 连续天数 / 近 14 天趋势（v2-F7）"
-            disabled={!novel}
-            onClick={() => setStatsOpen(true)}
-          >
-            统计
-          </button>
-          <button
-            className="left-footer-btn"
-            title="敏感词检测：按投稿站点词库检测当前章/全本（纯本地，v2-F6）"
-            disabled={!novel}
-            onClick={() => setSensitiveOpen(true)}
-          >
-            敏感词
-          </button>
-          <button
-            className="left-footer-btn"
-            title="快照：把当前小说存为可回滚的完整拷贝（.snapshots/，最多 10 份）"
-            disabled={!novel}
-            onClick={() => setSnapOpen(true)}
-          >
-            快照
-          </button>
-          <button
-            className="left-footer-btn"
-            title="重建 .index 索引（索引异常时的兜底手段；大目录可能短暂卡顿）"
-            disabled={!novel}
-            onClick={() => void handleRebuildIndex()}
-          >
-            重建索引
-          </button>
+          <span className="left-footer-ver" title={`Electron ${versions.electron} · Node ${versions.node}`}>
+            Electron {versions.electron} · Node {versions.node}
+          </span>
+          {/* 按钮独立一行可换行（晨间审查修复：4 按钮+版本串单行在默认 240px 左栏下必然溢出） */}
+          <div className="left-footer-btns">
+            <button
+              className="left-footer-btn"
+              title="码字统计：今日新增 / 总字数 / 连续天数 / 近 14 天趋势"
+              disabled={!novel}
+              onClick={() => setStatsOpen(true)}
+            >
+              统计
+            </button>
+            <button
+              className="left-footer-btn"
+              title="敏感词检测：按投稿站点词库检测当前章/全本（纯本地）"
+              disabled={!novel}
+              onClick={() => setSensitiveOpen(true)}
+            >
+              敏感词
+            </button>
+            <button
+              className="left-footer-btn"
+              title="快照：把当前小说存为可回滚的完整拷贝（.snapshots/，最多 10 份）"
+              disabled={!novel}
+              onClick={() => setSnapOpen(true)}
+            >
+              快照
+            </button>
+            <button
+              className="left-footer-btn"
+              title="重建 .index 索引（索引异常时的兜底手段；大目录可能短暂卡顿）"
+              disabled={!novel}
+              onClick={() => void handleRebuildIndex()}
+            >
+              重建索引
+            </button>
+          </div>
         </div>
       )}
       {snapOpen && <SnapshotPanel onClose={() => setSnapOpen(false)} />}

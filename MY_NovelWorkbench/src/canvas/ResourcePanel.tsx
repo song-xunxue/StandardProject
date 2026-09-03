@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useReactFlow } from '@xyflow/react'
 import type { ReactElement } from 'react'
 import type { CSSProperties } from 'react'
 import { graphToStructureTemplate, nodeToTemplate, normalizeStructureTemplate, tagSetTemplate, templateToNodeDraft } from '@shared/resource'
@@ -34,6 +35,7 @@ interface ResourceItem {
 }
 
 export function ResourcePanel(props: { onClose: () => void }): ReactElement {
+  const rf = useReactFlow()
   const [items, setItems] = useState<ResourceItem[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   // 数组化受控选中取首个
@@ -112,7 +114,9 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
     gs.updateNode(targetId, { tags: [...tpl.payload.tags] })
   }
 
-  /** v2-F5 插入结构模板：批量建节点（网格散开防重叠）+ 按索引映射连线；蓝图节点达 8 层时跳过并提示 */
+  /** v2-F5 插入结构模板：批量建节点（从既有内容包围盒右下方网格展开）+ 按索引映射连线；
+   *  蓝图节点达 8 层时跳过并提示。插入后关闭浮层并选中首个新节点（晨间审查：原先
+   *  固定流坐标连续插入会重叠、且无任何可见反馈——虚拟化下视口外不渲染看似无效） */
   const handleInsertStructure = (tpl: ResourceTemplate): void => {
     if (tpl.kind !== 'structure') return
     const gs = useGraphStore.getState()
@@ -120,11 +124,15 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
     const graph = graphId ? gs.graphs[graphId] : undefined
     if (!graph) return
     const payload = normalizeStructureTemplate(tpl.payload)
-    const base = graph.nodeIds.length
+    // 落点基准：既有节点包围盒右下角外（晨间审查修复：原 (base%3)*60 小偏移，连续
+    // 插入同一模板时几乎完全重叠）
+    const members = graph.nodeIds.map((id) => gs.nodes[id]).filter((n): n is NonNullable<typeof n> => Boolean(n))
+    const maxX = members.length > 0 ? Math.max(...members.map((n) => n.position.x)) : 0
+    const maxY = members.length > 0 ? Math.max(...members.map((n) => n.position.y)) : 0
     const idOf: Array<string | null> = []
     let skippedBlueprint = 0
     payload.nodes.forEach((n, i) => {
-      // 网格散开：每行 4 个，新节点排在既有节点右下方，避免与画布现有内容重叠
+      // 网格散开：每行 4 个，从既有内容右下方展开
       const col = i % 4
       const row = Math.floor(i / 4)
       const id = gs.addNode({
@@ -133,7 +141,9 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
         tags: [...n.tags],
         prompt: n.prompt ?? '',
         summary: n.summary ?? '',
-        position: { x: 120 + (base % 3) * 60 + col * 240, y: 100 + row * 110 }
+        aliases: [...(n.aliases ?? [])],
+        aiVisibility: n.aiVisibility,
+        position: { x: maxX + 120 + col * 240, y: maxY + 80 + row * 110 }
       })
       idOf.push(id)
       if (id === null && n.type === 'blueprint') skippedBlueprint++
@@ -143,6 +153,15 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
       const to = idOf[e.to]
       if (from && to) gs.addEdge(from, to, e.type)
     }
+    // 反馈：选中首个新节点 + 视口跳到新骨架（晨间审查：视口外的节点被虚拟化裁剪，
+    //    不 fitView 时插入看似无效）+ 关闭浮层露出画布
+    const newIds = idOf.filter((x): x is string => x !== null)
+    const firstId = newIds[0]
+    if (firstId) gs.selectNode(firstId)
+    if (newIds.length > 0) {
+      void rf.fitView({ nodes: newIds.map((id) => ({ id })), padding: 0.25, duration: 300, maxZoom: 1.2 })
+    }
+    props.onClose()
     if (skippedBlueprint > 0) {
       void dialogConfirm(
         `已达蓝图嵌套上限（${MAX_NESTING_DEPTH} 层），已跳过 ${skippedBlueprint} 个蓝图类型节点（可插入后手动改为文本类型）`,

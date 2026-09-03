@@ -206,11 +206,12 @@ export function indexChapter(path: string): boolean {
   const raw = readFileSync(join(novel.dir, path), 'utf-8')
   if (state === 'same' && hashUnchanged(database, path, st, raw)) return false
   const { data } = parseFrontmatter(raw)
+  const hash = contentHash(raw) // 单次计算复用（晨间审查：原先对同一文本算两次 sha1）
   const upsert = database.prepare(
     'INSERT OR REPLACE INTO nodes (id, path, type, tags, mtime, hash) VALUES (?, ?, ?, ?, ?, ?)'
   )
-  upsert.run(path, path, 'chapter', JSON.stringify(data.tags ?? []), Math.round(st.mtimeMs), contentHash(raw))
-  markIndexed(database, path, st, contentHash(raw))
+  upsert.run(path, path, 'chapter', JSON.stringify(data.tags ?? []), Math.round(st.mtimeMs), hash)
+  markIndexed(database, path, st, hash)
   return true
 }
 

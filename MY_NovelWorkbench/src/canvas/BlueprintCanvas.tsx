@@ -40,7 +40,12 @@
  *      使 graphStore.mergeRefresh 的引用保护传导到 RF 层，无关保存回推不再重渲全图
  *      可见节点）；nodeMirror 等价跳过（逐项 id/position/data/style 一致时不再 set，
  *      消除 dragStop 与回推的第二轮全图渲染）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2-F1：节点角标 ⊘AI/⊕AI；晨间审查修复：角标移出省略号容器（长标题不裁）、
+ *      rfNodes 缓存在图无效时清空（不变式严格化）
+*/
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactElement, ReactNode, RefObject } from 'react'
@@ -117,16 +122,20 @@ function nodeStyle(kind: NodeType | 'proxy', accent?: string): CSSProperties {
   return base
 }
 
-/** 节点内容：标题（◆ 蓝图 / § 引用 前缀）+ ref 指向 + AI 可见性标记 + 标签 chips */
+/** 节点内容：标题（◆ 蓝图 / § 引用 前缀）+ ref 指向 + AI 可见性标记 + 标签 chips。
+ *  角标是标题的兄弟元素而非子元素（晨间审查修复）：标题 span 带 ellipsis 裁剪，
+ *  角标嵌在里面时长标题节点上会被完全裁掉不可见 */
 function renderNodeLabel(node: BlueprintNode, tagLibrary: TagDef[]): ReactNode {
   const prefix = node.type === 'blueprint' ? '◆ ' : node.type === 'ref' ? '§ ' : ''
   return (
     <div className="bp-node-label">
-      <span className="bp-node-title">{prefix}
-        {node.title}
+      <div className="bp-node-title-row">
+        <span className="bp-node-title">{prefix}
+          {node.title}
+        </span>
         {node.aiVisibility === 'never' && <span className="bp-node-aivis" title="AI 永不注入（防剧透）">⊘AI</span>}
         {node.aiVisibility === 'always' && <span className="bp-node-aivis always" title="AI 常驻注入">⊕AI</span>}
-      </span>
+      </div>
       {node.type === 'ref' && node.refTarget && <span className="bp-node-ref">→ {basename(node.refTarget)}</span>}
       {node.tags.length > 0 && (
         <span className="bp-node-tags">
@@ -191,7 +200,13 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
   }
 
   const { rfNodes, rfEdges } = useMemo(() => {
-    if (!graph) return { rfNodes: [] as Node[], rfEdges: [] as Edge[] }
+    if (!graph) {
+      // 图已无效（外部删除/路由回退）——缓存必陈旧，清空以维持「memo 返回后缓存只含
+      // 当前图条目」的不变式（晨间审查：原提前返回跳过瘦身，陈旧条目跨图驻留）
+      buildCacheRef.current.rfNodes.clear()
+      buildCacheRef.current.rfEdges.clear()
+      return { rfNodes: [] as Node[], rfEdges: [] as Edge[] }
+    }
     const memberIds = new Set(graph.nodeIds)
 
     // ---- 增量缓存（2026-08-30 夜间重构）：源对象引用未变时复用上次构建的 RF 对象 ----

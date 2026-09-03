@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -45,6 +45,12 @@ const nodeTpl = (name: string): ResourceTemplate => ({
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'novel-resources-'))
+  // v2-F5：首次 listResources 会种子写入内置结构模板（标记文件驱动）——预消费种子
+  // 并清掉结构模板文件，保持既有用例夹具干净（标记已写，后续调用不再种子）
+  listResources()
+  for (const f of readdirSync(join(root, 'resources'))) {
+    if (f.endsWith('.structure.json')) unlinkSync(join(root, 'resources', f))
+  }
 })
 
 afterEach(() => {
@@ -64,7 +70,11 @@ describe('saveResource / listResources（全局目录）', () => {
     expect(items.map((i) => i.template.name)).toEqual(['标签组', '乙模板'])
   })
 
-  it('不依赖打开小说：无全局目录时种子写入内置结构模板（v2-F5）并返回', () => {
+  it('v2-F5 种子标记驱动：删光结构模板不复活；删标记后重新种子（升级用户可找回）', () => {
+    // 夹具已预消费种子并清掉结构模板（标记已写）——不复活
+    expect(listResources().filter((i) => i.template.kind === 'structure')).toEqual([])
+    // 删标记（模拟 v2 升级前的存量安装）→ 重新种子三骨架
+    unlinkSync(join(root, 'resources', '.structures-seeded'))
     const items = listResources()
     expect(items.map((i) => i.template.kind)).toEqual(['structure', 'structure', 'structure'])
     expect(items.map((i) => i.template.name).sort()).toEqual(['三幕结构', '英雄之旅', '救猫咪节拍表'].sort())

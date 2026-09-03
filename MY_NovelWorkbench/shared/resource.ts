@@ -101,15 +101,18 @@ export function isResourceTemplate(v: unknown): v is ResourceTemplate {
   return false
 }
 
-/** v2-F5：结构模板校验归一化（损坏字段静默修正：prompt/summary 缺省空串、edges 缺省空数组） */
+/** v2-F5：结构模板校验归一化（损坏字段静默修正：prompt/summary 缺省空串、aliases 过滤、
+ *  aiVisibility 非法回落 undefined、空 title 回落占位名、edges 剔除越界与非法类型） */
 export function normalizeStructureTemplate(t: StructureTemplatePayload): StructureTemplatePayload {
   return {
     nodes: t.nodes.map((n) => ({
       type: n.type,
-      title: n.title,
+      title: typeof n.title === 'string' && n.title !== '' ? n.title : '未命名节点',
       tags: Array.isArray(n.tags) ? n.tags.filter((x) => typeof x === 'string') : [],
       prompt: typeof n.prompt === 'string' ? n.prompt : '',
-      summary: typeof n.summary === 'string' ? n.summary : ''
+      summary: typeof n.summary === 'string' ? n.summary : '',
+      aliases: Array.isArray(n.aliases) ? n.aliases.filter((x) => typeof x === 'string') : [],
+      aiVisibility: n.aiVisibility === 'always' || n.aiVisibility === 'never' ? n.aiVisibility : undefined
     })),
     edges: Array.isArray(t.edges)
       ? t.edges.filter(
@@ -145,7 +148,9 @@ export function graphToStructureTemplate(data: GraphData, graphId: string): Stru
       title: n.title,
       tags: [...n.tags],
       prompt: n.prompt,
-      summary: n.summary
+      summary: n.summary,
+      aliases: [...n.aliases],
+      aiVisibility: n.aiVisibility
     })),
     edges
   }

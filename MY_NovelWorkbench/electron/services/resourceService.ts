@@ -13,7 +13,12 @@
  *   2. 新增 migrateLegacyResources：M2-M4A 期间存小说目录内的旧资源迁移入全局目录
  *   3. 审查修复：迁移完成标记 .migrated（防全局库删除已迁移模板后重开小说复活）；
  *      迁移/保存改 tmp+rename 原子写；迁移目录级容错；跨旧小说清洗撞车告警
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. 晨间审查修复：结构模板种子改 .structures-seeded 标记文件驱动（原按目录
+ *      存在性判定，v2 升级用户永远拿不到内置骨架）
+*/
 
 import { app } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -53,15 +58,13 @@ function resourceFileOf(template: ResourceTemplate): string {
 }
 
 /** 列出资源库全部模板（坏文件跳过并留日志，不阻断列表；不依赖打开小说）。
- *  v2-F5：首次使用（库内无任何 structure 模板）时种子写入内置情节结构骨架——
- *  写入后即用户资产（可删可改），删除全部结构模板不再复活（与迁移标记同思路：
- *  按「是否存在 structure 文件」判定，删光=用户明确不要） */
+ *  v2-F5：一次性种子写入内置情节结构骨架——判定用独立标记文件（与旧库迁移的
+ *  .migrated 同思路）：标记不存在即种子并写标记。既保证 v2 升级用户（M4-B 起已有
+ *  userData/resources，目录存在）拿到内置骨架，也保留「用户删光=明确不要、不复活」
+ *  的语义（晨间审查修复：原按目录存在性判定，存量安装永远拿不到） */
 export function listResources(): Array<{ path: string; template: ResourceTemplate }> {
   const dir = globalResourcesDir()
-  if (!existsSync(dir)) {
-    // v2-F5：全新安装（目录尚不存在）时种子写入内置结构骨架，随后照常扫描返回
-    seedBuiltinStructures()
-  }
+  if (!existsSync(join(dir, SEEDED_MARKER))) seedBuiltinStructures()
   const out: Array<{ path: string; template: ResourceTemplate }> = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue
@@ -79,12 +82,17 @@ export function listResources(): Array<{ path: string; template: ResourceTemplat
   return out
 }
 
-/** v2-F5：种子写入内置结构模板（仅在资源库目录不存在时由 listResources 调用；失败静默不影响列表） */
+/** v2-F5 种子完成标记（隐藏文件不参与 *.json 扫描；存在即不再种子——用户删光不复活） */
+const SEEDED_MARKER = '.structures-seeded'
+
+/** v2-F5：种子写入内置结构模板并落标记（listResources 调用；失败静默不影响列表——
+ *  标记随任一模板写入成功后写，部分失败下次补种） */
 function seedBuiltinStructures(): void {
   try {
     for (const tpl of BUILTIN_STRUCTURE_TEMPLATES) {
       saveResource(tpl)
     }
+    writeFileSync(join(globalResourcesDir(), SEEDED_MARKER), new Date().toISOString(), 'utf-8')
     console.log(`[resourceService] 已种子写入 ${BUILTIN_STRUCTURE_TEMPLATES.length} 个内置结构模板`)
   } catch (err) {
     console.error('[resourceService] 内置结构模板种子写入失败:', err)

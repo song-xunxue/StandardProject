@@ -13,7 +13,12 @@
  * 2026-08-28
  * 变更说明：
  *   1. M5：新增快照契约（SnapshotInfo 类型 + fs:snapshot* 四通道，ADR-14 评估通过后实现）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2 契约补记：aiVisibility（F1）/ getWritingStats+WritingStatsView（F7）/
+ *      wordbank 四通道+Wordbank（F6）/ StructureTemplatePayload（F5，晨间补 aliases/aiVisibility 透传）
+*/
 
 /** 小说元信息（novel.json） */
 export interface NovelMeta {
@@ -214,7 +219,9 @@ export interface TagSetTemplatePayload {
   tags: string[]
 }
 
-/** v2-F5 结构模板载荷：节点序列 + 索引连线——插入时在当前图批量生成骨架（占位标题可编辑） */
+/** v2-F5 结构模板载荷：节点序列 + 索引连线——插入时在当前图批量生成骨架（占位标题可编辑）。
+ *  晨间审查修复：节点补可选 aliases/aiVisibility 透传（否则「存图→插入」往返丢失
+ *  F1 防剧透设置与关键词兜底的别名源）；旧模板缺省视为 auto/[] 向后兼容 */
 export interface StructureTemplatePayload {
   nodes: Array<{
     type: 'blueprint' | 'text' | 'ref'
@@ -222,6 +229,8 @@ export interface StructureTemplatePayload {
     tags: string[]
     prompt?: string
     summary?: string
+    aliases?: string[]
+    aiVisibility?: 'auto' | 'always' | 'never'
   }>
   /** from/to 为 nodes 数组下标；插入时映射为真实节点 id */
   edges: Array<{ from: number; to: number; type: 'arrow' | 'line' | 'dashed' }>

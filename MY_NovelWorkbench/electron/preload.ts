@@ -12,7 +12,11 @@
  *   3. M2：新增元信息读写与资源库通道
  *   4. M3：新增 provider 组（Provider CRUD/测试）与 llm 组（流式生成/中断 + llm:chunk 订阅）
  *   5. M5：新增快照四通道（创建/列表/删除/恢复）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2 补记：fs.getWritingStats 与 wordbank 组（list/save/remove/importTxt）暴露
+*/
 
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, IPC_PUSH } from '../shared/types'

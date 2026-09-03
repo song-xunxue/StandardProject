@@ -44,6 +44,15 @@ export function SnapshotPanel(props: { onClose: () => void }): ReactElement {
     void reload()
   }, [reload])
 
+  // Esc 关闭（晨间批次：浮层族统一交互——遮罩点关 + Esc 关）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') props.onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [props])
+
   /** 创建快照（备注可选；取消输入框=null 中止） */
   const handleCreate = async (): Promise<void> => {
     if (busy) return
@@ -96,12 +105,12 @@ export function SnapshotPanel(props: { onClose: () => void }): ReactElement {
   }
 
   return (
-    <div className="snapshot-overlay nokey" onClick={props.onClose}>
-      <div className="resource-panel snapshot-panel" onClick={(e) => e.stopPropagation()}>
+    <div className="snapshot-overlay" onMouseDown={props.onClose}>
+      <div className="resource-panel snapshot-panel nokey" onMouseDown={(e) => e.stopPropagation()}>
         <div className="resource-header">
           <span>快照（{items.length}/10 · 新→旧）</span>
-          <button className="resource-close" title="关闭" onClick={props.onClose}>
-            ✕
+          <button className="resource-close" title="关闭（Esc）" onClick={props.onClose}>
+            ×
           </button>
         </div>
         <div className="resource-actions">

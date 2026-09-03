@@ -53,8 +53,10 @@ interface AiState {
   generation: { requestId: string; mode: GenerateMode } | null
   /** 最近一次生成错误（done.error） */
   generationError: string | null
-  /** v2-F3 多候选会话组（与单会话互斥：任一进行中另一方禁发起） */
-  multiGen: { candidates: GenCandidate[]; running: boolean } | null
+  /** v2-F3 多候选会话组（与单会话互斥：任一进行中另一方禁发起）。
+   *  originPath/originLabel：发起时的章节（晨间审查修复——采纳前校验仍在原章，
+   *  防 A 章候选静默插进 B 章） */
+  multiGen: { candidates: GenCandidate[]; running: boolean; originPath?: string; originLabel?: string } | null
   /** 编辑中的章节草稿 */
   editingDraft: EditingDraft | null
   /** 正文编辑器实例（流式插入与改写需要；不入 zustand 响应式语义，仅引用存放） */
@@ -173,6 +175,9 @@ export const useAiStore = create<AiState>()((set, get) => ({
   startGeneration: async (mode, messages, onDelta) => {
     const providerId = get().activeProviderId
     if (!providerId) throw new Error('未选择 AI Provider（先在面板中配置）')
+    // 晨间审查修复：与 startMultiGeneration 对称的互斥守卫——双击竞态下两路流会
+    // 经各自 requestId 写进同一个 StreamInserter（按钮禁用态重渲染提交前可连点）
+    if (get().generation !== null || get().multiGen?.running) throw new Error('已有生成进行中')
     const requestId = newRequestId()
     deltaHandlers.set(requestId, onDelta)
     ensureChunkSubscription()
@@ -196,11 +201,15 @@ export const useAiStore = create<AiState>()((set, get) => ({
     const gen = get().generation
     if (gen && chunk.requestId === gen.requestId) {
       if (chunk.error) {
+        // 晨间审查修复：done/error 包若携带 delta 先转发再收尾（恢复旧语义的宽松度——
+        // 当前主进程不合并发送，但非流式回退等未来路径可能一包带尾）
+        if (chunk.delta) deltaHandlers.get(chunk.requestId)?.(chunk.delta)
         set({ generation: null, generationError: chunk.error })
         deltaHandlers.delete(chunk.requestId)
         return
       }
       if (chunk.done) {
+        if (chunk.delta) deltaHandlers.get(chunk.requestId)?.(chunk.delta)
         set({ generation: null })
         deltaHandlers.delete(chunk.requestId)
         return
@@ -213,6 +222,8 @@ export const useAiStore = create<AiState>()((set, get) => ({
       if (cand) {
         if (chunk.error) {
           deltaHandlers.delete(chunk.requestId)
+          // 收尾包携带的尾部 delta 先并入缓冲再 flush（同单会话修复口径）
+          if (chunk.delta) pendingMultiText.set(chunk.requestId, (pendingMultiText.get(chunk.requestId) ?? '') + chunk.delta)
           flushMultiText()
           const cur = get().multiGen!
           set({
@@ -225,6 +236,7 @@ export const useAiStore = create<AiState>()((set, get) => ({
         }
         if (chunk.done) {
           deltaHandlers.delete(chunk.requestId)
+          if (chunk.delta) pendingMultiText.set(chunk.requestId, (pendingMultiText.get(chunk.requestId) ?? '') + chunk.delta)
           flushMultiText()
           const cur = get().multiGen!
           set({
@@ -262,7 +274,12 @@ export const useAiStore = create<AiState>()((set, get) => ({
       error: null
     }))
     ensureChunkSubscription()
-    set({ multiGen: { candidates, running: true }, generationError: null })
+    // 记录发起章节（采纳时校验目标；无编辑器草稿时缺省——由 AiPanel 的发起前置保证基本存在）
+    const draft = get().editingDraft
+    set({
+      multiGen: { candidates, running: true, originPath: draft?.path, originLabel: draft?.path.split('/').pop()?.replace(/\.md$/, '') },
+      generationError: null
+    })
     // 并发发起（fire-and-forget；结果全部经 chunk 推送按 requestId 路由回各候选）
     for (const cand of candidates) {
       void api().llm.generate({ requestId: cand.requestId, providerId, messages }).catch((err) => {
@@ -281,7 +298,10 @@ export const useAiStore = create<AiState>()((set, get) => ({
       }
     }
     flushMultiText()
-    set({ multiGen: { ...mg, running: false, candidates: mg.candidates.map((c) => ({ ...c, done: true })) } })
+    // 晨间审查修复：flush 之后重取 state——原实现用停止前的 mg 快照构建载荷，
+    // 会把 80ms 节流窗口内刚并入的候选尾部文本覆盖回滚（全停丢尾巴）
+    const cur = get().multiGen!
+    set({ multiGen: { ...cur, running: false, candidates: cur.candidates.map((c) => ({ ...c, done: true })) } })
   },
 
   dismissMultiGeneration: async () => {

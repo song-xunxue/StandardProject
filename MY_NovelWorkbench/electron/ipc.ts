@@ -16,7 +16,11 @@
  *   1. M5：新增快照四通道（snapshotService）；restore 在本层编排
  *    停监听 → closeIndex（释放 SQLite 句柄，Windows 删除/覆盖前置条件）
  *    → 恢复文件 → openNovel → startWatching（增量校对对齐索引）
- */
+ 
+ * 2026-09-01
+ * 变更说明（v2 首批补记+晨间审查修复）：
+ *   1. v2 补记：getWritingStats 与 wordbank 四通道路由
+*/
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import { IPC } from '../shared/types'
@@ -115,7 +119,7 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     opened(() => importWordbankTxt(win, p.name, p.merge))
   )
 
-    ipcMain.handle(IPC.rebuildIndex, () => opened(() => rebuildIndex()))
+  ipcMain.handle(IPC.rebuildIndex, () => opened(() => rebuildIndex()))
   ipcMain.handle(IPC.indexStats, () => opened(() => indexStats()))
 
   // M2：元信息（标签库）与资源库

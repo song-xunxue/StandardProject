@@ -58,6 +58,8 @@ export interface AddNodeInput {
   prompt?: string
   summary?: string
   size?: { width: number; height: number }
+  /** v2-F1 AI 可见性（结构模板往返透传用，晨间审查修复） */
+  aiVisibility?: BlueprintNode['aiVisibility']
 }
 
 /** 路由栈状态与动作 */
@@ -368,6 +370,7 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
       aliases: input.aliases ?? [],
       prompt: input.prompt ?? '',
       summary: input.summary ?? '',
+      aiVisibility: input.aiVisibility,
       position: input.position,
       size: input.size ?? { width: 160, height: 50 }
     }

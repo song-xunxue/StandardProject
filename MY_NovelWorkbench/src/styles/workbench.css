@@ -108,15 +108,29 @@
   opacity: 0.7;
 }
 
+/* footer 两行布局（晨间审查修复）：版本串独占一行可截断，按钮行可换行——
+ *  4 按钮+版本串单行在默认 240px 左栏下必然溢出 */
 .left-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   padding: 6px 12px;
   font-size: 10.5px;
   color: var(--fg-muted);
   border-top: 1px solid var(--border-subtle);
+}
+
+.left-footer-ver {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.left-footer-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
 }
 
 .left-footer-btn {
@@ -987,20 +1001,28 @@
   max-width: 100%;
 }
 
+/* 标题行（flex）：标题可省略，角标为兄弟元素永不被裁（晨间审查修复） */
+.bp-node-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
 .bp-node-title {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 /* v2-F1：节点 AI 可见性角标（⊘AI 永不注入 / ⊕AI 常驻注入） */
 .bp-node-aivis {
-  margin-left: 6px;
+  flex: none;
   font-size: 9px;
   font-weight: 400;
   color: #e08a8a;
-  vertical-align: 1px;
 }
 
 .bp-node-aivis.always {
@@ -2239,11 +2261,24 @@
   color: #e08a8a;
 }
 
-/* resource-panel 原为画布内绝对定位，浮层内改回流式（遮罩负责定位） */
+/* resource-panel 原为画布内绝对定位，浮层内改回流式（遮罩负责定位）。
+ * 晨间审查修复：通用复位不再携带 width/max-height——本规则特异性 (0,2,0) 会压过
+ * .stats-panel/.sensitive-panel 等单类面板自己的宽度声明（声明变死代码），尺寸
+ * 交由各面板类定义 */
 .snapshot-overlay .resource-panel {
   position: relative;
   top: auto;
   right: auto;
+}
+
+/* 浮层标题（v2 面板族使用，晨间补定义防死类） */
+.resource-title {
+  font-size: 12.5px;
+  color: var(--fg-default);
+}
+
+/* 快照面板沿用 380px（stats 520px / sensitive 560px 见各自类） */
+.snapshot-overlay .snapshot-panel {
   width: 380px;
   max-height: 70vh;
 }

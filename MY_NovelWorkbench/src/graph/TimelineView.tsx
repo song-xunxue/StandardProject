@@ -63,8 +63,10 @@ export function TimelineView(props: { onClose: () => void }): ReactElement {
   }, [nodes, chapters, tagLibrary])
 
   const chapterCount = chapters.length
+  /** 跳章即关闭矩阵（与全局图谱点击跳转的既有行为一致——用户意图是去编辑那章） */
   const openChapter = (path: string): void => {
     useNovelStore.getState().openTab('chapter', path)
+    props.onClose()
   }
 
   return (

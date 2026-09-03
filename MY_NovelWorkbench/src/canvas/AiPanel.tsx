@@ -253,6 +253,22 @@ export function AiPanel(): ReactElement {
     }
   }, [generation, generationError])
 
+  /** 卸载收尾（晨间审查修复）：生成中切走 AI 面板（图标条切换卸载本组件）时，
+   *  上面的收尾 effect 随组件消失永不执行——流式内联文本的段落结构永久压扁、
+   *  剩余 delta 也无人消费。卸载即中断生成并 finalize 已生成部分 */
+  useEffect(() => {
+    return () => {
+      const ai = useAiStore.getState()
+      if (ai.generation !== null) void ai.stopGeneration()
+      if (writerRef.current) {
+        inserterRef.current?.close()
+        inserterRef.current = null
+        writerRef.current.finalize()
+        writerRef.current = null
+      }
+    }
+  }, [])
+
   /** 生成中章节被关闭/切换（编辑器注销）：中断生成，避免 token 白烧与写入已销毁实例（v2-F3 含多候选） */
   useEffect(() => {
     if (generation !== null && !chapterEditor) {
@@ -346,16 +362,31 @@ export function AiPanel(): ReactElement {
     }
   }
 
-  /** v2-F3 采纳一路候选：光标处插入该路文本（续写语义），其余路丢弃 */
+  /** v2-F3 采纳一路候选：光标处按 markdown 插入该路文本（与 GenerationWriter.finalize 同口径，
+   *  纯文本内联会压扁段落结构——晨间审查修复），其余路丢弃。
+   *  目标章节校验（晨间审查修复）：候选是发起时章节的续写，切到别章/编辑器不在时拒绝采纳 */
   const handleAdopt = async (index: number): Promise<void> => {
-    const mg = useAiStore.getState().multiGen
-    if (!mg) return
-    const cand = mg.candidates[index]
-    const editor = useAiStore.getState().chapterEditor
-    if (!cand || !editor || cand.text.trim() === '') return
-    editor.commands.focus()
-    editor.commands.insertContent(`${cand.text.trim()}\n\n`)
-    await useAiStore.getState().dismissMultiGeneration()
+    const ai = useAiStore.getState()
+    const mg = ai.multiGen
+    const cand = mg?.candidates[index]
+    const editor = ai.chapterEditor
+    if (!mg || !cand) return
+    if (cand.text.trim() === '') return
+    if (!editor) {
+      await dialogConfirm('正文编辑器已不在（章节被关闭或切换）——请重新打开原章节后再采纳', '知道了')
+      return
+    }
+    const draft = ai.editingDraft
+    if (draft && draft.text.trim() !== '' && mg.originPath && draft.path !== mg.originPath) {
+      await dialogConfirm(`候选是「${mg.originLabel ?? mg.originPath}」的续写，当前正在编辑其他章节——请切回原章节后再采纳`, '知道了')
+      return
+    }
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(editor.state.selection.to, `${cand.text.trim()}\n\n`, { contentType: 'markdown' } as never)
+      .run()
+    await ai.dismissMultiGeneration()
   }
 
   const activeProvider = providers.find((p) => p.id === activeProviderId) ?? null
@@ -442,7 +473,7 @@ export function AiPanel(): ReactElement {
           <button
             className="left-tool-btn"
             disabled={generation !== null || multiGen !== null || !activeProviderId}
-            title="v2-F3 三路候选续写：同提示词并发生成三个方向供挑选，采纳一路写入正文（v2-F3）"
+            title="三路候选续写：同提示词并发生成三个方向供挑选，采纳一路写入正文"
             onClick={() => void handleMultiGenerate()}
           >
             ⁂ 三路续写
@@ -476,7 +507,7 @@ export function AiPanel(): ReactElement {
                   全停
                 </button>
               )}
-              <button className="left-tool-btn" title="丢弃全部候选" onClick={() => void useAiStore.getState().dismissMultiGeneration()}>
+              <button className="left-tool-btn" title="放弃全部候选" onClick={() => void useAiStore.getState().dismissMultiGeneration()}>
                 放弃
               </button>
             </div>
@@ -504,6 +535,11 @@ export function AiPanel(): ReactElement {
             ③ 把该引用节点与设定/大纲等节点连线（箭头=顺序 · 直线=关联 · 虚线=参考）。
             多章共享同一设定：把设定节点分别连到各章的引用节点即可。
             之后续写会自动以引用节点为「当前节点」，按三层优先级注入其链接的节点内容与上级蓝图摘要。
+          </div>
+        )}
+        {target?.aiVisibility === 'never' && (
+          <div className="insp-hint ai-unlinked">
+            ⚠ 上下文目标节点已设为「AI 永不注入（never）」，上下文被整体清空——如需恢复，请在蓝图中选中该节点后把属性面板的「AI 上下文注入」改回 auto。
           </div>
         )}
       </div>

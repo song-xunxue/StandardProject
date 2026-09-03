@@ -50,6 +50,15 @@ export function SensitivePanel(props: { onClose: () => void }): ReactElement {
     void reload()
   }, [reload])
 
+  // Esc 关闭（浮层族统一交互）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') props.onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [props])
+
   const bank = useMemo(() => banks.find((b) => b.name === activeBank) ?? null, [banks, activeBank])
 
   /** 扫描入口：scope=current 当前章（编辑器实时内容）/ all 全本（逐章读文件） */
@@ -74,6 +83,12 @@ export function SensitivePanel(props: { onClose: () => void }): ReactElement {
           else entry.chapters.push({ path, title, count: 1, sample: m.context })
         }
       }
+      // 激活章节的实时正文（编辑中 600ms 防抖未落盘的草稿优先于磁盘版本——晨间审查修复：
+      // 全本检测原先逐文件读盘，正在编辑的章节会用旧盘内容，与用户眼前的正文不一致）
+      const draftOf = (path: string): string | null => {
+        const draft = useAiStore.getState().editingDraft
+        return draft && draft.path === path ? draft.text : null
+      }
       if (scope === 'current') {
         const draft = useAiStore.getState().editingDraft
         const ns = useNovelStore.getState()
@@ -82,7 +97,7 @@ export function SensitivePanel(props: { onClose: () => void }): ReactElement {
           collect(active.path, active.title, draft.text)
         } else if (active?.kind === 'chapter') {
           const doc = await window.api.fs.readChapter(active.path)
-          collect(active.path, doc.title, doc.content)
+          collect(active.path, doc.title, draftOf(active.path) ?? doc.content)
         } else {
           setScanNote('当前没有打开的章节 Tab——请先打开章节，或使用「全本检测」')
           return
@@ -90,6 +105,11 @@ export function SensitivePanel(props: { onClose: () => void }): ReactElement {
       } else {
         const chapters = flattenChapterFiles(tree)
         for (const ch of chapters) {
+          const draft = draftOf(ch.path)
+          if (draft !== null) {
+            collect(ch.path, ch.title, draft)
+            continue
+          }
           const doc = await window.api.fs.readChapter(ch.path)
           collect(ch.path, ch.title, doc.content)
         }

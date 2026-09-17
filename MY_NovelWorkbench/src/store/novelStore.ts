@@ -76,8 +76,8 @@ interface NovelState {
   restoreChapterSnapshot: (chapterPath: string, id: string) => Promise<void>
   /** 刷新文件树 + 重新水合图数据；传入变更蓝图清单时走增量合并（watcher 推送路径） */
   refreshTree: (changedBlueprints?: string[]) => Promise<void>
-  /** 创建蓝图/章节文件（章节可指定卷目录名） */
-  createFile: (kind: 'blueprint' | 'chapter', title: string, volume?: string) => Promise<void>
+  /** 创建蓝图/章节文件（章节可指定卷目录名）；返回实际创建的相对路径（v2-F16：序号回绕等可能改名） */
+  createFile: (kind: 'blueprint' | 'chapter', title: string, volume?: string) => Promise<string>
   /** 新建卷（chapters 下一层目录） */
   createVolume: (name: string) => Promise<void>
   /** 交换两个文件位置（文件名互换=内容对调；章节拖动排序用） */
@@ -284,6 +284,7 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     const created = await api().fs.createFile(kind, title, volume)
     await get().refreshTree()
     get().openTab(kind, created.path, title)
+    return created.path
   },
 
   createVolume: async (name) => {

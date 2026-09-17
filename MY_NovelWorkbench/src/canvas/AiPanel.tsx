@@ -33,7 +33,9 @@
  *   2. v2-F13 改写预设：改写操作旁选择器（资源库 rewritePreset 模板），选中替换默认
  *      改写指令（非叠加）；续写/三路续写不受影响
  *   3. buildMessages 抽纯函数 services/generateMessages（单测覆盖 preset 替换/前情注入）
- */
+ *   4. v2-F16 节拍整章：操作区新增「节拍整章」入口（当前子图）；候选区抽出为
+ *      MultiCandidates 独立组件（chapterDraft 会话编辑器消失不中断）
+*/
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
@@ -45,9 +47,11 @@ import { assembleRecap, recapConfigOf, recapModeLabel } from '@/services/recapAs
 import { buildGenerateMessages } from '@/services/generateMessages'
 import { StreamInserter } from '@/services/streamInsert'
 import { GenerationWriter } from '@/services/generationWriter'
+import { MultiCandidates } from '@/canvas/MultiCandidates'
 import { useAiStore } from '@/store/aiStore'
 import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
+import { useUiStore } from '@/store/uiStore'
 import { dialogConfirm } from '@/store/dialogStore'
 
 const ROLE_LABEL: Record<string, string> = {
@@ -308,12 +312,13 @@ export function AiPanel(): ReactElement {
     }
   }, [])
 
-  /** 生成中章节被关闭/切换（编辑器注销）：中断生成，避免 token 白烧与写入已销毁实例（v2-F3 含多候选） */
+  /** 生成中章节被关闭/切换（编辑器注销）：中断生成，避免 token 白烧与写入已销毁实例（v2-F3 含多候选）。
+   *  v2-F16：chapterDraft 候选会话不依赖编辑器（文本在 store 累积，采纳时才落盘）——豁免 */
   useEffect(() => {
     if (generation !== null && !chapterEditor) {
       void useAiStore.getState().stopGeneration()
     }
-    if (multiGen?.running && !chapterEditor) {
+    if (multiGen?.running && multiGen.kind !== 'chapterDraft' && !chapterEditor) {
       void useAiStore.getState().stopMultiGeneration()
     }
   }, [generation, multiGen, chapterEditor])
@@ -394,33 +399,6 @@ export function AiPanel(): ReactElement {
     } catch (err) {
       await dialogConfirm(`三路续写发起失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
     }
-  }
-
-  /** v2-F3 采纳一路候选：光标处按 markdown 插入该路文本（与 GenerationWriter.finalize 同口径，
-   *  纯文本内联会压扁段落结构——晨间审查修复），其余路丢弃。
-   *  目标章节校验（晨间审查修复）：候选是发起时章节的续写，切到别章/编辑器不在时拒绝采纳 */
-  const handleAdopt = async (index: number): Promise<void> => {
-    const ai = useAiStore.getState()
-    const mg = ai.multiGen
-    const cand = mg?.candidates[index]
-    const editor = ai.chapterEditor
-    if (!mg || !cand) return
-    if (cand.text.trim() === '') return
-    if (!editor) {
-      await dialogConfirm('正文编辑器已不在（章节被关闭或切换）——请重新打开原章节后再采纳', '知道了')
-      return
-    }
-    const draft = ai.editingDraft
-    if (draft && draft.text.trim() !== '' && mg.originPath && draft.path !== mg.originPath) {
-      await dialogConfirm(`候选是「${mg.originLabel ?? mg.originPath}」的续写，当前正在编辑其他章节——请切回原章节后再采纳`, '知道了')
-      return
-    }
-    editor
-      .chain()
-      .focus()
-      .insertContentAt(editor.state.selection.to, `${cand.text.trim()}\n\n`, { contentType: 'markdown' } as never)
-      .run()
-    await ai.dismissMultiGeneration()
   }
 
   /** v2-F9：应用前情提要双档配置（写回 novel.json；失败提示不静默） */
@@ -538,6 +516,17 @@ export function AiPanel(): ReactElement {
             ■ 停止
           </button>
         </div>
+        <button
+          className="left-tool-btn"
+          disabled={generation !== null || multiGen !== null || !activeProviderId}
+          title="按当前子图的节拍节点生成整章草稿（场景节拍→整章，v2-F16）"
+          onClick={() => {
+            const gid = route[route.length - 1]
+            if (gid) useUiStore.getState().openBeatLauncher(gid)
+          }}
+        >
+          ♬ 节拍整章
+        </button>
         {generation && <div className="insp-hint ai-streaming">生成中…（流式写入正文）</div>}
         {/* v2-F13 改写预设：替换式指令模板（仅作用于「改写选中」，续写/三路续写不受影响） */}
         <div className="ai-rewrite-preset">
@@ -561,37 +550,8 @@ export function AiPanel(): ReactElement {
             ↻
           </button>
         </div>
-        {/* v2-F3 三路候选区：分栏流式展示，采纳一路写入正文、其余丢弃 */}
-        {multiGen && (
-          <div className="ai-candidates nokey">
-            <div className="ai-candidates-head">
-              <span className="ai-candidates-title">三路候选（挑一个方向）</span>
-              <span className="insp-hint">{multiGen.running ? '生成中…' : '已结束'}</span>
-              {multiGen.running && (
-                <button className="left-tool-btn" title="中断未完成的路（保留已生成文本）" onClick={() => void useAiStore.getState().stopMultiGeneration()}>
-                  全停
-                </button>
-              )}
-              <button className="left-tool-btn" title="放弃全部候选" onClick={() => void useAiStore.getState().dismissMultiGeneration()}>
-                放弃
-              </button>
-            </div>
-            <div className="ai-candidates-cols">
-              {multiGen.candidates.map((cand, i) => (
-                <div key={cand.requestId} className={`ai-candidate${cand.error ? ' error' : ''}`}>
-                  <div className="ai-candidate-head">
-                    <span className="ai-candidate-label">{cand.label}</span>
-                    <span className="insp-hint">{cand.error ?? (cand.done ? `${cand.text.length} 字` : '流式中…')}</span>
-                  </div>
-                  <pre className="ai-candidate-text left-scroll">{cand.text !== '' ? cand.text : cand.error ? '' : '等待输出…'}</pre>
-                  <button className="left-tool-btn" disabled={cand.text.trim() === ''} title="在正文光标处插入此路文本" onClick={() => void handleAdopt(i)}>
-                    采纳此路
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* v2-F3/F16 多候选区（抽出为 MultiCandidates：continue=续写候选 / chapterDraft=整章草稿候选） */}
+        <MultiCandidates />
         {generationError && <div className="insp-hint ai-error">生成失败：{generationError}</div>}
         {editingDraft && !chapterLinked && (
           <div className="insp-hint ai-unlinked">

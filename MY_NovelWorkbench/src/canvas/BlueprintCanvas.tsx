@@ -71,6 +71,7 @@ import { nodeAccentColor, tagColorOf } from '@shared/tags'
 import { pathToGraph } from '@/services/graphTraversal'
 import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
+import { useUiStore } from '@/store/uiStore'
 import { dialogConfirm } from '@/store/dialogStore'
 import { Breadcrumb } from './Breadcrumb'
 import { CanvasToolbar, canvasCreateBridge } from './CanvasToolbar'
@@ -547,6 +548,23 @@ function BlueprintFlow(props: { bodyRef: RefObject<HTMLDivElement> }): ReactElem
               <span className="canvas-context-text">
                 <span className="canvas-context-title">进入子图</span>
                 <span className="canvas-context-hint">打开「{menuNode.title}」的子蓝图</span>
+              </span>
+            </button>
+          )}
+          {menuNode.type === 'blueprint' && menuNode.refGraphId && (
+            <button
+              type="button"
+              className="canvas-context-item"
+              onClick={() => {
+                setCtxMenu(null)
+                // v2-F16：按该蓝图子图的节拍节点生成整章草稿（发起浮层列出节拍序）
+                useUiStore.getState().openBeatLauncher(menuNode.refGraphId!)
+              }}
+            >
+              <span className="canvas-context-icon">♬</span>
+              <span className="canvas-context-text">
+                <span className="canvas-context-title">生成整章草稿</span>
+                <span className="canvas-context-hint">按「{menuNode.title}」子图的节拍序列（v2-F16）</span>
               </span>
             </button>
           )}

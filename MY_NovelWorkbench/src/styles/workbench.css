@@ -2444,3 +2444,113 @@
   padding: 2px 0;
   user-select: none;
 }
+
+/* ---- v2-F16 节拍整章发起浮层与全局候选浮层 ---- */
+.snapshot-overlay .beat-launcher {
+  width: 460px;
+  max-height: 74vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.beat-launcher .beat-list {
+  flex: 1;
+  min-height: 120px;
+  max-height: none;
+  margin-top: 6px;
+}
+
+.beat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.beat-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.beat-item.off {
+  opacity: 0.45;
+}
+
+.beat-item-idx {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #14161a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.beat-item.off .beat-item-idx {
+  background: #4a4d55;
+  color: var(--fg-muted);
+}
+
+.beat-item-title {
+  flex-shrink: 0;
+  color: var(--fg-default);
+}
+
+.beat-item-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.beat-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--border, #2f3136);
+}
+
+.beat-form .recap-config-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.beat-form .recap-config-field .dialog-input {
+  width: auto;
+  min-width: 110px;
+  font-size: 11.5px;
+  padding: 3px 6px;
+}
+
+/* 整章候选全局预览浮层（AI 面板未开时）：右下角固定卡片 */
+.beat-candidates-float {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  width: min(720px, calc(100vw - 360px));
+  max-height: 46vh;
+  overflow: auto;
+  padding: 10px;
+  background: rgba(24, 26, 30, 0.97);
+  border: 1px solid #3a3d44;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.beat-candidates-float .ai-candidates {
+  margin: 0;
+}

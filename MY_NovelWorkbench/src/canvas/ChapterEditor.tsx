@@ -216,10 +216,12 @@ export function ChapterEditor(props: { path: string }): ReactElement {
     return () => {
       // 卸载即中断生成（审查修复）：面板未挂载时此前无人中断——主进程 fetch 持续烧 token
       // 而流式输出因编辑器已销毁全部丢弃。挂载侧的 stop 仍保留（双保险，幂等）。
-      // v2-F3：多候选同样卸载即停（采纳目标编辑器已不在）
+      // v2-F3：多候选同样卸载即停（采纳目标编辑器已不在）。
+      // v2-F16 豁免：chapterDraft 候选会话不依赖编辑器（文本在 store 累积，
+      // 采纳时才落盘）——用户切走/关闭当前章不应丢掉整章生成
       const cur = useAiStore.getState()
       if (cur.generation !== null) void cur.stopGeneration()
-      if (cur.multiGen?.running) void cur.stopMultiGeneration()
+      if (cur.multiGen?.running && cur.multiGen.kind !== 'chapterDraft') void cur.stopMultiGeneration()
       if (cur.chapterFlush === flush) useAiStore.setState({ chapterFlush: null })
       setChapterEditor(null)
       // 章节关闭后草稿同步清除（避免 Context Viewer 继续以旧章节为组装目标/草稿源）

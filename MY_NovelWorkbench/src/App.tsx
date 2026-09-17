@@ -35,8 +35,11 @@ import { GlobalGraphView } from './graph/GlobalGraphView'
 import { TimelineView } from './graph/TimelineView'
 import { ChapterSnapshotPanel } from './layout/ChapterSnapshotPanel'
 import { ChapterDiffPanel } from './layout/ChapterDiffPanel'
+import { BeatLauncher } from './canvas/BeatLauncher'
+import { MultiCandidates } from './canvas/MultiCandidates'
 import { Dialog } from './components/Dialog'
 import { useNovelStore } from './store/novelStore'
+import { useAiStore } from './store/aiStore'
 import { useUiStore } from './store/uiStore'
 import { dialogPrompt } from './store/dialogStore'
 
@@ -108,6 +111,9 @@ export default function App(): ReactElement {
   // v2-F8 浮层：章节快照列表 + diff 对比（TabBar 章节 Tab 右键发起）
   const chapterSnapPanel = useUiStore((s) => s.chapterSnapPanel)
   const chapterDiff = useUiStore((s) => s.chapterDiff)
+  // v2-F16：节拍整章发起浮层（画布蓝图右键/AI 面板入口）+ 整章候选的全局预览浮层
+  const beatLauncher = useUiStore((s) => s.beatLauncher)
+  const multiGen = useAiStore((s) => s.multiGen)
 
   useEffect(() => {
     void init()
@@ -177,6 +183,13 @@ export default function App(): ReactElement {
       {/* v2-F8：章节快照列表与 diff 对比浮层（根级挂载——TabBar 发起，与左栏浮层族同交互） */}
       {chapterSnapPanel && <ChapterSnapshotPanel />}
       {chapterDiff && <ChapterDiffPanel />}
+      {/* v2-F16：节拍整章发起浮层 + 整章候选全局预览（AI 面板未开时画布右键发起的会话仍有处可看） */}
+      {beatLauncher && <BeatLauncher />}
+      {multiGen?.kind === 'chapterDraft' && activeStrip !== 'ai' && (
+        <div className="beat-candidates-float nokey">
+          <MultiCandidates />
+        </div>
+      )}
       <Dialog />
     </div>
   )

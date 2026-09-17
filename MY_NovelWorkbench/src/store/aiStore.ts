@@ -20,7 +20,13 @@
  *      （单会话与三路并发候选共用同一路由表，互不串扰）；新增 multiGen 候选组
  *      （同 prompt 三路并发、流式累积 80ms 节流批量 flush）、stopMultiGeneration
  *      （中断未完成路保留文本）、dismissMultiGeneration（采纳/放弃后清空）
- */
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F16：startGeneration 加 options.maxTokens 透传；startMultiGeneration 加
+ *      MultiGenOptions（kind/originPath/targetTitle/maxTokens 显式传入，缺省兼容 F3）；
+ *      chapterDraft 会话不依赖编辑器（编辑器消失不中断，采纳时确保目标章就绪）
+*/
 
 import { create } from 'zustand'
 import type { Editor } from '@tiptap/core'
@@ -45,6 +51,19 @@ export interface GenCandidate {
   error: string | null
 }
 
+/** v2-F16：多候选会话的扩展选项（缺省兼容 F3 旧路径） */
+export interface MultiGenOptions {
+  /** 生成上限（整章草稿按字数档位放开；缺省用主进程默认） */
+  maxTokens?: number
+  /** 会话种类：continue=F3 续写候选（默认）；chapterDraft=节拍整章草稿（不依赖编辑器，预览后采纳落盘） */
+  kind?: 'continue' | 'chapterDraft'
+  /** 发起章/目标章路径（缺省取 editingDraft——F3 旧语义；chapterDraft 的「新章」目标显式传预定路径） */
+  originPath?: string
+  originLabel?: string
+  /** 目标章标题（chapterDraft 展示与采纳建章用） */
+  targetTitle?: string
+}
+
 interface AiState {
   providers: ProviderInfo[]
   /** 当前选中的 Provider id */
@@ -55,8 +74,16 @@ interface AiState {
   generationError: string | null
   /** v2-F3 多候选会话组（与单会话互斥：任一进行中另一方禁发起）。
    *  originPath/originLabel：发起时的章节（晨间审查修复——采纳前校验仍在原章，
-   *  防 A 章候选静默插进 B 章） */
-  multiGen: { candidates: GenCandidate[]; running: boolean; originPath?: string; originLabel?: string } | null
+   *  防 A 章候选静默插进 B 章）。v2-F16 增 kind/targetTitle：chapterDraft 会话
+   *  不依赖编辑器（文本在 store 累积），编辑器消失不中断，采纳时确保目标章就绪 */
+  multiGen: {
+    candidates: GenCandidate[]
+    running: boolean
+    originPath?: string
+    originLabel?: string
+    kind?: 'continue' | 'chapterDraft'
+    targetTitle?: string
+  } | null
   /** 编辑中的章节草稿 */
   editingDraft: EditingDraft | null
   /** 正文编辑器实例（流式插入与改写需要；不入 zustand 响应式语义，仅引用存放） */
@@ -76,15 +103,22 @@ interface AiState {
   testProvider: (id: string) => Promise<{ ok: boolean; message: string }>
   setActiveProvider: (id: string) => void
 
-  /** 发起流式生成：onDelta 由调用方接 StreamInserter；返回 requestId */
-  startGeneration: (mode: GenerateMode, messages: ChatMessage[], onDelta: (delta: string) => void) => Promise<string>
+  /** 发起流式生成：onDelta 由调用方接 StreamInserter；返回 requestId。
+   *  v2-F16：options.maxTokens 透传（整章草稿按字数档位放开生成上限） */
+  startGeneration: (
+    mode: GenerateMode,
+    messages: ChatMessage[],
+    onDelta: (delta: string) => void,
+    options?: { maxTokens?: number }
+  ) => Promise<string>
   /** 中断当前生成 */
   stopGeneration: () => Promise<void>
   /** 内部：处理 llm:chunk 推送（按 requestId 路由 delta 与会话状态） */
   handleChunk: (chunk: LlmChunkPayload) => void
 
-  /** v2-F3：发起 count 路并发候选（同一 messages；各路独立 requestId 路由） */
-  startMultiGeneration: (count: number, messages: ChatMessage[]) => Promise<void>
+  /** v2-F3：发起 count 路并发候选（同一 messages；各路独立 requestId 路由）。
+   *  v2-F16：options 扩展（kind/originPath/targetTitle/maxTokens，缺省兼容 F3 旧路径） */
+  startMultiGeneration: (count: number, messages: ChatMessage[], options?: MultiGenOptions) => Promise<void>
   /** v2-F3：中断未完成的路（保留已生成文本供采纳） */
   stopMultiGeneration: () => Promise<void>
   /** v2-F3：清空候选区（采纳/放弃后调用；会先中断未完成路） */
@@ -172,7 +206,7 @@ export const useAiStore = create<AiState>()((set, get) => ({
 
   setActiveProvider: (id) => set({ activeProviderId: id }),
 
-  startGeneration: async (mode, messages, onDelta) => {
+  startGeneration: async (mode, messages, onDelta, options) => {
     const providerId = get().activeProviderId
     if (!providerId) throw new Error('未选择 AI Provider（先在面板中配置）')
     // 晨间审查修复：与 startMultiGeneration 对称的互斥守卫——双击竞态下两路流会
@@ -182,7 +216,7 @@ export const useAiStore = create<AiState>()((set, get) => ({
     deltaHandlers.set(requestId, onDelta)
     ensureChunkSubscription()
     set({ generation: { requestId, mode }, generationError: null })
-    await api().llm.generate({ requestId, providerId, messages })
+    await api().llm.generate({ requestId, providerId, messages, maxTokens: options?.maxTokens })
     return requestId
   },
 
@@ -261,7 +295,7 @@ export const useAiStore = create<AiState>()((set, get) => ({
     if (chunk.delta) deltaHandlers.get(chunk.requestId)?.(chunk.delta)
   },
 
-  startMultiGeneration: async (count, messages) => {
+  startMultiGeneration: async (count, messages, options) => {
     const providerId = get().activeProviderId
     if (!providerId) throw new Error('未选择 AI Provider（先在面板中配置）')
     if (get().generation !== null || get().multiGen?.running) throw new Error('已有生成进行中')
@@ -274,17 +308,27 @@ export const useAiStore = create<AiState>()((set, get) => ({
       error: null
     }))
     ensureChunkSubscription()
-    // 记录发起章节（采纳时校验目标；无编辑器草稿时缺省——由 AiPanel 的发起前置保证基本存在）
-    const draft = get().editingDraft
+    // 记录发起章节（F3 采纳时校验仍在原章；chapterDraft 的目标章可显式传入——
+    // 目标可能是尚未创建的新章，此时不能取 editingDraft 冒充目标）
+    const originPath = options?.originPath ?? get().editingDraft?.path
     set({
-      multiGen: { candidates, running: true, originPath: draft?.path, originLabel: draft?.path.split('/').pop()?.replace(/\.md$/, '') },
+      multiGen: {
+        candidates,
+        running: true,
+        originPath,
+        originLabel: options?.originLabel ?? originPath?.split('/').pop()?.replace(/\.md$/, ''),
+        kind: options?.kind,
+        targetTitle: options?.targetTitle
+      },
       generationError: null
     })
     // 并发发起（fire-and-forget；结果全部经 chunk 推送按 requestId 路由回各候选）
     for (const cand of candidates) {
-      void api().llm.generate({ requestId: cand.requestId, providerId, messages }).catch((err) => {
-        console.error('[aiStore] 候选发起失败:', cand.label, err)
-      })
+      void api()
+        .llm.generate({ requestId: cand.requestId, providerId, messages, maxTokens: options?.maxTokens })
+        .catch((err) => {
+          console.error('[aiStore] 候选发起失败:', cand.label, err)
+        })
     }
   },
 

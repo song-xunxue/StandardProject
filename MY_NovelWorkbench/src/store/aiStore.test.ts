@@ -9,12 +9,19 @@
  * 2026-09-01
  * 变更说明：
  *   1. v2-F3 初版
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F16：multiGen 扩展选项用例组（显式 originPath/kind/targetTitle/maxTokens
+ *      透传；缺省兼容 F3 旧路径）+ generate 载荷完整记录
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ---- window.api stub（须在导入 aiStore 前就位） ----
 const generateCalls: string[] = []
+/** v2-F16：完整 generate 载荷记录（maxTokens 透传断言用） */
+const generatePayloads: Array<Record<string, unknown>> = []
 const stopCalls: string[] = []
 let chunkSink: ((chunk: unknown) => void) | null = null
 vi.stubGlobal('window', {
@@ -28,6 +35,7 @@ vi.stubGlobal('window', {
     llm: {
       generate: async (payload: { requestId: string }): Promise<void> => {
         generateCalls.push(payload.requestId)
+        generatePayloads.push(payload as Record<string, unknown>)
       },
       stop: async (requestId: string): Promise<void> => {
         stopCalls.push(requestId)
@@ -50,6 +58,7 @@ const pushChunk = (chunk: Record<string, unknown>): void => {
 
 beforeEach(() => {
   generateCalls.length = 0
+  generatePayloads.length = 0
   stopCalls.length = 0
   useAiStore.setState({
     providers: [],
@@ -150,5 +159,41 @@ describe('晨间审查修复回归（F3）', () => {
     await expect(useAiStore.getState().startMultiGeneration(2, [])).rejects.toThrow('已有生成进行中')
     const gen = useAiStore.getState().generation!
     pushChunk({ requestId: gen.requestId, done: true })
+  })
+})
+
+describe('multiGen 扩展选项（v2-F16）', () => {
+  it('显式 originPath/kind/targetTitle：不取 editingDraft 冒充目标（新章目标场景）', async () => {
+    useAiStore.setState({ editingDraft: { path: 'chapters/第01章.md', text: '旧章草稿' } })
+    await useAiStore.getState().startMultiGeneration(3, [], {
+      kind: 'chapterDraft',
+      originPath: 'chapters/第02章.md',
+      originLabel: '第02章',
+      targetTitle: '第02章',
+      maxTokens: 4800
+    })
+    const mg = useAiStore.getState().multiGen!
+    expect(mg.kind).toBe('chapterDraft')
+    expect(mg.originPath).toBe('chapters/第02章.md')
+    expect(mg.originLabel).toBe('第02章')
+    expect(mg.targetTitle).toBe('第02章')
+    // maxTokens 逐路透传到 llm.generate 载荷
+    expect(generatePayloads).toHaveLength(3)
+    for (const p of generatePayloads) expect(p['maxTokens']).toBe(4800)
+  })
+
+  it('缺省选项兼容 F3 旧路径：originPath 仍取 editingDraft，kind 为 undefined', async () => {
+    useAiStore.setState({ editingDraft: { path: 'chapters/第01章.md', text: 'x' } })
+    await useAiStore.getState().startMultiGeneration(3, [])
+    const mg = useAiStore.getState().multiGen!
+    expect(mg.originPath).toBe('chapters/第01章.md')
+    expect(mg.kind).toBeUndefined()
+    for (const p of generatePayloads) expect(p['maxTokens']).toBeUndefined()
+  })
+
+  it('startGeneration 的 maxTokens 透传（单路整章流式）', async () => {
+    await useAiStore.getState().startGeneration('continue', [], () => {}, { maxTokens: 7200 })
+    expect(generatePayloads).toHaveLength(1)
+    expect(generatePayloads[0]!['maxTokens']).toBe(7200)
   })
 })

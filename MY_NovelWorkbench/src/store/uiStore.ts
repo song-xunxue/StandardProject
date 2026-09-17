@@ -1,6 +1,7 @@
 /**
- * UI 浮层状态存储（zustand，v2-F8）：跨组件唤起的浮层（TabBar 发起 → App 根挂载）
- * 章节快照列表浮层与 diff 对比浮层的开合状态；LeftPanel footer 的既有浮层仍走组件局部 state
+ * UI 浮层状态存储（zustand，v2-F8/F16）：跨组件唤起的浮层（TabBar/画布发起 → App 根挂载）
+ * 章节快照列表浮层、diff 对比浮层、节拍整章发起浮层的开合状态；
+ * LeftPanel footer 的既有浮层仍走组件局部 state
  *
  * 作者: 李文煜
  * 日期: 2026-09-17
@@ -29,6 +30,10 @@ interface UiState {
   chapterDiff: ChapterDiffTarget | null
   openChapterDiff: (target: ChapterDiffTarget) => void
   closeChapterDiff: () => void
+  /** v2-F16 节拍整章发起浮层（null=关闭）；graphId=节拍子图 */
+  beatLauncher: { graphId: string } | null
+  openBeatLauncher: (graphId: string) => void
+  closeBeatLauncher: () => void
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -37,5 +42,8 @@ export const useUiStore = create<UiState>()((set) => ({
   closeChapterSnap: () => set({ chapterSnapPanel: null, chapterDiff: null }),
   chapterDiff: null,
   openChapterDiff: (target) => set({ chapterDiff: target }),
-  closeChapterDiff: () => set({ chapterDiff: null })
+  closeChapterDiff: () => set({ chapterDiff: null }),
+  beatLauncher: null,
+  openBeatLauncher: (graphId) => set({ beatLauncher: { graphId } }),
+  closeBeatLauncher: () => set({ beatLauncher: null })
 }))

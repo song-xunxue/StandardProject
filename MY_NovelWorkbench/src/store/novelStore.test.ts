@@ -17,6 +17,10 @@
  *      + 蓝图回退经 activateTab 同步画布路由（enterGraph 集成验证）
  *   2. 审查修复回归：renameFile 重写 Tab id、exchange/delete/rename 前置冲刷桥调用、
  *      deleteFile 统一回退、refreshTree 树对账
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8：章节快照编排用例组（冲刷顺序/seq 递增/全本快照缺冲刷缺口修复的回归）
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -26,6 +30,8 @@ import type { NovelMeta, TreeNode } from '@shared/types'
 const savedMetas: NovelMeta[] = []
 /** readTree 的可变桩数据（按测试需要预置章节树；blueprints 目录保持空避免触发蓝图读取） */
 let stubTree: TreeNode[] = []
+/** v2-F8：快照相关 IPC 调用记录（chapterPath 顺序供编排断言） */
+const snapCalls: string[] = []
 vi.stubGlobal('window', {
   api: {
     fs: {
@@ -39,7 +45,16 @@ vi.stubGlobal('window', {
         path: path.endsWith('.md') ? `chapters/${title}.md` : `blueprints/${title}.blueprint.json`
       }),
       deleteFile: async (): Promise<void> => {},
-      exchangeFiles: async (): Promise<void> => {}
+      exchangeFiles: async (): Promise<void> => {},
+      snapshotCreate: async (note: string): Promise<void> => {
+        snapCalls.push(`full:${note}`)
+      },
+      snapshotChapterCreate: async (chapterPath: string): Promise<void> => {
+        snapCalls.push(`create:${chapterPath}`)
+      },
+      snapshotChapterRestore: async (chapterPath: string): Promise<void> => {
+        snapCalls.push(`restore:${chapterPath}`)
+      }
     }
   }
 })
@@ -254,5 +269,57 @@ describe('文件变更的 Tab 联动（2026-08-30 审查修复）', () => {
     const s = useNovelStore.getState()
     expect(s.tabs.map((t) => t.id)).toEqual([chTab(2).id])
     expect(s.activeTabId).toBe(chTab(2).id)
+  })
+})
+
+describe('章节快照编排（v2-F8）', () => {
+  it('createChapterSnapshot：先 chapterFlush([path]) 再 IPC（快照含最新正文）', async () => {
+    snapCalls.length = 0
+    const order: string[] = []
+    useAiStore.setState({
+      chapterFlush: async (paths) => {
+        order.push(`flush:${paths?.join(',')}`)
+      }
+    })
+    await useNovelStore.getState().createChapterSnapshot('chapters/第01章.md', '大改前')
+    expect(order).toEqual(['flush:chapters/第01章.md'])
+    expect(snapCalls).toEqual(['create:chapters/第01章.md'])
+  })
+
+  it('restoreChapterSnapshot：冲刷 → IPC 恢复 → chapterReloadSeq 递增（重挂载防旧内存回写）', async () => {
+    snapCalls.length = 0
+    const before = useNovelStore.getState().chapterReloadSeq
+    const flushPaths: Array<string[] | undefined> = []
+    useAiStore.setState({
+      chapterFlush: async (paths) => {
+        flushPaths.push(paths)
+      }
+    })
+    await useNovelStore.getState().restoreChapterSnapshot('chapters/第01章.md', 'snap-20990101-000000-000')
+    expect(flushPaths).toEqual([['chapters/第01章.md']])
+    expect(snapCalls).toEqual(['restore:chapters/第01章.md'])
+    expect(useNovelStore.getState().chapterReloadSeq).toBe(before + 1)
+  })
+
+  it('createSnapshot（全本）：flushDirty 后冲刷全部章节编辑器（无参=无条件）再 IPC', async () => {
+    snapCalls.length = 0
+    const flushPaths: Array<string[] | undefined> = []
+    useAiStore.setState({
+      chapterFlush: async (paths) => {
+        flushPaths.push(paths)
+      }
+    })
+    await useNovelStore.getState().createSnapshot('存档点')
+    expect(flushPaths).toEqual([undefined])
+    expect(snapCalls).toEqual(['full:存档点'])
+    // 蓝图保存失败（脏集合非空）时中止创建，不产出缺内容的快照：
+    // 铺一张脏图（有路径有图体，saveBlueprint 桩缺失会保存失败回脏集合）
+    useGraphStore.setState({
+      graphs: { 'g-dirty': { id: 'g-dirty', title: '脏图', nodeIds: [], ownerNodeId: null } },
+      graphPaths: { 'g-dirty': 'blueprints/脏图.blueprint.json' },
+      dirtyGraphIds: ['g-dirty']
+    })
+    await expect(useNovelStore.getState().createSnapshot('应中止')).rejects.toThrow('尚未保存成功')
+    expect(snapCalls).toEqual(['full:存档点'])
   })
 })

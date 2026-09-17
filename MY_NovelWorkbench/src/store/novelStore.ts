@@ -32,6 +32,8 @@
  * 2026-09-17
  * 变更说明：
  *   1. v2-F9：新增 setRecapConfig（前情提要双档配置写回 novel.json 可选字段 recap）
+ *   2. v2-F8：新增 createSnapshot（全本快照前置冲刷——补齐 SnapshotPanel 直调 IPC 缺冲刷
+ *      的现状缺口）/ createChapterSnapshot / restoreChapterSnapshot（冲刷→直写→seq 重挂载）
  */
 
 import { create } from 'zustand'
@@ -66,6 +68,12 @@ interface NovelState {
   openNovel: (dir: string) => Promise<void>
   /** 恢复快照：前序落盘/清态后交主进程换内容，再复用 openNovel 全套水合（M5） */
   restoreSnapshot: (id: string) => Promise<void>
+  /** v2-F8：创建全本快照（前置冲刷蓝图防抖与全部章节编辑器——补齐直调 IPC 缺前置冲刷的现状缺口） */
+  createSnapshot: (note: string) => Promise<void>
+  /** v2-F8：创建章节快照（前置冲刷该章编辑器防抖窗口内的最新正文） */
+  createChapterSnapshot: (chapterPath: string, note: string) => Promise<void>
+  /** v2-F8：恢复章节快照（冲刷→IPC 整文件直写→chapterReloadSeq 重挂载编辑器防旧内存回写） */
+  restoreChapterSnapshot: (chapterPath: string, id: string) => Promise<void>
   /** 刷新文件树 + 重新水合图数据；传入变更蓝图清单时走增量合并（watcher 推送路径） */
   refreshTree: (changedBlueprints?: string[]) => Promise<void>
   /** 创建蓝图/章节文件（章节可指定卷目录名） */
@@ -196,6 +204,33 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     await api().fs.snapshotRestore(id)
     // 5. 复用完整打开流程：flush 空转 → IPC openNovel（主进程已重开监听）→ 全量水合 → 开第一张蓝图
     await get().openNovel(dir)
+  },
+
+  createSnapshot: async (note) => {
+    // 前置冲刷（v2-F8 补齐现状缺口：原 SnapshotPanel 直调 IPC，编辑器 600ms 防抖窗口内
+    // 的正文与蓝图防抖挂起均不进快照——恢复后静默丢失最新编辑）
+    await useGraphStore.getState().flushDirty()
+    const dirtyLeft = useGraphStore.getState().dirtyGraphIds
+    if (dirtyLeft.length > 0) {
+      throw new Error('部分蓝图尚未保存成功，请稍后重试创建快照（避免快照缺少最新内容）')
+    }
+    // 无参调用=无条件冲刷全部挂载编辑器（快照应包含所有打开章节的最新正文）
+    await useAiStore.getState().chapterFlush?.()
+    await api().fs.snapshotCreate(note)
+  },
+
+  createChapterSnapshot: async (chapterPath, note) => {
+    // 前置冲刷该章（落盘时序确定，可 await——快照存的即是编辑器所见最新正文）
+    await useAiStore.getState().chapterFlush?.([chapterPath])
+    await api().fs.snapshotChapterCreate(chapterPath, note)
+  },
+
+  restoreChapterSnapshot: async (chapterPath, id) => {
+    // 编排三步串行（与 exchangeFiles 同族）：冲刷清防抖 → IPC 整文件直写 →
+    // 递增版本号重挂载编辑器重读磁盘（否则编辑器内存旧正文经 600ms 防抖写回覆盖恢复结果）
+    await useAiStore.getState().chapterFlush?.([chapterPath])
+    await api().fs.snapshotChapterRestore(chapterPath, id)
+    set((s) => ({ chapterReloadSeq: s.chapterReloadSeq + 1 }))
   },
 
   refreshTree: async (changedBlueprints) => {

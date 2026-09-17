@@ -15,6 +15,10 @@
  * 2026-09-01
  * 变更说明（v2 首批补记+晨间审查修复）：
  *   1. v2-F4：TimelineView 路由（图标条 timeline 项全宽覆盖层）
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8：根级挂载章节快照列表（ChapterSnapshotPanel）与 diff 对比（ChapterDiffPanel）浮层
 */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -29,8 +33,11 @@ import { ChapterEditor } from './canvas/ChapterEditor'
 import { InspectorPanel } from './canvas/InspectorPanel'
 import { GlobalGraphView } from './graph/GlobalGraphView'
 import { TimelineView } from './graph/TimelineView'
+import { ChapterSnapshotPanel } from './layout/ChapterSnapshotPanel'
+import { ChapterDiffPanel } from './layout/ChapterDiffPanel'
 import { Dialog } from './components/Dialog'
 import { useNovelStore } from './store/novelStore'
+import { useUiStore } from './store/uiStore'
 import { dialogPrompt } from './store/dialogStore'
 
 const MIN_LEFT = 200
@@ -98,6 +105,9 @@ export default function App(): ReactElement {
   const activeTab = useNovelStore((s) => s.tabs.find((t) => t.id === s.activeTabId) ?? null)
   // 章节内容版本：交换/重排后递增 → key 变化 → ChapterEditor 重挂载重读磁盘
   const chapterReloadSeq = useNovelStore((s) => s.chapterReloadSeq)
+  // v2-F8 浮层：章节快照列表 + diff 对比（TabBar 章节 Tab 右键发起）
+  const chapterSnapPanel = useUiStore((s) => s.chapterSnapPanel)
+  const chapterDiff = useUiStore((s) => s.chapterDiff)
 
   useEffect(() => {
     void init()
@@ -164,6 +174,9 @@ export default function App(): ReactElement {
           {activeStrip === 'graph' && novel && <GlobalGraphView onClose={() => setActiveStrip('novel')} />}
         </div>
       </div>
+      {/* v2-F8：章节快照列表与 diff 对比浮层（根级挂载——TabBar 发起，与左栏浮层族同交互） */}
+      {chapterSnapPanel && <ChapterSnapshotPanel />}
+      {chapterDiff && <ChapterDiffPanel />}
       <Dialog />
     </div>
   )

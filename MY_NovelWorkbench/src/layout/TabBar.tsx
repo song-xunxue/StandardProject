@@ -15,11 +15,17 @@
  *      批量底座，含激活态回退与画布路由同步）；中键点击关闭（mousedown 阶段拦截自动滚动）；
  *      Tab 溢出时横向滚动（滚轮纵转横 + 激活 Tab 自动滚入视野，滚动条隐藏防行高跳变）；
  *      菜单实现迁移共享 useContextMenu hook
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8：章节 Tab 右键菜单补「创建章节快照」「章节快照与对比…」两项
  */
 
 import { useEffect, useRef } from 'react'
 import type { ReactElement, MouseEvent as ReactMouseEvent } from 'react'
 import { useNovelStore } from '@/store/novelStore'
+import { useUiStore } from '@/store/uiStore'
+import { dialogPrompt } from '@/store/dialogStore'
 import { useContextMenu } from '@/components/useContextMenu'
 
 export function TabBar(): ReactElement {
@@ -45,6 +51,31 @@ export function TabBar(): ReactElement {
   const menuItems: Array<{ key: string; label: string; run: () => void }> = menuTab
     ? [
         { key: 'close', label: '关闭', run: () => useNovelStore.getState().closeTabs([menuTab.id]) },
+        // v2-F8：章节 Tab 专属——单章快照（大改/AI 采纳前回滚点）与对比入口
+        ...(menuTab.kind === 'chapter'
+          ? [
+              {
+                key: 'snap-create',
+                label: '创建章节快照',
+                run: () => {
+                  void (async () => {
+                    const note = await dialogPrompt(`创建章节快照（${menuTab.title}）`, '备注（可留空）', '')
+                    if (note === null) return
+                    try {
+                      await useNovelStore.getState().createChapterSnapshot(menuTab.path, note)
+                    } catch (err) {
+                      console.error('[TabBar] 章节快照创建失败:', err)
+                    }
+                  })()
+                }
+              },
+              {
+                key: 'snap-list',
+                label: '章节快照与对比…',
+                run: () => useUiStore.getState().openChapterSnap({ path: menuTab.path, title: menuTab.title })
+              }
+            ]
+          : []),
         ...(tabs.length > 1
           ? [
               {

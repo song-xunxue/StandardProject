@@ -9,11 +9,17 @@
  * 2026-08-28
  * 变更说明：
  *   1. M5 初版（左栏 footer「快照」入口唤起）
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8：创建改走 novelStore.createSnapshot（前置冲刷防丢最新编辑）；
+ *      标题上限改用 shared 常量（与服务层 prune 共用防漂移）；章节级快照见 ChapterSnapshotPanel
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { SnapshotInfo } from '@shared/types'
+import { MAX_FULL_SNAPSHOTS } from '@shared/types'
 import { useNovelStore } from '@/store/novelStore'
 import { dialogConfirm, dialogPrompt } from '@/store/dialogStore'
 
@@ -53,14 +59,16 @@ export function SnapshotPanel(props: { onClose: () => void }): ReactElement {
     return () => window.removeEventListener('keydown', onKey)
   }, [props])
 
-  /** 创建快照（备注可选；取消输入框=null 中止） */
+  /** 创建快照（备注可选；取消输入框=null 中止）。
+   *  v2-F8 起走 novelStore.createSnapshot——前置冲刷蓝图防抖与全部章节编辑器
+   *  （原直调 IPC 会漏掉 600ms 防抖窗口内的最新编辑，恢复后静默丢失） */
   const handleCreate = async (): Promise<void> => {
     if (busy) return
     const note = await dialogPrompt('创建快照', '备注（可留空）', '')
     if (note === null) return
     setBusy(true)
     try {
-      await window.api.fs.snapshotCreate(note)
+      await useNovelStore.getState().createSnapshot(note)
       await reload()
     } catch (err) {
       await dialogConfirm(`快照创建失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
@@ -108,7 +116,7 @@ export function SnapshotPanel(props: { onClose: () => void }): ReactElement {
     <div className="snapshot-overlay" onMouseDown={props.onClose}>
       <div className="resource-panel snapshot-panel nokey" onMouseDown={(e) => e.stopPropagation()}>
         <div className="resource-header">
-          <span>快照（{items.length}/10 · 新→旧）</span>
+          <span>快照（{items.length}/{MAX_FULL_SNAPSHOTS} · 新→旧）</span>
           <button className="resource-close" title="关闭（Esc）" onClick={props.onClose}>
             ×
           </button>

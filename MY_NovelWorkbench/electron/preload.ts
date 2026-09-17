@@ -16,6 +16,10 @@
  * 2026-09-01
  * 变更说明（v2 首批补记+晨间审查修复）：
  *   1. v2 补记：fs.getWritingStats 与 wordbank 组（list/save/remove/importTxt）暴露
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8：fs.snapshotChapter* 五方法暴露（章节级快照）
 */
 
 import { contextBridge, ipcRenderer } from 'electron'
@@ -54,6 +58,16 @@ const api = {
     snapshotList: () => ipcRenderer.invoke(IPC.snapshotList),
     snapshotDelete: (id: string) => ipcRenderer.invoke(IPC.snapshotDelete, { id }),
     snapshotRestore: (id: string) => ipcRenderer.invoke(IPC.snapshotRestore, { id }),
+    // v2-F8：章节级快照（创建/列表/删除/恢复/读原文）
+    snapshotChapterCreate: (chapterPath: string, note: string) =>
+      ipcRenderer.invoke(IPC.snapshotChapterCreate, { chapterPath, note }),
+    snapshotChapterList: (chapterPath: string) => ipcRenderer.invoke(IPC.snapshotChapterList, { chapterPath }),
+    snapshotChapterDelete: (chapterPath: string, id: string) =>
+      ipcRenderer.invoke(IPC.snapshotChapterDelete, { chapterPath, id }),
+    snapshotChapterRestore: (chapterPath: string, id: string) =>
+      ipcRenderer.invoke(IPC.snapshotChapterRestore, { chapterPath, id }),
+    snapshotChapterRead: (chapterPath: string, id: string) =>
+      ipcRenderer.invoke(IPC.snapshotChapterRead, { chapterPath, id }),
     // v2-F7：码字统计
     getWritingStats: () => ipcRenderer.invoke(IPC.getWritingStats)
   },

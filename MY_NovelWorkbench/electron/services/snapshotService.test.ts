@@ -9,13 +9,28 @@
  * 2026-08-28
  * 变更说明：
  *   1. M5 初版
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8：章节级快照用例组——创建原文拷贝/按章列表隔离/上限独立于全本/
+ *      恢复整文件直写不动他章/穿越与非法路径防护/全本列表不混入
  */
 
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createSnapshot, deleteSnapshot, listSnapshots, restoreSnapshot } from './snapshotService'
+import {
+  createChapterSnapshot,
+  createSnapshot,
+  deleteChapterSnapshot,
+  deleteSnapshot,
+  listChapterSnapshots,
+  listSnapshots,
+  readChapterSnapshot,
+  restoreChapterSnapshot,
+  restoreSnapshot
+} from './snapshotService'
 
 let novelDir = ''
 
@@ -150,5 +165,93 @@ describe('restoreSnapshot', () => {
     // 恢复源在恢复后仍保留（未被 prune），且自动备份存在
     expect(existsSync(join(novelDir, '.snapshots', oldest))).toBe(true)
     expect(listSnapshots(novelDir).some((s) => s.note === '恢复前自动备份')).toBe(true)
+  })
+})
+
+describe('章节级快照（v2-F8）', () => {
+  const CH1 = 'chapters/第01章.md'
+  const CH2 = 'chapters/第一卷/第02章.md'
+
+  it('创建=整文件原文拷贝（含 frontmatter），manifest 记章路径与去空白字数', () => {
+    const info = createChapterSnapshot(novelDir, CH1, '大改前')
+    expect(info.chapterPath).toBe(CH1)
+    expect(info.note).toBe('大改前')
+    // 「第一章正文。」去空白 = 6 字（句号计 1）
+    expect(info.chars).toBe(6)
+    // 分组目录在 .snapshots/chapters/ 下（base64url 编码，纯 ASCII）
+    const chaptersRoot = join(novelDir, '.snapshots', 'chapters')
+    const groups = readdirSync(chaptersRoot)
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatch(/^[A-Za-z0-9_-]+$/)
+    // 快照体=原文（不经 frontmatter 往返）
+    expect(readChapterSnapshot(novelDir, CH1, info.id)).toBe(
+      readFileSync(join(novelDir, 'chapters', '第01章.md'), 'utf-8')
+    )
+  })
+
+  it('按章列表互相隔离；全本列表与全本 prune 均不混入章节快照', () => {
+    const s1 = createChapterSnapshot(novelDir, CH1, '章一')
+    createChapterSnapshot(novelDir, CH2, '章二')
+    expect(listChapterSnapshots(novelDir, CH1).map((s) => s.note)).toEqual(['章一'])
+    expect(listChapterSnapshots(novelDir, CH2).map((s) => s.note)).toEqual(['章二'])
+    // 全本列表不含章节快照（分组目录无 manifest）
+    expect(listSnapshots(novelDir)).toEqual([])
+    // 全本 prune（创建第 11 份全本快照触发清理）不删章节快照
+    for (let i = 0; i < 11; i++) createSnapshot(novelDir, `全本${i}`)
+    expect(listChapterSnapshots(novelDir, CH1)).toHaveLength(1)
+    expect(listChapterSnapshots(novelDir, CH1)[0]!.id).toBe(s1.id)
+    // 全本快照也不吸入章节快照（.snapshots 整体排除）
+    expect(existsSync(join(novelDir, '.snapshots', listSnapshots(novelDir)[0]!.id, '.snapshots'))).toBe(false)
+  })
+
+  it('每章独立 20 份上限：第 21 份创建后最旧被清', () => {
+    let firstId = ''
+    for (let i = 0; i < 21; i++) {
+      const info = createChapterSnapshot(novelDir, CH1, `第${i + 1}份`)
+      if (i === 0) firstId = info.id
+    }
+    const list = listChapterSnapshots(novelDir, CH1)
+    expect(list).toHaveLength(20)
+    expect(list.some((s) => s.id === firstId)).toBe(false)
+    // 同期另一章不受影响
+    createChapterSnapshot(novelDir, CH2, '')
+    expect(listChapterSnapshots(novelDir, CH2)).toHaveLength(1)
+  })
+
+  it('恢复=整文件直写：只动目标章，他章与其他文件不变；返回原文供入账', () => {
+    createChapterSnapshot(novelDir, CH1, '旧版')
+    writeFileSync(join(novelDir, 'chapters', '第01章.md'), '---\ntitle: 第01章\ntags: []\n---\n\n被大改过的正文。\n', 'utf-8')
+    const otherBefore = readFileSync(join(novelDir, 'chapters', '第一卷', '第02章.md'), 'utf-8')
+    const bpBefore = readFileSync(join(novelDir, 'blueprints', '主蓝图.blueprint.json'), 'utf-8')
+    const old = listChapterSnapshots(novelDir, CH1)[0]!
+    const raw = restoreChapterSnapshot(novelDir, CH1, old.id)
+    expect(readFileSync(join(novelDir, 'chapters', '第01章.md'), 'utf-8')).toBe(raw)
+    expect(raw).toContain('第一章正文。')
+    expect(readFileSync(join(novelDir, 'chapters', '第一卷', '第02章.md'), 'utf-8')).toBe(otherBefore)
+    expect(readFileSync(join(novelDir, 'blueprints', '主蓝图.blueprint.json'), 'utf-8')).toBe(bpBefore)
+  })
+
+  it('删除章节快照；非法 id 与残缺目录拒绝（防穿越同全本口径）', () => {
+    const info = createChapterSnapshot(novelDir, CH1, '')
+    deleteChapterSnapshot(novelDir, CH1, info.id)
+    expect(listChapterSnapshots(novelDir, CH1)).toEqual([])
+    expect(() => deleteChapterSnapshot(novelDir, CH1, '../evil')).toThrow()
+    expect(() => deleteChapterSnapshot(novelDir, CH1, 'snap-20990101-000000-000')).toThrow()
+    expect(() => readChapterSnapshot(novelDir, CH1, 'snap-20990101-000000-000')).toThrow()
+  })
+
+  it('非法章节路径拒绝：绝对路径/越出目录/非 chapters 前缀/非 .md', () => {
+    expect(() => createChapterSnapshot(novelDir, join(novelDir, 'chapters', '第01章.md'), '')).toThrow('相对路径')
+    expect(() => createChapterSnapshot(novelDir, '../novel.json', '')).toThrow()
+    expect(() => createChapterSnapshot(novelDir, 'novel.json', '')).toThrow('chapters')
+    expect(() => createChapterSnapshot(novelDir, 'chapters/第01章.txt', '')).toThrow('.md')
+    // 不存在的章节文件
+    expect(() => createChapterSnapshot(novelDir, 'chapters/第99章.md', '')).toThrow('不存在')
+  })
+
+  it('同毫秒连续创建不撞 id（与全本共用 newSnapshotId 单调机制）', () => {
+    const ids = new Set<string>()
+    for (let i = 0; i < 5; i++) ids.add(createChapterSnapshot(novelDir, CH1, '').id)
+    expect(ids.size).toBe(5)
   })
 })

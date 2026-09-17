@@ -18,6 +18,12 @@ import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from
 import { join } from 'node:path'
 import { currentNovel } from './novelService'
 import { parseFrontmatter } from '../../shared/frontmatter'
+import { countChars } from '../../shared/textMetrics'
+
+// v2-F8 起 countChars 上移 shared/textMetrics（快照服务同样需要，且纯函数归 shared
+// 避免 snapshotService→statsService→novelService→electron 的传递依赖）；
+// 此处重导出保持既有 import（statsService.test 等）不变
+export { countChars }
 
 /** 面板展示的天数 */
 const RECENT_DAYS = 14
@@ -49,11 +55,6 @@ function dateStrOf(d: Date): string {
 
 function statsPath(): string {
   return join(currentNovel()!.dir, 'writing-stats.json')
-}
-
-/** 正文字数：去空白字符（空格/换行/制表等不计） */
-export function countChars(content: string): number {
-  return content.replace(/\s/g, '').length
 }
 
 function loadStats(): StatsFile {

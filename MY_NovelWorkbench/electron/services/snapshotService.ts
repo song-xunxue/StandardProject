@@ -13,16 +13,25 @@
  * 2026-08-28
  * 变更说明：
  *   1. M5 初版：创建/列表/删除/恢复 + 保留上限（MAX_SNAPSHOTS=10）+ 路径穿越防护
- */
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8 章节级快照：.snapshots/chapters/<章路径 base64url>/ 分组隔离（全本列表/
+ *      prune 天然不混入）；单文件原文拷贝、整文件直写恢复（零 frontmatter 伪变更）；
+ *      每章独立 20 份上限；上限常量上移 shared（UI 与服务共用）
+*/
 
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import type { SnapshotInfo } from '../../shared/types'
+import { isAbsolute, join, relative, sep } from 'node:path'
+import type { ChapterSnapshotInfo, SnapshotInfo } from '../../shared/types'
+import { MAX_CHAPTER_SNAPSHOTS, MAX_FULL_SNAPSHOTS } from '../../shared/types'
+import { countChars } from '../../shared/textMetrics'
+import { parseFrontmatter } from '../../shared/frontmatter'
 
 const SNAPSHOT_DIR = '.snapshots'
 const MANIFEST_NAME = 'manifest.json'
 /** 保留上限：超出删最旧（防快照无限膨胀；恢复前自动备份也计入） */
-const MAX_SNAPSHOTS = 10
+const MAX_SNAPSHOTS = MAX_FULL_SNAPSHOTS
 /** 快照/恢复都不触碰的顶层目录（索引缓存可重建；快照防自嵌套；git 历史不属应用管理） */
 const EXCLUDED_TOP = new Set(['.index', '.snapshots', '.git'])
 
@@ -192,4 +201,141 @@ export function restoreSnapshot(novelDir: string, id: string): void {
   // 晨间审查修复：writing-stats.json 是累积写作日志（连续天数/趋势不可重建），
   // 不随内容回滚——快照里的旧版统计拷回会清掉快照点之后的码字记录
   copyTopLevel(snapDir, novelDir, (name) => name === MANIFEST_NAME || name === 'writing-stats.json')
+}
+
+// ---------------------------------------------------------------------------
+// v2-F8 章节级快照：.snapshots/chapters/<章路径 base64url>/snap-*/
+// 与全本快照物理隔离——listSnapshots 只枚举根层目录（'chapters' 无 manifest 天然不混入），
+// 全本 prune 的 id 正则过滤不会触碰该子目录，章节配额（每章 20 份）独立计数。
+// 分组目录名用 base64url（纯 ASCII，规避本机 Node rmSync 非 ASCII 单文件坑）；真实
+// chapterPath 记 manifest。快照体 = 章节 .md 整文件原文（含 frontmatter extraLines），
+// 恢复整文件直写——绝不只存 content 再经 serializeFrontmatter 重排（会产生伪变更 diff）。
+// ---------------------------------------------------------------------------
+
+/** 章节快照分组目录（章路径 base64url 编码；解码可还原真实路径便于排障） */
+function chapterGroupDir(novelDir: string, chapterPath: string): string {
+  const encoded = Buffer.from(chapterPath, 'utf-8').toString('base64url')
+  return join(snapshotsRoot(novelDir), 'chapters', encoded)
+}
+
+/** 校验章节路径合法并解析为绝对路径：相对路径、首段必须是 chapters/、.md 结尾、无穿越 */
+function resolveChapterFile(novelDir: string, chapterPath: string): string {
+  if (isAbsolute(chapterPath)) throw new Error(`仅接受相对路径：${chapterPath}`)
+  const abs = join(novelDir, chapterPath)
+  const rel = relative(novelDir, abs)
+  const first = rel.split(sep)[0] ?? ''
+  if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`)) {
+    throw new Error(`路径越出小说目录：${chapterPath}`)
+  }
+  if (first !== 'chapters' || !rel.endsWith('.md')) {
+    throw new Error(`仅接受 chapters/ 下的章节 .md 文件：${chapterPath}`)
+  }
+  return abs
+}
+
+/** 读章节快照 manifest（结构校验同全本版口径） */
+function readChapterManifest(snapDir: string): ChapterSnapshotInfo | null {
+  try {
+    const info = JSON.parse(readFileSync(join(snapDir, MANIFEST_NAME), 'utf-8')) as ChapterSnapshotInfo
+    if (typeof info.id !== 'string' || typeof info.createdAt !== 'string') return null
+    return {
+      id: info.id,
+      createdAt: info.createdAt,
+      note: info.note ?? '',
+      chapterPath: typeof info.chapterPath === 'string' ? info.chapterPath : '',
+      chars: typeof info.chars === 'number' ? info.chars : 0
+    }
+  } catch {
+    return null
+  }
+}
+
+/** 创建章节快照：单文件原样拷贝 + manifest 最后写；每章独立 prune（MAX_CHAPTER_SNAPSHOTS） */
+export function createChapterSnapshot(novelDir: string, chapterPath: string, note = ''): ChapterSnapshotInfo {
+  const chapterAbs = resolveChapterFile(novelDir, chapterPath)
+  if (!existsSync(chapterAbs)) throw new Error(`章节文件不存在：${chapterPath}`)
+  const raw = readFileSync(chapterAbs, 'utf-8')
+  const id = newSnapshotId()
+  const target = join(chapterGroupDir(novelDir, chapterPath), id)
+  mkdirSync(target, { recursive: true })
+  try {
+    // 整文件原文拷贝（保留文件名——diff/恢复都不经 parse→serialize 往返）
+    copyFileSync(chapterAbs, join(target, 'chapter.md'))
+    const manifest: ChapterSnapshotInfo = {
+      id,
+      createdAt: new Date(lastIdTime).toISOString(),
+      note,
+      chapterPath,
+      chars: countChars(parseFrontmatter(raw).content)
+    }
+    writeFileSync(join(target, MANIFEST_NAME), JSON.stringify(manifest, null, 2), 'utf-8')
+    pruneChapterSnapshots(novelDir, chapterPath)
+    return manifest
+  } catch (err) {
+    rmSync(target, { recursive: true, force: true })
+    throw err
+  }
+}
+
+/** 章节快照列表（新→旧）；残缺（无 manifest）跳过 */
+export function listChapterSnapshots(novelDir: string, chapterPath: string): ChapterSnapshotInfo[] {
+  const group = chapterGroupDir(novelDir, chapterPath)
+  if (!existsSync(group)) return []
+  const infos: ChapterSnapshotInfo[] = []
+  for (const name of readdirSync(group, { withFileTypes: true })) {
+    if (!name.isDirectory()) continue
+    const info = readChapterManifest(join(group, name.name))
+    if (info) infos.push(info)
+  }
+  return infos.sort((a, b) => (a.id < b.id ? 1 : -1))
+}
+
+/** 校验章节快照 id 并返回其目录（不存在/残缺时抛错） */
+function requireChapterSnapshotDir(novelDir: string, chapterPath: string, id: string): string {
+  if (!SNAPSHOT_ID_RE.test(id)) throw new Error(`非法快照 id：${id}`)
+  const dir = join(chapterGroupDir(novelDir, chapterPath), id)
+  if (!readChapterManifest(dir)) throw new Error(`章节快照不存在或不完整：${id}`)
+  return dir
+}
+
+/** 删除章节快照（目录级 rmSync 递归合法——目录内中文文件名不受本机坑影响） */
+export function deleteChapterSnapshot(novelDir: string, chapterPath: string, id: string): void {
+  const dir = requireChapterSnapshotDir(novelDir, chapterPath, id)
+  rmSync(dir, { recursive: true, force: true })
+}
+
+/** 读取章节快照原文（diff 视图用） */
+export function readChapterSnapshot(novelDir: string, chapterPath: string, id: string): string {
+  const dir = requireChapterSnapshotDir(novelDir, chapterPath, id)
+  return readFileSync(join(dir, 'chapter.md'), 'utf-8')
+}
+
+/**
+ * 恢复章节快照：整文件原文直写回章节路径（不经 frontmatter 往返，零伪变更），
+ * 返回原文供调用方（ipc 层）做码字统计入账——绕过 saveChapter 直写必须手动
+ * recordChapterSave，否则 chapterChars 停留旧值永不自愈（对账只处理新键/死键）。
+ * 轻量编排：不停 watcher/closeIndex（单文件写入不触碰 SQLite 句柄，watcher 捕获
+ * mtime 变化自动增量索引）
+ */
+export function restoreChapterSnapshot(novelDir: string, chapterPath: string, id: string): string {
+  const dir = requireChapterSnapshotDir(novelDir, chapterPath, id)
+  const chapterAbs = resolveChapterFile(novelDir, chapterPath)
+  if (!existsSync(join(dir, 'chapter.md'))) throw new Error(`章节快照体缺失：${id}`)
+  const raw = readFileSync(join(dir, 'chapter.md'), 'utf-8')
+  writeFileSync(chapterAbs, raw, 'utf-8')
+  return raw
+}
+
+/** 章节级保留策略：分组目录内超出上限删最旧（独立于全本 10 份配额） */
+function pruneChapterSnapshots(novelDir: string, chapterPath: string): void {
+  const group = chapterGroupDir(novelDir, chapterPath)
+  if (!existsSync(group)) return
+  const ids = readdirSync(group, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && SNAPSHOT_ID_RE.test(e.name))
+    .map((e) => e.name)
+    .sort()
+    .reverse()
+  for (const id of ids.slice(MAX_CHAPTER_SNAPSHOTS)) {
+    rmSync(join(group, id), { recursive: true, force: true })
+  }
 }

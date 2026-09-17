@@ -20,6 +20,10 @@
  * 2026-09-01
  * 变更说明（v2 首批补记+晨间审查修复）：
  *   1. v2 补记：getWritingStats 与 wordbank 四通道路由
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8：章节快照五通道路由（轻量恢复编排 + recordChapterSave 统计入账）
 */
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
@@ -39,10 +43,21 @@ import {
   saveChapter
 } from './services/fileService'
 import { deleteResource, listResources, saveResource } from './services/resourceService'
-import { createSnapshot, deleteSnapshot, listSnapshots, restoreSnapshot } from './services/snapshotService'
+import {
+  createChapterSnapshot,
+  createSnapshot,
+  deleteChapterSnapshot,
+  deleteSnapshot,
+  listChapterSnapshots,
+  listSnapshots,
+  readChapterSnapshot,
+  restoreChapterSnapshot,
+  restoreSnapshot
+} from './services/snapshotService'
 import { deleteProvider, listProviders, saveProvider, testProvider } from './services/providerService'
 import { startGeneration, stopGeneration } from './services/llmService'
-import { getWritingStats } from './services/statsService'
+import { getWritingStats, recordChapterSave } from './services/statsService'
+import { parseFrontmatter } from '../shared/frontmatter'
 import { deleteWordbank, importWordbankTxt, listWordbanks, saveWordbank } from './services/wordbankService'
 import { indexStats, rebuildIndex, closeIndex } from './services/indexService'
 import { startWatching, stopWatching } from './watcher'
@@ -180,6 +195,47 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       }
       openNovel(novel.dir)
       startWatching(win)
+    })
+  )
+
+  // v2-F8：章节级快照（轻量编排——不需要 stopWatching/closeIndex：单文件写入不触碰
+  // SQLite 句柄，watcher 捕获 mtime 变化自动增量索引并推送 novelChanged）
+  ipcMain.handle(IPC.snapshotChapterCreate, (_e, p: { chapterPath: string; note?: string }) =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      return createChapterSnapshot(novel.dir, p.chapterPath, p.note ?? '')
+    })
+  )
+  ipcMain.handle(IPC.snapshotChapterList, (_e, p: { chapterPath: string }) =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      return listChapterSnapshots(novel.dir, p.chapterPath)
+    })
+  )
+  ipcMain.handle(IPC.snapshotChapterDelete, (_e, p: { chapterPath: string; id: string }) =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      deleteChapterSnapshot(novel.dir, p.chapterPath, p.id)
+    })
+  )
+  ipcMain.handle(IPC.snapshotChapterRead, (_e, p: { chapterPath: string; id: string }) =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      return readChapterSnapshot(novel.dir, p.chapterPath, p.id)
+    })
+  )
+  ipcMain.handle(IPC.snapshotChapterRestore, (_e, p: { chapterPath: string; id: string }) =>
+    opened(() => {
+      const novel = currentNovel()
+      if (!novel) throw new Error('尚未打开小说')
+      const raw = restoreChapterSnapshot(novel.dir, p.chapterPath, p.id)
+      // 码字统计入账：恢复绕过 saveChapter 直写文件，必须手动记录——否则
+      // chapterChars[path] 停留旧值永不自愈（initStats 对账只处理新键/死键）
+      recordChapterSave(p.chapterPath, parseFrontmatter(raw).content)
     })
   )
 

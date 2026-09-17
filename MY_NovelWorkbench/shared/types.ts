@@ -23,6 +23,7 @@
  * 变更说明：
  *   1. v2 二批：NovelMeta.recap 可选字段（F9 前情提要双档）；
  *      ResourceTemplate 第四类 rewritePreset（F13 去 AI 味改写预设，载荷=替换式指令模板）
+ *   2. v2-F8：ChapterSnapshotInfo + snapshotChapter* 五通道 + 保留上限共享常量
 */
 
 /** v2-F9 前情提要配置（novel.json 可选字段；旧小说无字段时渲染层兜底默认 tail/2/800/300） */
@@ -70,6 +71,24 @@ export interface SnapshotInfo {
   /** 快照包含的文件数（不含排除项与 manifest 自身） */
   fileCount: number
 }
+
+/**
+ * 章节级快照信息（v2-F8，存于 .snapshots/chapters/&lt;章路径base64&gt;/&lt;snap id&gt;/manifest.json）
+ * 快照体=章节 .md 整文件原文拷贝（含 frontmatter extraLines——恢复整文件直写，零伪变更）
+ */
+export interface ChapterSnapshotInfo {
+  id: string
+  createdAt: string
+  note: string
+  /** 章节相对小说目录路径（如 chapters/第一卷/第02章.md），manifest 内保留可读真名 */
+  chapterPath: string
+  /** 正文字数（countChars 去空白口径，与码字统计一致） */
+  chars: number
+}
+
+/** v2-F8 保留上限共享常量（服务层 prune 与 UI 标题共用，防两处漂移） */
+export const MAX_FULL_SNAPSHOTS = 10
+export const MAX_CHAPTER_SNAPSHOTS = 20
 
 /** 文件树节点 */
 export interface TreeNode {
@@ -120,6 +139,13 @@ export const IPC = {
   snapshotList: 'fs:snapshotList', // () => SnapshotInfo[]（新→旧；残缺快照不显示）
   snapshotDelete: 'fs:snapshotDelete', // (payload: { id }) => void
   snapshotRestore: 'fs:snapshotRestore', // (payload: { id }) => void（当前内容自动备份后覆盖恢复）
+
+  // v2-F8：章节级快照（.snapshots/chapters/<章路径base64>/snap-*/，与全本物理隔离互不挤占配额）
+  snapshotChapterCreate: 'fs:snapshotChapterCreate', // (payload: { chapterPath, note? }) => ChapterSnapshotInfo
+  snapshotChapterList: 'fs:snapshotChapterList', // (payload: { chapterPath }) => ChapterSnapshotInfo[]
+  snapshotChapterDelete: 'fs:snapshotChapterDelete', // (payload: { chapterPath, id }) => void
+  snapshotChapterRestore: 'fs:snapshotChapterRestore', // (payload: { chapterPath, id }) => void（整文件原文直写+统计入账）
+  snapshotChapterRead: 'fs:snapshotChapterRead', // (payload: { chapterPath, id }) => string（快照原文，diff 用）
 
   // v2-F7：码字统计（writing-stats.json 随小说走；openNovel 全量对账 + saveChapter 入账）
   getWritingStats: 'fs:getWritingStats', // () => WritingStatsView

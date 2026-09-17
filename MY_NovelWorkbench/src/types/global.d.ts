@@ -18,11 +18,16 @@
  * 2026-08-31
  * 变更说明：
  *   1. v2 阶段二：fs.getWritingStats（F7 码字统计）与 wordbank 组（F6 敏感词词库）
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F8：fs.snapshotChapter* 五方法（章节级快照）类型
  */
 
 import type {
   BlueprintFile,
   ChapterDoc,
+  ChapterSnapshotInfo,
   ChatMessage,
   LlmChunkPayload,
   NovelChangedPayload,
@@ -69,6 +74,12 @@ export interface Api {
     snapshotList: () => Promise<SnapshotInfo[]>
     snapshotDelete: (id: string) => Promise<void>
     snapshotRestore: (id: string) => Promise<void>
+    /** v2-F8：章节级快照（每章独立 20 份，与全本快照物理隔离） */
+    snapshotChapterCreate: (chapterPath: string, note: string) => Promise<ChapterSnapshotInfo>
+    snapshotChapterList: (chapterPath: string) => Promise<ChapterSnapshotInfo[]>
+    snapshotChapterDelete: (chapterPath: string, id: string) => Promise<void>
+    snapshotChapterRestore: (chapterPath: string, id: string) => Promise<void>
+    snapshotChapterRead: (chapterPath: string, id: string) => Promise<string>
     /** v2-F7：码字统计（主进程 writing-stats.json） */
     getWritingStats: () => Promise<WritingStatsView>
   }

@@ -1747,6 +1747,76 @@
   color: #e0a868;
 }
 
+/* v2-F13 改写预设选择行（AI 面板，作用于「改写选中」） */
+.ai-rewrite-preset {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ai-rewrite-preset-label {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+
+.ai-rewrite-preset .dialog-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+/* v2-F9 前情提要双档配置行（Context Viewer 顶部） */
+.recap-config {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.recap-config .dialog-input {
+  font-size: 11.5px;
+  padding: 3px 6px;
+}
+
+.recap-config .recap-config-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.recap-config .recap-config-field .dialog-input {
+  width: 56px;
+  text-align: center;
+}
+
+.recap-config .left-tool-btn {
+  font-size: 11.5px;
+  padding: 3px 10px;
+}
+
+/* v2-F13 改写预设编辑表单（资源库）与列表预览 */
+.resource-preset-textarea {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.resource-preset-preview {
+  margin-top: 2px;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ai-error {
   color: #e07a7a;
 }

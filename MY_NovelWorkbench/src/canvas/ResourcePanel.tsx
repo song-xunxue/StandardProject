@@ -15,6 +15,11 @@
  * 变更说明：
  *   1. v2-F5：结构模板分区——插入=当前图批量建节点+连线（网格散开防重叠）；
  *      「存当前图为结构模板」把整图压成可复用骨架（跨图边跳过）
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F13：改写预设分区——新建/编辑（PresetForm：名称+多行指令）/删除；
+ *      预设的使用入口在 AI 面板「改写预设」下拉（选中替换默认改写指令）
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -34,10 +39,62 @@ interface ResourceItem {
   template: ResourceTemplate
 }
 
+/** v2-F13 改写预设编辑表单（新建/编辑共用；origName 为空=新建） */
+function PresetForm(props: {
+  initial: { name: string; instruction: string; origName?: string }
+  onDone: () => void
+  onSaved: () => Promise<void>
+}): ReactElement {
+  const [name, setName] = useState(props.initial.name)
+  const [instruction, setInstruction] = useState(props.initial.instruction)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSave = async (): Promise<void> => {
+    if (name.trim() === '' || instruction.trim() === '') {
+      setError('名称与指令均必填')
+      return
+    }
+    try {
+      await window.api.fs.saveResource({
+        kind: 'rewritePreset',
+        name: name.trim(),
+        payload: { instruction: instruction.trim() }
+      })
+      await props.onSaved()
+      props.onDone()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  return (
+    <div className="ai-provider-form">
+      <input className="dialog-input" placeholder="预设名称（如 去AI味 / 口语化）" value={name} onChange={(e) => setName(e.target.value)} />
+      <textarea
+        className="dialog-input resource-preset-textarea"
+        placeholder="改写指令全文——选中该预设时替换「改写选中」的默认指令。可写多行具体要求（如：情绪不直接点破，改用动作呈现…）"
+        value={instruction}
+        onChange={(e) => setInstruction(e.target.value)}
+      />
+      {error && <div className="insp-hint ai-error">{error}</div>}
+      <div className="ai-provider-form-actions">
+        <button className="left-tool-btn" onClick={() => void handleSave()}>
+          保存
+        </button>
+        <button className="left-tool-btn" onClick={props.onDone}>
+          取消
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function ResourcePanel(props: { onClose: () => void }): ReactElement {
   const rf = useReactFlow()
   const [items, setItems] = useState<ResourceItem[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
+  /** v2-F13：改写预设编辑表单（null=关闭；origName=编辑既有） */
+  const [presetForm, setPresetForm] = useState<{ name: string; instruction: string; origName?: string } | null>(null)
   // 数组化受控选中取首个
   const selectedNode = useGraphStore((s) => {
     const id = s.selectedNodeIds[0]
@@ -204,6 +261,7 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
   const nodeItems = items.filter((i) => i.template.kind === 'node')
   const tagSetItems = items.filter((i) => i.template.kind === 'tagSet')
   const structureItems = items.filter((i) => i.template.kind === 'structure')
+  const presetItems = items.filter((i) => i.template.kind === 'rewritePreset')
 
   return (
     <div className="resource-panel">
@@ -238,7 +296,23 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
         >
           存当前图为结构模板
         </button>
+        <button
+          className="left-tool-btn"
+          title="新建改写预设（v2-F13：选中后替换「改写选中」的默认指令，跨小说共享）"
+          onClick={() => setPresetForm({ name: '', instruction: '' })}
+        >
+          新建改写预设
+        </button>
       </div>
+
+      {/* v2-F13 改写预设编辑表单（新建/编辑共用） */}
+      {presetForm && (
+        <PresetForm
+          initial={presetForm}
+          onDone={() => setPresetForm(null)}
+          onSaved={reload}
+        />
+      )}
 
       {loadError && <div className="insp-hint">资源库读取失败：{loadError}</div>}
 
@@ -338,6 +412,36 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
                   插入
                 </button>
                 <button className="resource-act danger" title="删除模板" onClick={() => void handleDelete({ path, template })}>
+                  ×
+                </button>
+              </div>
+            </div>
+          ) : null
+        )}
+
+        <div className="resource-section">改写预设（{presetItems.length}）</div>
+        {presetItems.length === 0 && <div className="insp-hint">暂无——「新建改写预设」自定义指令，内置「去AI味」见首次安装</div>}
+        {presetItems.map(({ path, template }) =>
+          template.kind === 'rewritePreset' ? (
+            <div key={path} className="resource-item">
+              <div className="resource-item-main">
+                <div className="resource-item-name">
+                  ✎ {template.name}
+                </div>
+                <div className="resource-preset-preview insp-hint">
+                  {template.payload.instruction.replace(/\s+/g, ' ').slice(0, 80)}
+                  {template.payload.instruction.length > 80 ? '…' : ''}
+                </div>
+              </div>
+              <div className="resource-item-acts">
+                <button
+                  className="resource-act"
+                  title="编辑指令（AI 面板「改写预设」下拉中选择使用）"
+                  onClick={() => setPresetForm({ name: template.name, instruction: template.payload.instruction, origName: template.name })}
+                >
+                  编辑
+                </button>
+                <button className="resource-act danger" title="删除预设" onClick={() => void handleDelete({ path, template })}>
                   ×
                 </button>
               </div>

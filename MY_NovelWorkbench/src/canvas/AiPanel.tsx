@@ -24,14 +24,25 @@
  * 变更说明：
  *   1. v2-F3 三路候选续写：同 prompt 并发三路（A/B/C），流式分栏展示、采纳一路
  *      写入正文（光标处插入）、其余丢弃；与单会话互斥；全停/放弃
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F9 前情提要双档：硬编码常量改 novel.json recap 配置（尾部全文/开头摘要 ×
+ *      N 章 × 每章字数），组装抽纯函数 services/recapAssembly；Context Viewer 显示
+ *      档位与前情 token（此前为 system 尾部隐形消耗）
+ *   2. v2-F13 改写预设：改写操作旁选择器（资源库 rewritePreset 模板），选中替换默认
+ *      改写指令（非叠加）；续写/三路续写不受影响
+ *   3. buildMessages 抽纯函数 services/generateMessages（单测覆盖 preset 替换/前情注入）
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { Editor } from '@tiptap/core'
-import type { ChatMessage, ProviderInfo } from '@shared/types'
-import { assembleContext, layerBudgetsOf } from '@/services/contextAssembly'
+import type { ChatMessage, ProviderInfo, RecapConfig, ResourceTemplate } from '@shared/types'
+import { assembleContext, estimateTokens, layerBudgetsOf } from '@/services/contextAssembly'
 import { flattenChapterFiles } from '@/services/chapterTree'
+import { assembleRecap, recapConfigOf, recapModeLabel } from '@/services/recapAssembly'
+import { buildGenerateMessages } from '@/services/generateMessages'
 import { StreamInserter } from '@/services/streamInsert'
 import { GenerationWriter } from '@/services/generationWriter'
 import { useAiStore } from '@/store/aiStore'
@@ -52,9 +63,6 @@ const LAYER_LABEL = ['第1层 60%', '第2层 25%', '第3层 15%']
 
 /** 续写的用户指令正文截取（正文可能很长，只送尾部） */
 const DRAFT_TAIL_CHARS = 2000
-/** 前情提要：自动注入的前文章节数与各自正文尾部字数 */
-const RECAP_CHAPTERS = 2
-const RECAP_TAIL_CHARS = 800
 
 /** —— Provider 编辑表单 —— */
 function ProviderForm(props: { initial: ProviderInfo | null; onDone: () => void }): ReactElement {
@@ -169,10 +177,42 @@ export function AiPanel(): ReactElement {
   const [showPrompt, setShowPrompt] = useState(false)
   const inserterRef = useRef<StreamInserter | null>(null)
   const writerRef = useRef<GenerationWriter | null>(null)
-  /** 前情提要：当前章之前最近 2 章的正文尾部（自动注入，无需手动关联） */
+  /** 前情提要正文（按双档配置组装，自动注入，无需手动关联） */
   const [recap, setRecap] = useState('')
+  /** v2-F13 改写预设：列表与当前选中（''=标准改写） */
+  const [rewritePresets, setRewritePresets] = useState<ResourceTemplate[]>([])
+  const [presetName, setPresetName] = useState('')
+  /** v2-F9 双档配置编辑草稿（应用后写回 novel.json） */
+  const novel = useNovelStore((s) => s.novel)
+  const recapCfg = useMemo(() => recapConfigOf(novel), [novel])
+  const [recapDraft, setRecapDraft] = useState<RecapConfig>(recapCfg)
+  // novel.json 变化（如外部恢复/切换小说）同步编辑草稿
+  useEffect(() => setRecapDraft(recapCfg), [recapCfg])
 
-  // 编辑章节切换时异步读取前情（含卷内章节，按「第N章」数字序取前 2 章正文结尾）
+  const loadRewritePresets = async (): Promise<void> => {
+    try {
+      const all = await window.api.fs.listResources()
+      setRewritePresets(all.map((i) => i.template).filter((t) => t.kind === 'rewritePreset'))
+    } catch (err) {
+      console.error('[AiPanel] 读取改写预设失败:', err)
+    }
+  }
+  useEffect(() => {
+    void loadRewritePresets()
+  }, [])
+  // 选中预设被删除时回落标准改写
+  useEffect(() => {
+    if (presetName !== '' && !rewritePresets.some((t) => t.kind === 'rewritePreset' && t.name === presetName)) {
+      setPresetName('')
+    }
+  }, [rewritePresets, presetName])
+  const presetInstruction = useMemo(() => {
+    if (presetName === '') return undefined
+    const found = rewritePresets.find((t) => t.kind === 'rewritePreset' && t.name === presetName)
+    return found && found.kind === 'rewritePreset' ? found.payload.instruction : undefined
+  }, [presetName, rewritePresets])
+
+  // 编辑章节切换/双档配置变化时异步重读前情（含卷内章节，按「第N章」数字序取前 N 章）
   useEffect(() => {
     let disposed = false
     setRecap('')
@@ -182,15 +222,14 @@ export function AiPanel(): ReactElement {
         const all = flattenChapterFiles(useNovelStore.getState().tree)
         const idx = all.findIndex((c) => c.path === editingDraft.path)
         if (idx <= 0) return
-        const prev = all.slice(Math.max(0, idx - RECAP_CHAPTERS), idx)
-        const parts: string[] = []
+        const prev = all.slice(Math.max(0, idx - recapCfg.chapters), idx)
+        const sources: Array<{ title: string; content: string }> = []
         for (const p of prev) {
           const doc = await window.api.fs.readChapter(p.path)
           if (disposed) return
-          const tail = doc.content.replace(/\s+/g, ' ').trim().slice(-RECAP_TAIL_CHARS)
-          if (tail !== '') parts.push(`【${doc.title}】…${tail}`)
+          sources.push({ title: doc.title, content: doc.content })
         }
-        if (!disposed && parts.length > 0) setRecap(parts.join('\n'))
+        if (!disposed) setRecap(assembleRecap(sources, recapCfg))
       } catch (err) {
         console.error('[AiPanel] 前情提要读取失败:', err)
       }
@@ -198,7 +237,7 @@ export function AiPanel(): ReactElement {
     return () => {
       disposed = true
     }
-  }, [editingDraft?.path])
+  }, [editingDraft?.path, recapCfg])
 
   useEffect(() => {
     void loadProviders()
@@ -279,22 +318,17 @@ export function AiPanel(): ReactElement {
     }
   }, [generation, multiGen, chapterEditor])
 
-  /** 组装消息（system=上下文全文+前情提要；user=指令+正文） */
-  const buildMessages = (mode: 'continue' | 'rewrite', selectedText: string): ChatMessage[] => {
-    const instruction =
-      mode === 'continue'
-        ? '请紧接上文自然续写，保持人称、时态与文风一致，与前情提要中的情节保持连贯，直接输出正文，不要任何说明或标题。'
-        : '请改写下面选中的文字，保持情节事实不变、提升文笔，直接输出改写后的正文，不要任何说明。'
-    const body = mode === 'continue' ? (editingDraft?.text ?? '').slice(-DRAFT_TAIL_CHARS) : selectedText
-    const systemParts = [promptFullText || '（上下文为空：请在蓝图中先组织节点与连线）']
-    if (recap !== '') {
-      systemParts.push(`【前情提要】（当前章之前最近 ${RECAP_CHAPTERS} 章的正文结尾，情节须保持连贯）\n${recap}`)
-    }
-    return [
-      { role: 'system', content: systemParts.join('\n\n') },
-      { role: 'user', content: `${instruction}\n\n${body}` }
-    ]
-  }
+  /** 组装消息（system=上下文全文+前情提要双档；user=指令+正文）——纯函数口径见 services/generateMessages */
+  const buildMessages = (mode: 'continue' | 'rewrite', selectedText: string): ChatMessage[] =>
+    buildGenerateMessages({
+      mode,
+      contextText: promptFullText,
+      recap,
+      recapHeader: `【前情提要】（当前章之前最近 ${recapCfg.chapters} 章的${recapModeLabel(recapCfg.mode)}，情节须保持连贯）`,
+      body: mode === 'continue' ? (editingDraft?.text ?? '').slice(-DRAFT_TAIL_CHARS) : selectedText,
+      // v2-F13：改写预设替换默认改写指令（仅作用于改写；续写/三路续写不受影响）
+      rewriteInstruction: mode === 'rewrite' ? presetInstruction : undefined
+    })
 
   /** 无章节编辑器挂载时（如在蓝图页打开 AI 面板）：切换到最近章节 Tab 并等待编辑器与内容就绪 */
   const ensureChapterEditor = async (): Promise<Editor | null> => {
@@ -387,6 +421,15 @@ export function AiPanel(): ReactElement {
       .insertContentAt(editor.state.selection.to, `${cand.text.trim()}\n\n`, { contentType: 'markdown' } as never)
       .run()
     await ai.dismissMultiGeneration()
+  }
+
+  /** v2-F9：应用前情提要双档配置（写回 novel.json；失败提示不静默） */
+  const applyRecapDraft = async (): Promise<void> => {
+    try {
+      await useNovelStore.getState().setRecapConfig(recapDraft)
+    } catch (err) {
+      await dialogConfirm(`前情提要配置保存失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+    }
   }
 
   const activeProvider = providers.find((p) => p.id === activeProviderId) ?? null
@@ -496,6 +539,28 @@ export function AiPanel(): ReactElement {
           </button>
         </div>
         {generation && <div className="insp-hint ai-streaming">生成中…（流式写入正文）</div>}
+        {/* v2-F13 改写预设：替换式指令模板（仅作用于「改写选中」，续写/三路续写不受影响） */}
+        <div className="ai-rewrite-preset">
+          <span className="ai-rewrite-preset-label">改写预设</span>
+          <select
+            className="dialog-input ai-provider-select"
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            title="选中后替换默认改写指令；预设的新建/编辑在资源库（画布工具条入口）"
+          >
+            <option value="">标准改写</option>
+            {rewritePresets.map((t) =>
+              t.kind === 'rewritePreset' ? (
+                <option key={t.name} value={t.name}>
+                  {t.name}
+                </option>
+              ) : null
+            )}
+          </select>
+          <button className="resource-act" title="刷新预设列表（资源库保存/删除后）" onClick={() => void loadRewritePresets()}>
+            ↻
+          </button>
+        </div>
         {/* v2-F3 三路候选区：分栏流式展示，采纳一路写入正文、其余丢弃 */}
         {multiGen && (
           <div className="ai-candidates nokey">
@@ -546,6 +611,62 @@ export function AiPanel(): ReactElement {
 
       {/* Context Viewer：三层预算（行容器 ctx-budget-row / 轨道 ctx-budget-bar，对齐 M0 样式） */}
       <div className="ctx-budget">
+        {/* v2-F9 前情提要双档配置（novel.json 可选字段，缺省=尾部 2 章×800 字） */}
+        <div className="recap-config">
+          <span className="ctx-budget-label">前情提要</span>
+          <select
+            className="dialog-input"
+            value={recapDraft.mode}
+            onChange={(e) => setRecapDraft({ ...recapDraft, mode: e.target.value as RecapConfig['mode'] })}
+            title="尾部全文=前 N 章正文结尾（衔接最近情节）；开头摘要=前 N 章开头（更省 token）"
+          >
+            <option value="tail">尾部全文</option>
+            <option value="summary">开头摘要</option>
+          </select>
+          <label className="recap-config-field">
+            前
+            <input
+              className="dialog-input"
+              type="number"
+              min={1}
+              max={20}
+              value={recapDraft.chapters}
+              onChange={(e) => setRecapDraft({ ...recapDraft, chapters: Number(e.target.value) })}
+            />
+            章
+          </label>
+          <label className="recap-config-field">
+            每章{recapDraft.mode === 'tail' ? '尾部' : '开头'}
+            <input
+              className="dialog-input"
+              type="number"
+              min={1}
+              max={recapDraft.mode === 'tail' ? 5000 : 2000}
+              value={recapDraft.mode === 'tail' ? recapDraft.tailChars : recapDraft.summaryChars}
+              onChange={(e) =>
+                setRecapDraft(
+                  recapDraft.mode === 'tail'
+                    ? { ...recapDraft, tailChars: Number(e.target.value) }
+                    : { ...recapDraft, summaryChars: Number(e.target.value) }
+                )
+              }
+            />
+            字
+          </label>
+          <button
+            className="left-tool-btn"
+            disabled={
+              recapDraft.mode === recapCfg.mode &&
+              recapDraft.chapters === recapCfg.chapters &&
+              recapDraft.tailChars === recapCfg.tailChars &&
+              recapDraft.summaryChars === recapCfg.summaryChars
+            }
+            title="写回 novel.json（对本小说全局生效，含三路续写）"
+            onClick={() => void applyRecapDraft()}
+          >
+            保存
+          </button>
+        </div>
         {result.layerTokens.map((used, i) => {
           const budget = layerBudgetsOf()[i]!
           const pct = budget > 0 ? Math.min(100, (used / budget) * 100) : 0
@@ -562,10 +683,13 @@ export function AiPanel(): ReactElement {
           )
         })}
         <div className="ctx-total">
-          合计 {result.totalTokens} / {result.totalBudget} tokens · 预算命中率{' '}
+          合计 {result.totalTokens}
+          {recap !== '' ? `+${estimateTokens(recap)}（前情）` : ''} / {result.totalBudget} tokens · 预算命中率{' '}
           {result.totalBudget > 0 ? `${Math.min(100, Math.round((result.totalTokens / result.totalBudget) * 100))}%` : '—'}
           {editingDraft ? ' · 草稿来源：编辑中章节' : ' · 草稿来源：无'}
-          {recap !== '' ? ` · 前情提要：已注入前 ${RECAP_CHAPTERS} 章结尾（${recap.length} 字）` : ' · 前情提要：无'}
+          {recap !== ''
+            ? ` · 前情提要：${recapModeLabel(recapCfg.mode)} · 前 ${recapCfg.chapters} 章（${recap.length} 字 ≈ ${estimateTokens(recap)}t）`
+            : ' · 前情提要：无'}
         </div>
       </div>
 

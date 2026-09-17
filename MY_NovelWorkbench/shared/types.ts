@@ -18,7 +18,24 @@
  * 变更说明（v2 首批补记+晨间审查修复）：
  *   1. v2 契约补记：aiVisibility（F1）/ getWritingStats+WritingStatsView（F7）/
  *      wordbank 四通道+Wordbank（F6）/ StructureTemplatePayload（F5，晨间补 aliases/aiVisibility 透传）
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2 二批：NovelMeta.recap 可选字段（F9 前情提要双档）；
+ *      ResourceTemplate 第四类 rewritePreset（F13 去 AI 味改写预设，载荷=替换式指令模板）
 */
+
+/** v2-F9 前情提要配置（novel.json 可选字段；旧小说无字段时渲染层兜底默认 tail/2/800/300） */
+export interface RecapConfig {
+  /** tail=前 N 章正文尾部（全文层）；summary=前 N 章开头摘要（摘要层，LLM 摘要后置单独批次） */
+  mode: 'tail' | 'summary'
+  /** 注入的前文章节数 */
+  chapters: number
+  /** 全文层：每章正文尾部截取字数 */
+  tailChars: number
+  /** 摘要层：每章开头截取字数 */
+  summaryChars: number
+}
 
 /** 小说元信息（novel.json） */
 export interface NovelMeta {
@@ -29,6 +46,8 @@ export interface NovelMeta {
   createdAt: string
   /** 标签库：内置 + 自定义 */
   tagLibrary: Array<{ name: string; color: string; builtin: boolean }>
+  /** v2-F9 前情提要双档配置（可选，缺省=现状行为：尾部 2 章×800 字） */
+  recap?: RecapConfig
 }
 
 /** 最近打开记录（userData/recent.json，仅主进程读写） */
@@ -202,6 +221,7 @@ export type ResourceTemplate =
   | { kind: 'node'; name: string; payload: NodeTemplatePayload }
   | { kind: 'tagSet'; name: string; payload: TagSetTemplatePayload }
   | { kind: 'structure'; name: string; payload: StructureTemplatePayload }
+  | { kind: 'rewritePreset'; name: string; payload: RewritePresetPayload }
 
 /** 节点模板载荷：可安全复制到任意画布的节点字段 */
 export interface NodeTemplatePayload {
@@ -217,6 +237,12 @@ export interface NodeTemplatePayload {
 /** 标签组模板载荷 */
 export interface TagSetTemplatePayload {
   tags: string[]
+}
+
+/** v2-F13 改写预设载荷：instruction 为完整替换式指令——选中预设时替换默认改写指令
+ *  （非叠加，避免与「保持文风一致」类默认指令互相矛盾）；仅作用于改写操作（续写/三路不受影响） */
+export interface RewritePresetPayload {
+  instruction: string
 }
 
 /** v2-F5 结构模板载荷：节点序列 + 索引连线——插入时在当前图批量生成骨架（占位标题可编辑）。

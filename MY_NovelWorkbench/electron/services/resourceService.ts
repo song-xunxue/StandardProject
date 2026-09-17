@@ -18,6 +18,11 @@
  * 变更说明（v2 首批补记+晨间审查修复）：
  *   1. 晨间审查修复：结构模板种子改 .structures-seeded 标记文件驱动（原按目录
  *      存在性判定，v2 升级用户永远拿不到内置骨架）
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F13：种子机制泛化 seedBuiltinTemplates——改写预设走独立标记
+ *      .rewrite-presets-seeded（存量安装升级后补种，删光不复活语义同结构模板）
 */
 
 import { app } from 'electron'
@@ -27,6 +32,7 @@ import { isAbsolute, join, relative, sep } from 'node:path'
 import { sanitizeFileName } from '../../shared/sanitize'
 import { isResourceTemplate } from '../../shared/resource'
 import { BUILTIN_STRUCTURE_TEMPLATES } from '../../shared/structureTemplates'
+import { BUILTIN_REWRITE_PRESETS } from '../../shared/rewritePresets'
 import type { ResourceTemplate } from '../../shared/types'
 
 /** 旧资源目录的迁移完成标记（隐藏文件，不参与 *.json 扫描） */
@@ -64,7 +70,9 @@ function resourceFileOf(template: ResourceTemplate): string {
  *  的语义（晨间审查修复：原按目录存在性判定，存量安装永远拿不到） */
 export function listResources(): Array<{ path: string; template: ResourceTemplate }> {
   const dir = globalResourcesDir()
-  if (!existsSync(join(dir, SEEDED_MARKER))) seedBuiltinStructures()
+  if (!existsSync(join(dir, SEEDED_MARKER))) seedBuiltinTemplates(SEEDED_MARKER, BUILTIN_STRUCTURE_TEMPLATES, '结构模板')
+  // v2-F13：改写预设独立标记驱动（存量安装已有结构标记、缺预设标记 → 升级后补种一次）
+  if (!existsSync(join(dir, PRESET_SEEDED_MARKER))) seedBuiltinTemplates(PRESET_SEEDED_MARKER, BUILTIN_REWRITE_PRESETS, '改写预设')
   const out: Array<{ path: string; template: ResourceTemplate }> = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue
@@ -82,20 +90,22 @@ export function listResources(): Array<{ path: string; template: ResourceTemplat
   return out
 }
 
-/** v2-F5 种子完成标记（隐藏文件不参与 *.json 扫描；存在即不再种子——用户删光不复活） */
+/** v2-F5 结构模板种子完成标记（隐藏文件不参与 *.json 扫描；存在即不再种子——用户删光不复活） */
 const SEEDED_MARKER = '.structures-seeded'
+/** v2-F13 改写预设种子完成标记（独立于结构模板标记：存量安装升级后补种新预设） */
+const PRESET_SEEDED_MARKER = '.rewrite-presets-seeded'
 
-/** v2-F5：种子写入内置结构模板并落标记（listResources 调用；失败静默不影响列表——
- *  标记随任一模板写入成功后写，部分失败下次补种） */
-function seedBuiltinStructures(): void {
+/** 种子写入内置模板并落标记（listResources 调用；失败静默不影响列表——
+ *  标记随全部模板写入后写，部分失败下次补种）。v2-F13 起结构模板与改写预设共用此实现 */
+function seedBuiltinTemplates(marker: string, templates: ResourceTemplate[], label: string): void {
   try {
-    for (const tpl of BUILTIN_STRUCTURE_TEMPLATES) {
+    for (const tpl of templates) {
       saveResource(tpl)
     }
-    writeFileSync(join(globalResourcesDir(), SEEDED_MARKER), new Date().toISOString(), 'utf-8')
-    console.log(`[resourceService] 已种子写入 ${BUILTIN_STRUCTURE_TEMPLATES.length} 个内置结构模板`)
+    writeFileSync(join(globalResourcesDir(), marker), new Date().toISOString(), 'utf-8')
+    console.log(`[resourceService] 已种子写入 ${templates.length} 个内置${label}`)
   } catch (err) {
-    console.error('[resourceService] 内置结构模板种子写入失败:', err)
+    console.error(`[resourceService] 内置${label}种子写入失败:`, err)
   }
 }
 

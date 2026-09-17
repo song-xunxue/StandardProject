@@ -28,10 +28,14 @@
  *      - renameFile 同步重写 Tab id（id 内嵌路径，不重写则旧名复用时产生重复 key）
  *      - watcher/refreshTree 树对账：清理指向已不存在文件的 Tab（外部删除场景）
  *      - restoreSnapshot 关全部 Tab 统一走 closeTabs 单一入口
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F9：新增 setRecapConfig（前情提要双档配置写回 novel.json 可选字段 recap）
  */
 
 import { create } from 'zustand'
-import type { NovelMeta, RecentNovel, TreeNode } from '@shared/types'
+import type { NovelMeta, RecentNovel, RecapConfig, TreeNode } from '@shared/types'
 import type { TagDef } from '@shared/tags'
 import { hydrateGraphData } from '@shared/blueprintCodec'
 import type { BlueprintFile } from '@shared/types'
@@ -78,6 +82,8 @@ interface NovelState {
   createTag: (name: string, color: string) => Promise<TagDef | null>
   /** 删除自定义标签（内置标签禁删——全局图谱伏笔分析等硬依赖）；已贴节点的残留标签不动（回退灰色） */
   removeTag: (name: string) => Promise<void>
+  /** v2-F9：更新前情提要双档配置（novel.json 可选字段 recap，saveMeta 透传未知字段无需主进程改动） */
+  setRecapConfig: (recap: RecapConfig) => Promise<void>
   /** 打开 Tab（已打开则激活） */
   openTab: (kind: OpenTab['kind'], path: string, title?: string) => void
   /** 激活 Tab；蓝图 Tab 同步画布路由到该蓝图（Tab 栏点击与左栏树点击切换都走这里） */
@@ -313,6 +319,13 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     if (!tag || tag.builtin) return
     const tagLibrary = novel.tagLibrary.filter((t) => t.name !== name)
     const meta = await api().fs.saveMeta({ ...novel, tagLibrary })
+    set({ novel: meta })
+  },
+
+  setRecapConfig: async (recap) => {
+    const novel = get().novel
+    if (!novel) return
+    const meta = await api().fs.saveMeta({ ...novel, recap })
     set({ novel: meta })
   },
 

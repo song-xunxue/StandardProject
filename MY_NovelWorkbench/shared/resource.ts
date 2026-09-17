@@ -13,6 +13,10 @@
  * 变更说明：
  *   1. v2-F5：结构模板（节点序列+索引连线）——isResourceTemplate 校验扩展、
  *      graphToStructureTemplate（当前图保存为骨架）、structureTemplate 校验归一化
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F13：isResourceTemplate 校验扩展第四类 rewritePreset（载荷=非空替换式指令）
  */
 
 import type { BlueprintNode, EdgeType, GraphData } from './blueprint'
@@ -74,6 +78,11 @@ export function isResourceTemplate(v: unknown): v is ResourceTemplate {
   if (t['kind'] === 'tagSet') {
     const p = t['payload'] as Record<string, unknown> | undefined
     return !!p && Array.isArray(p['tags']) && (p['tags'] as unknown[]).every((x) => typeof x === 'string')
+  }
+  if (t['kind'] === 'rewritePreset') {
+    // v2-F13：改写预设——instruction 非空字符串（空白指令无意义）
+    const p = t['payload'] as Record<string, unknown> | undefined
+    return !!p && typeof p['instruction'] === 'string' && p['instruction'].trim() !== ''
   }
   if (t['kind'] === 'structure') {
     // v2-F5：结构模板——节点序列非空、每项基本字段合法、连线索引在界内且类型合法

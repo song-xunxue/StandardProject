@@ -8,6 +8,11 @@
  * 2026-08-28
  * 变更说明：
  *   1. M4-B 初版
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F13：改写预设种子（独立标记 .rewrite-presets-seeded）与预设 CRUD 用例；
+ *      夹具清理扩展 .rewritePreset.json
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
@@ -47,9 +52,10 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'novel-resources-'))
   // v2-F5：首次 listResources 会种子写入内置结构模板（标记文件驱动）——预消费种子
   // 并清掉结构模板文件，保持既有用例夹具干净（标记已写，后续调用不再种子）
+  // v2-F13：同理会种子内置改写预设——一并清掉 .rewritePreset.json（标记保留，不再种子）
   listResources()
   for (const f of readdirSync(join(root, 'resources'))) {
-    if (f.endsWith('.structure.json')) unlinkSync(join(root, 'resources', f))
+    if (f.endsWith('.structure.json') || f.endsWith('.rewritePreset.json')) unlinkSync(join(root, 'resources', f))
   }
 })
 
@@ -80,6 +86,37 @@ describe('saveResource / listResources（全局目录）', () => {
     expect(items.map((i) => i.template.name).sort()).toEqual(['三幕结构', '英雄之旅', '救猫咪节拍表'].sort())
     // 二次调用不再重复种子（幂等）
     expect(listResources()).toHaveLength(3)
+  })
+
+  it('v2-F13 改写预设种子：独立标记驱动；删光不复活；删标记后补种', () => {
+    // 夹具已预消费（标记已写、预设文件已清）——不复活
+    expect(listResources().filter((i) => i.template.kind === 'rewritePreset')).toEqual([])
+    // 删预设标记（模拟 v2 二批升级前的存量安装）→ 补种内置「去AI味」
+    unlinkSync(join(root, 'resources', '.rewrite-presets-seeded'))
+    const items = listResources().filter((i) => i.template.kind === 'rewritePreset')
+    expect(items.map((i) => i.template.name)).toEqual(['去AI味'])
+    const preset = items[0]!
+    if (preset.template.kind !== 'rewritePreset') throw new Error('unreachable')
+    expect(preset.template.payload.instruction).toContain('AI 写作痕迹')
+    // 结构标记仍在：补种预设不会重种结构模板（独立标记互不干扰）
+    expect(listResources().filter((i) => i.template.kind === 'structure')).toEqual([])
+    // 用户删光预设后不再复活（标记已写）
+    deleteResource(preset.path)
+    expect(listResources().filter((i) => i.template.kind === 'rewritePreset')).toEqual([])
+  })
+
+  it('v2-F13 改写预设：保存/覆盖/删除走资源库通用通道', () => {
+    saveResource({ kind: 'rewritePreset', name: '口语化', payload: { instruction: '请把选中的文字改得口语化。' } })
+    let items = listResources().filter((i) => i.template.kind === 'rewritePreset')
+    expect(items).toHaveLength(1)
+    // 同名同类型覆盖
+    saveResource({ kind: 'rewritePreset', name: '口语化', payload: { instruction: '新指令。' } })
+    items = listResources().filter((i) => i.template.kind === 'rewritePreset')
+    expect(items).toHaveLength(1)
+    if (items[0]!.template.kind !== 'rewritePreset') throw new Error('unreachable')
+    expect(items[0]!.template.payload.instruction).toBe('新指令。')
+    deleteResource(items[0]!.path)
+    expect(listResources().filter((i) => i.template.kind === 'rewritePreset')).toEqual([])
   })
 
   it('同名同类型覆盖保存', () => {

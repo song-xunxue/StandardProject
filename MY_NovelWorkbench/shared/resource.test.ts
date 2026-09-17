@@ -7,6 +7,10 @@
  * 2026-08-26
  * 变更说明：
  *   1. M2 初版：nodeToTemplate / templateToNodeDraft / tagSetTemplate / isResourceTemplate
+
+ * 2026-09-17
+ * 变更说明：
+ *   1. v2-F13：rewritePreset 校验用例（非空指令通过、空白/缺载荷拒绝）+ 内置预设合法性
  */
 
 import { describe, expect, it } from 'vitest'
@@ -150,5 +154,25 @@ describe('结构模板（v2-F5）', () => {
     expect(tpl.edges).toEqual([{ from: 0, to: 1, type: 'arrow' }])
     // 空图返回 null
     expect(graphToStructureTemplate({ nodes: {}, edges: {}, graphs: { 'g-1': { id: 'g-1', title: 'T', nodeIds: [], ownerNodeId: null } } }, 'g-1')).toBeNull()
+  })
+})
+
+describe('改写预设（v2-F13）', () => {
+  it('非空指令的 rewritePreset 通过校验；空白/缺载荷/非字符串拒绝', () => {
+    expect(isResourceTemplate({ kind: 'rewritePreset', name: '去AI味', payload: { instruction: '请改写……' } })).toBe(true)
+    expect(isResourceTemplate({ kind: 'rewritePreset', name: 'x', payload: { instruction: '   ' } })).toBe(false)
+    expect(isResourceTemplate({ kind: 'rewritePreset', name: 'x', payload: {} })).toBe(false)
+    expect(isResourceTemplate({ kind: 'rewritePreset', name: 'x', payload: { instruction: 123 } })).toBe(false)
+  })
+
+  it('内置「去AI味」预设自身合法（种子写入后 listResources 不会把它当坏文件跳过）', async () => {
+    const { BUILTIN_REWRITE_PRESETS } = await import('./rewritePresets')
+    expect(BUILTIN_REWRITE_PRESETS.length).toBeGreaterThan(0)
+    for (const tpl of BUILTIN_REWRITE_PRESETS) {
+      expect(tpl.kind).toBe('rewritePreset')
+      if (tpl.kind !== 'rewritePreset') continue
+      expect(isResourceTemplate(tpl)).toBe(true)
+      expect(tpl.payload.instruction).toContain('改写')
+    }
   })
 })

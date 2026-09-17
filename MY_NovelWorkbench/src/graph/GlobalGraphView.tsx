@@ -18,6 +18,14 @@
  *      （此前每次勾选都全图重排且用户拖好的布局全部丢失）——改为
  *      updateData 部分样式/visibility 更新 + draw()（G6 5 语义：仅重绘不重排），
  *      节点坐标全程保留；仅数据集变化（nodes/edges/标签库）才走 render 全量重排
+
+ * 2026-09-18
+ * 变更说明：
+ *   1. v2 二批遗留修复（渲染代际守卫）：genRef 代际号 + chainRef 串行队列——所有
+ *      G6 异步操作严格串行、旧代链空跑退出，杜绝数据集连变时两代渲染交错（瞬态
+ *      闪烁/旧数据闪现）与管道中段销毁的 unhandledrejection；
+ *      全量渲染 setData 首帧烤入当前过滤/高亮（viewStateRef，不进依赖——治
+ *      「render 重建全可见再隐藏」的一帧闪烁根因）
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -70,6 +78,14 @@ export function GlobalGraphView(props: { onClose: () => void }): ReactElement {
   const g6Ref = useRef<Graph | null>(null)
   /** 全量渲染完成计数：视图态 effect 依赖它，保证重排后重新套用过滤/高亮 */
   const [renderTick, setRenderTick] = useState(0)
+  /** v2 二批遗留修复（渲染代际守卫）：自增代际号——数据集连变时旧代链空跑、
+   *  卸载/新渲染使在途链全部失效，杜绝两代渲染在 G6 内部交错（瞬态闪烁/旧数据闪现） */
+  const genRef = useRef(0)
+  /** G6 异步操作串行队列：render/updateData/draw 全部排队执行，任何时刻至多一条链在跑
+   *  （G6 5 小版本间并发语义有差异——串行化后只依赖「无并发」弱假设） */
+  const chainRef = useRef<Promise<void>>(Promise.resolve())
+  /** 最新已结算的全量渲染代际：视图态增量早于全量渲染到达时跳过本轮（renderTick 兜底补套） */
+  const settledGenRef = useRef(0)
 
   /** 分析开关：孤立节点（度=0）/ 未回收伏笔（含「伏笔」标签） */
   const [showIsolated, setShowIsolated] = useState(false)
@@ -162,6 +178,13 @@ export function GlobalGraphView(props: { onClose: () => void }): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, edges, degreeMap, foreshadowIds, tagLibrary, activeTags, showIsolated, showForeshadow])
 
+  /** 视图态快照（声明先于消费它的 effect，每次提交同步——全量渲染首帧烤入过滤/高亮，
+   *  不进 fullData 依赖：过滤勾选不得触发全量重排（08-31 重构红线）） */
+  const viewStateRef = useRef(viewState)
+  useEffect(() => {
+    viewStateRef.current = viewState
+  })
+
   /** G6 实例生命周期：挂载创建 → 卸载销毁 */
   useEffect(() => {
     if (!containerRef.current) return
@@ -177,6 +200,8 @@ export function GlobalGraphView(props: { onClose: () => void }): ReactElement {
     })
     g6Ref.current = g6
     return () => {
+      // 代际失效：在途渲染/增量链的代际检查全部失配 → 空跑退出（不再触碰 G6）
+      genRef.current++
       // 清理必须整体容错：第三方库的销毁路径若同步抛异常会打断 React 提交导致整树白屏
       try {
         // 先停布局（终止 d3-force 的 rAF tick 链），再延迟销毁一个宏任务：让在途
@@ -197,35 +222,64 @@ export function GlobalGraphView(props: { onClose: () => void }): ReactElement {
     }
   }, [])
 
-  /** 全量渲染：挂载与数据集变化时（d3-force 重排 + fitView），完成后递增 renderTick */
+  /**
+   * 全量渲染：挂载与数据集变化时（d3-force 重排 + fitView），完成后递增 renderTick。
+   *  v2 二批遗留修复：
+   *  - 串行队列：setData→render→fitView 链入 chainRef，任何时刻至多一条 G6 链在跑，
+   *    全链 try/catch（G6 管道中段被销毁的 reject 不再变 unhandledrejection）；
+   *  - 代际号：数据集连变时旧代链在每个 await 恢复点检查失配即退出（不交错、不闪旧数据）；
+   *  - 首帧烤入：setData 前用 viewStateRef 给节点补过滤/高亮与 visibility——治
+   *    「render 重建为全可见、隔一提交再隐藏」的一帧闪烁（缺口 A 根因）
+   */
   useEffect(() => {
     const g6 = g6Ref.current
     if (!g6) return
-    let disposed = false
-    void (async () => {
-      if (g6.destroyed) return
-      g6.setData({ nodes: fullData.g6Nodes, edges: fullData.g6Edges })
+    const gen = ++genRef.current
+    const run = async (): Promise<void> => {
+      if (genRef.current !== gen || g6.destroyed) return
+      const vs = viewStateRef.current
+      const baked = fullData.g6Nodes.map((n) => {
+        const style = vs.styles.get(n.id)
+        return style
+          ? {
+              ...n,
+              style: { ...style, visibility: (vs.visible.get(n.id) ? 'visible' : 'hidden') as 'visible' | 'hidden' }
+            }
+          : n
+      })
+      g6.setData({ nodes: baked, edges: fullData.g6Edges })
       await g6.render()
-      if (disposed || g6.destroyed) return
+      if (genRef.current !== gen || g6.destroyed) return
       await g6.fitView()
-      if (!disposed && !g6.destroyed) setRenderTick((t) => t + 1)
-    })()
-    return () => {
-      disposed = true
+      if (genRef.current !== gen || g6.destroyed) return
+      settledGenRef.current = gen
+      setRenderTick((t) => t + 1)
     }
+    chainRef.current = chainRef.current
+      .then(run)
+      .catch((err) => {
+        console.error('[GlobalGraphView] 全量渲染失败:', err)
+      })
+      .then(() => {
+        // 失败路径也推进结算代际（否则视图态增量永久停跳，图谱停在无过滤态）
+        if (genRef.current === gen) settledGenRef.current = gen
+      })
   }, [fullData])
 
   /**
    * 视图态增量更新：过滤勾选/分析开关变化时仅更新样式与显隐——
    * updateData 为部分合并（G6 setElementVisibility 同款机制），不携带 x/y 故节点坐标
-   * 全程保留；draw() 只重绘不重排（G6 5 语义），用户拖好的布局不再丢失
+   * 全程保留；draw() 只重绘不重排（G6 5 语义），用户拖好的布局不再丢失。
+   *  v2 二批遗留修复：同样链入串行队列；全量渲染未结算（settled 落后于当前代际）时
+   *  跳过本轮——render 完成后 renderTick 递增会触发补套，消除与 render 管道的交错
    */
   useEffect(() => {
     const g6 = g6Ref.current
     if (!g6) return
-    let disposed = false
-    void (async () => {
-      if (g6.destroyed) return
+    const gen = genRef.current
+    const run = async (): Promise<void> => {
+      if (settledGenRef.current !== genRef.current) return
+      if (genRef.current !== gen || g6.destroyed) return
       const nodeUpdates = Object.values(nodes).map((n) => ({
         id: n.id,
         style: { ...viewState.styles.get(n.id), visibility: viewState.visible.get(n.id) ? 'visible' : 'hidden' }
@@ -238,11 +292,12 @@ export function GlobalGraphView(props: { onClose: () => void }): ReactElement {
         nodes: nodeUpdates,
         edges: edgeUpdates
       } as unknown as GraphData)
-      if (!disposed && !g6.destroyed) await g6.draw()
-    })()
-    return () => {
-      disposed = true
+      if (genRef.current !== gen || g6.destroyed) return
+      await g6.draw()
     }
+    chainRef.current = chainRef.current.then(run).catch((err) => {
+      console.error('[GlobalGraphView] 视图态增量更新失败:', err)
+    })
     // renderTick 依赖：全量重排后元素重建为可见态，需重新套用当前过滤/高亮
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewState, renderTick])

@@ -173,7 +173,9 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
 
   /** v2-F5 插入结构模板：批量建节点（从既有内容包围盒右下方网格展开）+ 按索引映射连线；
    *  蓝图节点达 8 层时跳过并提示。插入后关闭浮层并选中首个新节点（晨间审查：原先
-   *  固定流坐标连续插入会重叠、且无任何可见反馈——虚拟化下视口外不渲染看似无效） */
+   *  固定流坐标连续插入会重叠、且无任何可见反馈——虚拟化下视口外不渲染看似无效）。
+   *  v2 二批遗留修复：改走 addNodesBatch（单次 set+单次落盘——原逐个 addNode 产生
+   *  首笔部分写 + N 次全图拷贝 churn） */
   const handleInsertStructure = (tpl: ResourceTemplate): void => {
     if (tpl.kind !== 'structure') return
     const gs = useGraphStore.getState()
@@ -186,13 +188,9 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
     const members = graph.nodeIds.map((id) => gs.nodes[id]).filter((n): n is NonNullable<typeof n> => Boolean(n))
     const maxX = members.length > 0 ? Math.max(...members.map((n) => n.position.x)) : 0
     const maxY = members.length > 0 ? Math.max(...members.map((n) => n.position.y)) : 0
-    const idOf: Array<string | null> = []
-    let skippedBlueprint = 0
-    payload.nodes.forEach((n, i) => {
-      // 网格散开：每行 4 个，从既有内容右下方展开
-      const col = i % 4
-      const row = Math.floor(i / 4)
-      const id = gs.addNode({
+    // 网格散开：每行 4 个，从既有内容右下方展开（y 行序=模板节拍序）
+    const { ids } = gs.addNodesBatch(
+      payload.nodes.map((n, i) => ({
         type: n.type,
         title: n.title,
         tags: [...n.tags],
@@ -200,19 +198,14 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
         summary: n.summary ?? '',
         aliases: [...(n.aliases ?? [])],
         aiVisibility: n.aiVisibility,
-        position: { x: maxX + 120 + col * 240, y: maxY + 80 + row * 110 }
-      })
-      idOf.push(id)
-      if (id === null && n.type === 'blueprint') skippedBlueprint++
-    })
-    for (const e of payload.edges) {
-      const from = idOf[e.from]
-      const to = idOf[e.to]
-      if (from && to) gs.addEdge(from, to, e.type)
-    }
+        position: { x: maxX + 120 + (i % 4) * 240, y: maxY + 80 + Math.floor(i / 4) * 110 }
+      })),
+      payload.edges
+    )
+    const skippedBlueprint = ids.filter((id, i) => id === null && payload.nodes[i]?.type === 'blueprint').length
     // 反馈：选中首个新节点 + 视口跳到新骨架（晨间审查：视口外的节点被虚拟化裁剪，
     //    不 fitView 时插入看似无效）+ 关闭浮层露出画布
-    const newIds = idOf.filter((x): x is string => x !== null)
+    const newIds = ids.filter((x): x is string => x !== null)
     const firstId = newIds[0]
     if (firstId) gs.selectNode(firstId)
     if (newIds.length > 0) {

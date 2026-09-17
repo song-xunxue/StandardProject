@@ -103,6 +103,17 @@ interface GraphState extends GraphData {
   setSelection: (nodeIds: string[], edgeIds: string[]) => void
   /** 创建节点（落在当前图）：返回新节点 id；蓝图节点超 8 层嵌套上限时返回 null（ADR-12） */
   addNode: (input: AddNodeInput) => string | null
+  /**
+   * 批量创建节点+索引连线（v2 二批遗留修复：结构模板插入原逐个 addNode——首笔部分写
+   * 落盘（磁盘 600ms 内只含首节点，期间崩溃即丢其余节点）+ N 次全图 map 拷贝 churn）。
+   * 单次 set + 单次 flushNow：磁盘只见一笔完整终态。edges 的 from/to 为 inputs 数组下标；
+   * 蓝图超 8 层的位返回 null（该位作端点的边丢弃）；自环/同方向重复边拒绝（比对既有边
+   * 与批内已积累边）
+   */
+  addNodesBatch: (
+    inputs: AddNodeInput[],
+    edges?: Array<{ from: number; to: number; type: EdgeType }>
+  ) => { ids: Array<string | null>; edgeIds: string[] }
   /** 编辑节点属性（标题/标签/prompt/summary/refTarget 等） */
   updateNode: (id: string, patch: NodeEditableFields) => void
   /** 拖拽结束批量回写坐标（proxy 代理节点由画布层过滤，不进此列表） */
@@ -384,6 +395,76 @@ export const useGraphStore = create<GraphState>()((set, get) => ({
     })
     flushNow()
     return id
+  },
+
+  addNodesBatch: (inputs, edges) => {
+    if (inputs.length === 0) return { ids: [], edgeIds: [] }
+    const state = get()
+    // 单目标图（结构模板只进一张画布）：取首个显式 graphId，缺省=当前画布
+    const graphId = inputs[0]!.graphId ?? state.route[state.route.length - 1]
+    const graph = graphId ? state.graphs[graphId] : undefined
+    if (!graphId || !graph) return { ids: inputs.map(() => null), edgeIds: [] }
+    // 深度对整批只算一次（同图同值；蓝图超限位返回 null，文本节点照建——对齐 addNode 契约）
+    let depth = state.route.length
+    if (inputs[0]!.graphId) {
+      depth = pathToGraph({ nodes: state.nodes, edges: state.edges, graphs: state.graphs }, inputs[0]!.graphId).length
+    }
+    // 预生成全部节点（单次 nodes/ graphs 写入）
+    const ids: Array<string | null> = []
+    const newNodes: Record<string, BlueprintNode> = {}
+    const newNodeIds: string[] = []
+    for (const input of inputs) {
+      if (input.type === 'blueprint' && depth >= MAX_NESTING_DEPTH) {
+        ids.push(null)
+        continue
+      }
+      const id = newId('n')
+      ids.push(id)
+      newNodeIds.push(id)
+      newNodes[id] = {
+        id,
+        type: input.type,
+        title: input.title,
+        graphId,
+        refGraphId: input.refGraphId,
+        refTarget: input.refTarget,
+        tags: input.tags ?? [],
+        aliases: input.aliases ?? [],
+        prompt: input.prompt ?? '',
+        summary: input.summary ?? '',
+        aiVisibility: input.aiVisibility,
+        position: input.position,
+        size: input.size ?? { width: 160, height: 50 }
+      }
+    }
+    // 索引边 → 真实 id：端点为 null（超限）的边丢弃；自环/同方向重复（比对既有+批内）拒绝
+    const edgeIds: string[] = []
+    const newEdges: Record<string, BlueprintEdge> = {}
+    const batchPairs = new Set<string>()
+    for (const e of edges ?? []) {
+      const from = ids[e.from]
+      const to = ids[e.to]
+      if (!from || !to || from === to) continue
+      const key = `${from}->${to}`
+      const exists =
+        batchPairs.has(key) || Object.values(state.edges).some((x) => x.from === from && x.to === to)
+      if (exists) continue
+      batchPairs.add(key)
+      const eid = newId('e')
+      edgeIds.push(eid)
+      newEdges[eid] = { id: eid, from, to, type: e.type }
+    }
+    const firstId = newNodeIds[0] ?? null
+    set({
+      nodes: { ...state.nodes, ...newNodes },
+      edges: { ...state.edges, ...newEdges },
+      graphs: { ...state.graphs, [graphId]: { ...graph, nodeIds: [...graph.nodeIds, ...newNodeIds] } },
+      selectedNodeIds: firstId ? [firstId] : state.selectedNodeIds,
+      selectedEdgeIds: firstId ? [] : state.selectedEdgeIds,
+      dirtyGraphIds: withDirty(state, [graphId])
+    })
+    flushNow()
+    return { ids, edgeIds }
   },
 
   updateNode: (id, patch) => {

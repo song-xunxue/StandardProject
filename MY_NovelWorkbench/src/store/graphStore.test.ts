@@ -403,3 +403,88 @@ describe('flushDirty 容错', () => {
     }
   })
 })
+
+describe('addNodesBatch（v2 二批遗留修复：结构模板批量插入单笔完整写）', () => {
+  it('批量建节点+索引连线：单次 set 单笔落盘（磁盘只见一笔含全部节点与边的完整终态）', async () => {
+    const before = savedFiles.length
+    const { ids, edgeIds } = store().addNodesBatch(
+      [
+        { type: 'text', title: '拍一', position: { x: 0, y: 0 } },
+        { type: 'text', title: '拍二', position: { x: 1, y: 0 } },
+        { type: 'text', title: '拍三', position: { x: 2, y: 0 } }
+      ],
+      [
+        { from: 0, to: 1, type: 'arrow' },
+        { from: 1, to: 2, type: 'arrow' }
+      ]
+    )
+    await drainSave()
+    expect(ids.every((x) => x !== null)).toBe(true)
+    expect(edgeIds).toHaveLength(2)
+    // 关键断言：恰 1 条保存记录，且首笔即含全部 3 新节点与 2 条边（原逐个 addNode 为
+    // 「首笔仅首节点 + 600ms 后第二笔完整」两笔，崩溃窗口内磁盘不完整）
+    expect(savedFiles.slice(before)).toHaveLength(1)
+    const saved = savedFiles[savedFiles.length - 1]!
+    const newTitles = saved.file.nodes.map((n) => n.title)
+    expect(newTitles).toContain('拍一')
+    expect(newTitles).toContain('拍二')
+    expect(newTitles).toContain('拍三')
+    expect(saved.file.edges).toHaveLength(2 + 2) // 既有 e-ab/e-cross + 新 2 条（跨图边不在本文件）
+    // store 状态一次成型：nodeIds 一次拼接、选中首个新节点
+    const s = store()
+    expect(s.selectedNodeIds).toEqual([ids[0]])
+    expect(s.graphs['g-root']!.nodeIds.slice(-3)).toEqual([ids[0], ids[1], ids[2]])
+  })
+
+  it('蓝图超 8 层位返回 null、该位端点的边丢弃；文本节点照建（对齐 addNode 契约）', async () => {
+    // 铺 8 层深夹具并路由到最深层 g8
+    store().hydrate(deepFixture(8), {
+      ...Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`g${i + 1}`, `blueprints/L${i + 1}.blueprint.json`]))
+    })
+    useGraphStore.setState({ route: ['g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8'] })
+    const before = savedFiles.length
+    const { ids, edgeIds } = store().addNodesBatch(
+      [
+        { type: 'blueprint', title: '超限蓝图', position: { x: 0, y: 0 } },
+        { type: 'text', title: '正常文本', position: { x: 1, y: 0 } }
+      ],
+      [{ from: 0, to: 1, type: 'arrow' }]
+    )
+    await drainSave()
+    expect(ids[0]).toBeNull()
+    expect(ids[1]).toBeTruthy()
+    expect(edgeIds).toEqual([]) // 端点含 null 的边丢弃
+    expect(store().nodes[ids[1]!]!.title).toBe('正常文本')
+    expect(savedFiles.slice(before)).toHaveLength(1)
+  })
+
+  it('自环与同方向重复边（对既有边与批内边）拒绝；跨批顺序无副作用', async () => {
+    const { ids, edgeIds } = store().addNodesBatch(
+      [
+        { type: 'text', title: '甲', position: { x: 0, y: 0 } },
+        { type: 'text', title: '乙', position: { x: 1, y: 0 } }
+      ],
+      [
+        { from: 0, to: 0, type: 'arrow' }, // 自环拒
+        { from: 0, to: 1, type: 'arrow' },
+        { from: 0, to: 1, type: 'line' }, // 批内同向重复拒（同 from→to 不论类型）
+        { from: 1, to: 0, type: 'dashed' } // 反向允许
+      ]
+    )
+    expect(edgeIds).toHaveLength(2)
+    // 空批 no-op
+    expect(store().addNodesBatch([])).toEqual({ ids: [], edgeIds: [] })
+  })
+
+  it('单次 set 语义：N 个新节点一次进入 store（不存在中间态只含部分节点）', () => {
+    const s0 = store()
+    const nodesRefBefore = s0.nodes
+    const { ids } = store().addNodesBatch(
+      Array.from({ length: 5 }, (_, i) => ({ type: 'text' as const, title: `批${i}`, position: { x: i, y: 0 } }))
+    )
+    expect(ids).toHaveLength(5)
+    // 旧节点引用保持稳定（rfNodes 增量缓存命中），新节点全部就位
+    expect(store().nodes['n-a']).toBe(nodesRefBefore['n-a'])
+    for (const id of ids) expect(store().nodes[id!]).toBeDefined()
+  })
+})

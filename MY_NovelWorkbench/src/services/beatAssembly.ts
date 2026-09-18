@@ -18,9 +18,11 @@ export const BEAT_LENGTH_PRESETS: Array<{ label: string; chars: number }> = [
   { label: '长章 ~6000 字', chars: 6000 }
 ]
 
-/** 生成上限推导：中文约 1 token≈0.75-1 字，取 1.2 倍字数留裕量（上限宽松无害——按指令自然收束） */
+/** 生成上限推导：OpenAI 兼容通道下中文约 1.0-1.6 token/字（cl100k 类偏紧），取 1.5 倍
+ *  留足高消耗编码器裕量（审查修复：原 1.2 低于最差情形，长章被 length 截断且无提示；
+ *  上限宽松无害——按指令自然收束） */
 export function maxTokensOfChars(chars: number): number {
-  return Math.ceil(chars * 1.2)
+  return Math.ceil(chars * 1.5)
 }
 
 /** 节拍规划结果 */
@@ -104,6 +106,24 @@ export function planBeats(data: GraphData, graphId: string): BeatPlan {
 export interface BeatAncestor {
   title: string
   summary: string
+}
+
+/**
+ * 上级设定链规划（审查修复：F1 铁律——「永不注入」节点不得进 AI prompt）：
+ * 过滤 never 节点并单独列出（UI 提示用），与 assembleContext 的 hidden 集合同口径。
+ * 入参为子图宿主节点开头的自内向外链（[owner, ...ancestorNodesOf(data, owner.id)]）
+ */
+export function planAncestors(chain: BlueprintNode[]): { ancestors: BeatAncestor[]; neverSkipped: string[] } {
+  const ancestors: BeatAncestor[] = []
+  const neverSkipped: string[] = []
+  for (const n of chain) {
+    if (n.aiVisibility === 'never') {
+      neverSkipped.push(n.title)
+      continue
+    }
+    ancestors.push({ title: n.title, summary: n.summary })
+  }
+  return { ancestors, neverSkipped }
 }
 
 export interface BeatChapterInput {

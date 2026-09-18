@@ -21,7 +21,7 @@
  *      每章独立 20 份上限；上限常量上移 shared（UI 与服务共用）
 */
 
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import type { ChapterSnapshotInfo, SnapshotInfo } from '../../shared/types'
 import { MAX_CHAPTER_SNAPSHOTS, MAX_FULL_SNAPSHOTS } from '../../shared/types'
@@ -277,8 +277,11 @@ export function createChapterSnapshot(novelDir: string, chapterPath: string, not
   }
 }
 
-/** 章节快照列表（新→旧）；残缺（无 manifest）跳过 */
+/** 章节快照列表（新→旧）；残缺（无 manifest）跳过。
+ *  审查修复：读侧同样走 resolveChapterFile 校验——「分组目录名对应合法章节路径」
+ *  由显式校验保证而非 base64url 编码巧合（未来改可读分组名时不会变成穿越点） */
 export function listChapterSnapshots(novelDir: string, chapterPath: string): ChapterSnapshotInfo[] {
+  resolveChapterFile(novelDir, chapterPath)
   const group = chapterGroupDir(novelDir, chapterPath)
   if (!existsSync(group)) return []
   const infos: ChapterSnapshotInfo[] = []
@@ -290,8 +293,9 @@ export function listChapterSnapshots(novelDir: string, chapterPath: string): Cha
   return infos.sort((a, b) => (a.id < b.id ? 1 : -1))
 }
 
-/** 校验章节快照 id 并返回其目录（不存在/残缺时抛错） */
+/** 校验章节快照 id 并返回其目录（不存在/残缺时抛错）；chapterPath 经读侧统一校验 */
 function requireChapterSnapshotDir(novelDir: string, chapterPath: string, id: string): string {
+  resolveChapterFile(novelDir, chapterPath)
   if (!SNAPSHOT_ID_RE.test(id)) throw new Error(`非法快照 id：${id}`)
   const dir = join(chapterGroupDir(novelDir, chapterPath), id)
   if (!readChapterManifest(dir)) throw new Error(`章节快照不存在或不完整：${id}`)
@@ -322,7 +326,11 @@ export function restoreChapterSnapshot(novelDir: string, chapterPath: string, id
   const chapterAbs = resolveChapterFile(novelDir, chapterPath)
   if (!existsSync(join(dir, 'chapter.md'))) throw new Error(`章节快照体缺失：${id}`)
   const raw = readFileSync(join(dir, 'chapter.md'), 'utf-8')
-  writeFileSync(chapterAbs, raw, 'utf-8')
+  // tmp+rename 原子替换（审查修复：整文件直写途中崩溃会留半写章节；rename 同目录
+  // 原子替换，同样零 frontmatter 伪变更）
+  const tmp = `${chapterAbs}.tmp`
+  writeFileSync(tmp, raw, 'utf-8')
+  renameSync(tmp, chapterAbs)
   return raw
 }
 

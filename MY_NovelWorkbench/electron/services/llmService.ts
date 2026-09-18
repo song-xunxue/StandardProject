@@ -32,6 +32,14 @@ export interface GenerateOptions {
   maxTokens?: number
 }
 
+/** maxTokens 钳制（审查修复：来自渲染层的值无范围校验——负数触发远端 400、
+ *  异常超大值静默放行费用失控；NaN/0 因 falsy 已被展开丢弃） */
+function clampMaxTokens(v: number): number {
+  const n = Math.floor(v)
+  if (!Number.isFinite(n) || n < 1) return 1
+  return Math.min(n, 32768)
+}
+
 /** 启动流式生成（fire-and-forget：结果全部经 llm:chunk 推送） */
 export function startGeneration(win: BrowserWindow, opts: GenerateOptions): void {
   if (active.has(opts.requestId)) return
@@ -65,7 +73,7 @@ async function run(win: BrowserWindow, controller: AbortController, opts: Genera
         model: provider.model,
         messages: opts.messages,
         stream: true,
-        ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {})
+        ...(opts.maxTokens ? { max_tokens: clampMaxTokens(opts.maxTokens) } : {})
       }),
       signal: controller.signal
     })

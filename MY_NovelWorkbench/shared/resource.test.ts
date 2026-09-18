@@ -158,11 +158,14 @@ describe('结构模板（v2-F5）', () => {
 })
 
 describe('改写预设（v2-F13）', () => {
-  it('非空指令的 rewritePreset 通过校验；空白/缺载荷/非字符串拒绝', () => {
+  it('非空指令的 rewritePreset 通过校验；空白/缺载荷/非字符串/超长（>8000，审查修复）拒绝', () => {
     expect(isResourceTemplate({ kind: 'rewritePreset', name: '去AI味', payload: { instruction: '请改写……' } })).toBe(true)
     expect(isResourceTemplate({ kind: 'rewritePreset', name: 'x', payload: { instruction: '   ' } })).toBe(false)
     expect(isResourceTemplate({ kind: 'rewritePreset', name: 'x', payload: {} })).toBe(false)
     expect(isResourceTemplate({ kind: 'rewritePreset', name: 'x', payload: { instruction: 123 } })).toBe(false)
+    // 手写 JSON/误粘贴整章正文注入超长指令——按坏文件跳过
+    expect(isResourceTemplate({ kind: 'rewritePreset', name: 'x', payload: { instruction: '字'.repeat(8001) } })).toBe(false)
+    expect(isResourceTemplate({ kind: 'rewritePreset', name: 'x', payload: { instruction: '字'.repeat(8000) } })).toBe(true)
   })
 
   it('内置「去AI味」预设自身合法（种子写入后 listResources 不会把它当坏文件跳过）', async () => {

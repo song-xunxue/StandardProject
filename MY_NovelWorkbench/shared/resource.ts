@@ -80,9 +80,10 @@ export function isResourceTemplate(v: unknown): v is ResourceTemplate {
     return !!p && Array.isArray(p['tags']) && (p['tags'] as unknown[]).every((x) => typeof x === 'string')
   }
   if (t['kind'] === 'rewritePreset') {
-    // v2-F13：改写预设——instruction 非空字符串（空白指令无意义）
+    // v2-F13：改写预设——instruction 非空字符串（空白指令无意义）；
+    // 长度上限 8000（审查修复：手写 JSON/误粘贴整章正文会把超长指令全文送进生成请求）
     const p = t['payload'] as Record<string, unknown> | undefined
-    return !!p && typeof p['instruction'] === 'string' && p['instruction'].trim() !== ''
+    return !!p && typeof p['instruction'] === 'string' && p['instruction'].trim() !== '' && p['instruction'].length <= 8000
   }
   if (t['kind'] === 'structure') {
     // v2-F5：结构模板——节点序列非空、每项基本字段合法、连线索引在界内且类型合法

@@ -58,9 +58,15 @@ describe('assembleRecap（双档组装）', () => {
     expect(lines[1]).toBe(`【第02章】…${long(10)}`)
   })
 
-  it('摘要层（summary）：每章取开头并带后缀省略号', () => {
-    const out = assembleRecap(sources, { mode: 'summary', chapters: 2, tailChars: 10, summaryChars: 2 })
+  it('摘要层（summary）：每章取首段开头（不混入第二段）并带后缀省略号', () => {
+    const out = assembleRecap(sources, { mode: 'summary', chapters: 2, tailChars: 10, summaryChars: 5 })
+    // 首段=「开局」（短于上限不越段取第二段的「风」字）
     expect(out.split('\n')).toEqual([`【第01章】开局…`, `【第02章】承接…`])
+    // 首段超上限时截断
+    const longFirst = [{ title: '长首段', content: '一二三四五六七八九十\n\n第二段不该进来' }]
+    expect(assembleRecap(longFirst, { mode: 'summary', chapters: 1, tailChars: 10, summaryChars: 4 })).toBe(
+      '【长首段】一二三四…'
+    )
   })
 
   it('空白正文与空源列表：跳过/返回空串（不注入前情块）', () => {

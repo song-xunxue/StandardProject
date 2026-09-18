@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
-import { BEAT_LENGTH_PRESETS, beatChapterMessages, maxTokensOfChars, planBeats } from '@/services/beatAssembly'
+import { BEAT_LENGTH_PRESETS, beatChapterMessages, maxTokensOfChars, planAncestors, planBeats } from '@/services/beatAssembly'
 import { estimateTokens } from '@/services/contextAssembly'
 import { ancestorNodesOf } from '@/services/graphTraversal'
 import { flattenChapterFiles, volumeOfChapter } from '@/services/chapterTree'
@@ -55,17 +55,17 @@ export function BeatLauncher(): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.graphId])
 
-  // 上级设定链：子图宿主蓝图节点 + 其各级祖先（自内向外）
-  const ancestors = useMemo(() => {
-    if (!target) return []
+  // 上级设定链：子图宿主蓝图节点 + 其各级祖先（自内向外）——
+  // 审查修复：planAncestors 过滤 F1「永不注入」节点（铁律：never 内容不得进 prompt）
+  const ancestorPlan = useMemo(() => {
+    if (!target) return { ancestors: [], neverSkipped: [] }
     const ownerNodeId = graphs[target.graphId]?.ownerNodeId
-    if (!ownerNodeId) return []
+    if (!ownerNodeId) return { ancestors: [], neverSkipped: [] }
     const owner = nodes[ownerNodeId]
-    if (!owner) return []
-    return [owner, ...ancestorNodesOf(data, owner.id)]
-      .filter((n) => n.summary !== '' || n.title !== '')
-      .map((n) => ({ title: n.title, summary: n.summary }))
+    if (!owner) return { ancestors: [], neverSkipped: [] }
+    return planAncestors([owner, ...ancestorNodesOf(data, owner.id)])
   }, [data, graphs, nodes, target])
+  const ancestors = ancestorPlan.ancestors
 
   // 目标章解析（tree 订阅——采纳建章后新章序号随之更新）
   const tree = useNovelStore((s) => s.tree)
@@ -106,10 +106,18 @@ export function BeatLauncher(): ReactElement {
     return msgs.reduce((s, m) => s + estimateTokens(m.content), 0)
   }, [selectedBeats, ancestors, targetTitle, lengthChars])
 
-  // Esc 关闭（浮层族统一交互；单路生成进行中不响应 Esc——用停止按钮）
+  // Esc 关闭（浮层族统一交互）。审查修复：守卫用 busy（getState 实取）而非 launching——
+  // launching 在 startGeneration resolve 后即回落，而流式仍在进行（generation 非 null），
+  // 原实现此窗口按 Esc 会关浮层触发卸载收尾中断生成，与 ×/取消按钮的 busy 禁用语矛盾；
+  // select/option 内的 Esc 只应收起下拉，不关浮层
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !launching) close()
+      if (e.key !== 'Escape') return
+      const t = e.target
+      if (t instanceof HTMLElement && (t.tagName === 'SELECT' || t.tagName === 'OPTION' || t.tagName === 'INPUT')) return
+      const ai = useAiStore.getState()
+      const busyNow = ai.generation !== null || ai.multiGen?.running === true
+      if (!busyNow && !launching) close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -267,6 +275,12 @@ export function BeatLauncher(): ReactElement {
               {plan.neverBeats.map((b) => b.title).join('、')}
             </div>
           )}
+          {ancestorPlan.neverSkipped.length > 0 && (
+            <div className="insp-hint ai-unlinked">
+              ⚠ {ancestorPlan.neverSkipped.length} 个上级设定节点已设「AI 永不注入」被排除：
+              {ancestorPlan.neverSkipped.join('、')}
+            </div>
+          )}
           {plan.supporting.length > 0 && (
             <div className="insp-hint">另有 {plan.supporting.length} 个引用/蓝图节点作为支撑（不参与节拍序）</div>
           )}
@@ -319,7 +333,9 @@ export function BeatLauncher(): ReactElement {
 
         <div className="ai-provider-form-actions">
           <span className="insp-hint" style={{ alignSelf: 'center', flex: 1 }}>
-            {selectedBeats.length > 0 ? `预计输入 ≈${estimated} tokens · 生成上限 ${maxTokensOfChars(lengthChars)}` : '请至少勾选一拍'}
+            {selectedBeats.length > 0
+              ? `预计输入 ≈${estimated} tokens（另加前情，发起时按配置现算） · 生成上限 ${maxTokensOfChars(lengthChars)}`
+              : '请至少勾选一拍'}
           </span>
           <button className="left-tool-btn" onClick={close} disabled={busy}>
             取消

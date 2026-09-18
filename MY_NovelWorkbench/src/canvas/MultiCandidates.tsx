@@ -51,11 +51,14 @@ export function MultiCandidates(): ReactElement {
     return target
   }
 
-  /** 等编辑器与目标章草稿就绪（ensureChapterEditor 同款轮询模式） */
+  /** 等编辑器与目标章草稿就绪（AiPanel.ensureChapterEditor 同款轮询）。
+   *  审查修复：只认 editingDraft.path === targetPath——编辑器「已注册未加载」窗口
+   *  （readChapter 在途、editingDraft 尚为 null）插入会被 setContent(emitUpdate:false)
+   *  整体覆盖，整章草稿静默丢失 */
   const waitForEditor = async (targetPath: string): Promise<boolean> => {
     for (let i = 0; i < 30; i++) {
       const ai = useAiStore.getState()
-      if (ai.chapterEditor && (ai.editingDraft?.path === targetPath || ai.editingDraft === null)) return true
+      if (ai.chapterEditor && ai.editingDraft?.path === targetPath) return true
       await new Promise((r) => setTimeout(r, 100))
     }
     return false

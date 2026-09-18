@@ -204,6 +204,13 @@ export function AiPanel(): ReactElement {
   useEffect(() => {
     void loadRewritePresets()
   }, [])
+  // 审查修复：资源库保存/删除预设后自动重载（此前只在挂载时加载一次——资源库删除的
+  // 预设仍显示、仍可选中生效，UI 与磁盘真相源不一致）
+  const resourceVersion = useUiStore((s) => s.resourceVersion)
+  useEffect(() => {
+    if (resourceVersion > 0) void loadRewritePresets()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resourceVersion])
   // 选中预设被删除时回落标准改写
   useEffect(() => {
     if (presetName !== '' && !rewritePresets.some((t) => t.kind === 'rewritePreset' && t.name === presetName)) {

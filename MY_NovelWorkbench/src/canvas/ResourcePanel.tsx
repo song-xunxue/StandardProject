@@ -27,11 +27,13 @@ import { useReactFlow } from '@xyflow/react'
 import type { ReactElement } from 'react'
 import type { CSSProperties } from 'react'
 import { graphToStructureTemplate, nodeToTemplate, normalizeStructureTemplate, tagSetTemplate, templateToNodeDraft } from '@shared/resource'
+import { sanitizeFileName } from '@shared/sanitize'
 import type { ResourceTemplate } from '@shared/types'
 import { tagColorOf } from '@shared/tags'
 import { MAX_NESTING_DEPTH } from '@shared/blueprint'
 import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
+import { useUiStore } from '@/store/uiStore'
 import { dialogConfirm, dialogPrompt } from '@/store/dialogStore'
 
 interface ResourceItem {
@@ -60,7 +62,17 @@ function PresetForm(props: {
         name: name.trim(),
         payload: { instruction: instruction.trim() }
       })
+      // 审查修复：编辑改名时删除旧档（saveResource 按文件名落盘，不删则旧预设残留
+      // 可继续选用）；文件名按主进程同一 sanitizeFileName 规则拼出
+      if (props.initial.origName && props.initial.origName !== name.trim()) {
+        try {
+          await window.api.fs.deleteResource(`${sanitizeFileName(props.initial.origName)}.rewritePreset.json`)
+        } catch {
+          /* 旧档删除失败不阻断（可能被并发改名）——列表残留可手动删 */
+        }
+      }
       await props.onSaved()
+      useUiStore.getState().bumpResourceVersion()
       props.onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -73,6 +85,7 @@ function PresetForm(props: {
       <textarea
         className="dialog-input resource-preset-textarea"
         placeholder="改写指令全文——选中该预设时替换「改写选中」的默认指令。可写多行具体要求（如：情绪不直接点破，改用动作呈现…）"
+        maxLength={8000}
         value={instruction}
         onChange={(e) => setInstruction(e.target.value)}
       />
@@ -244,6 +257,8 @@ export function ResourcePanel(props: { onClose: () => void }): ReactElement {
     if (!ok) return
     try {
       await window.api.fs.deleteResource(item.path)
+      // 预设类删除/保存后递增版本号（AiPanel 订阅重载——防已删预设仍可选中生效）
+      useUiStore.getState().bumpResourceVersion()
       await reload()
     } catch (err) {
       console.error('[ResourcePanel] 删除资源模板失败:', err)

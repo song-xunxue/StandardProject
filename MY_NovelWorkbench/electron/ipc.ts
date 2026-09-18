@@ -234,8 +234,14 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       if (!novel) throw new Error('尚未打开小说')
       const raw = restoreChapterSnapshot(novel.dir, p.chapterPath, p.id)
       // 码字统计入账：恢复绕过 saveChapter 直写文件，必须手动记录——否则
-      // chapterChars[path] 停留旧值永不自愈（initStats 对账只处理新键/死键）
-      recordChapterSave(p.chapterPath, parseFrontmatter(raw).content)
+      // chapterChars[path] 停留旧值永不自愈（initStats 对账只处理新键/死键）。
+      // 审查修复：入账失败不阻断恢复（文件已写成功，reject 会让渲染层不递增
+      // chapterReloadSeq，旧编辑器内存随后把恢复结果覆盖回去）
+      try {
+        recordChapterSave(p.chapterPath, parseFrontmatter(raw).content)
+      } catch (err) {
+        console.error('[ipc] 章节快照恢复后统计入账失败（不阻断恢复）:', err)
+      }
     })
   )
 

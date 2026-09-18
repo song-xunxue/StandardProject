@@ -54,10 +54,12 @@ export function ChapterDiffPanel(): ReactElement {
     }
   }, [target])
 
-  // Esc 关闭（浮层族统一交互）
+  // Esc 关闭（浮层族统一交互；diff 为最上层——Dialog 打开时只取消 Dialog）
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') close()
+      if (e.key !== 'Escape') return
+      if (document.querySelector('.dialog-overlay')) return
+      close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

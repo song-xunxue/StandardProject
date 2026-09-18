@@ -25,7 +25,7 @@ import { useEffect, useRef } from 'react'
 import type { ReactElement, MouseEvent as ReactMouseEvent } from 'react'
 import { useNovelStore } from '@/store/novelStore'
 import { useUiStore } from '@/store/uiStore'
-import { dialogPrompt } from '@/store/dialogStore'
+import { dialogConfirm, dialogPrompt } from '@/store/dialogStore'
 import { useContextMenu } from '@/components/useContextMenu'
 
 export function TabBar(): ReactElement {
@@ -64,7 +64,12 @@ export function TabBar(): ReactElement {
                     try {
                       await useNovelStore.getState().createChapterSnapshot(menuTab.path, note)
                     } catch (err) {
-                      console.error('[TabBar] 章节快照创建失败:', err)
+                      // 审查修复：失败弹窗提示（与面板入口同口径）——静默会让用户误以为
+                      // 回滚点已建立，大改后才发现无快照可恢复
+                      await dialogConfirm(
+                        `章节快照创建失败：${err instanceof Error ? err.message : String(err)}`,
+                        '知道了'
+                      )
                     }
                   })()
                 }

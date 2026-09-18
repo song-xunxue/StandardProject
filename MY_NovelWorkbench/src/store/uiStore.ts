@@ -34,6 +34,10 @@ interface UiState {
   beatLauncher: { graphId: string } | null
   openBeatLauncher: (graphId: string) => void
   closeBeatLauncher: () => void
+  /** 资源库版本计数（审查修复：资源库保存/删除改写预设后递增——AiPanel 订阅重载
+   *  预设列表，防已删预设仍显示/仍可选中生效） */
+  resourceVersion: number
+  bumpResourceVersion: () => void
 }
 
 export const useUiStore = create<UiState>()((set) => ({
@@ -45,5 +49,7 @@ export const useUiStore = create<UiState>()((set) => ({
   closeChapterDiff: () => set({ chapterDiff: null }),
   beatLauncher: null,
   openBeatLauncher: (graphId) => set({ beatLauncher: { graphId } }),
-  closeBeatLauncher: () => set({ beatLauncher: null })
+  closeBeatLauncher: () => set({ beatLauncher: null }),
+  resourceVersion: 0,
+  bumpResourceVersion: () => set((s) => ({ resourceVersion: s.resourceVersion + 1 }))
 }))

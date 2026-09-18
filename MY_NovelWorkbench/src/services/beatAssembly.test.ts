@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { BlueprintEdge, BlueprintNode, GraphData } from '@/types/blueprint'
-import { BEAT_LENGTH_PRESETS, beatChapterMessages, maxTokensOfChars, planBeats } from './beatAssembly'
+import { BEAT_LENGTH_PRESETS, beatChapterMessages, maxTokensOfChars, planAncestors, planBeats } from './beatAssembly'
 
 let seq = 0
 const beat = (over: Partial<BlueprintNode> = {}): BlueprintNode => ({
@@ -107,6 +107,27 @@ describe('planBeats（节拍排序）', () => {
   })
 })
 
+describe('planAncestors（F1 铁律回归：上级设定链 never 过滤）', () => {
+  it('「永不注入」的上级节点（含子图宿主）被排除并单独列出，正常节点保留', () => {
+    const owner = beat({ id: 'owner', title: '宿主', summary: '第二卷主线' })
+    const neverOwner = beat({ id: 'nv-owner', title: '防剧透宿主', summary: '结局反转', aiVisibility: 'never' })
+    const normalAnc = beat({ id: 'anc', title: '第一卷', summary: '南下寻仇' })
+    const neverAnc = beat({ id: 'nv-anc', title: '防剧透上级', summary: '幕后黑手身份', aiVisibility: 'never' })
+    // 链一：正常宿主 + 正常上级
+    const r1 = planAncestors([owner, normalAnc])
+    expect(r1.ancestors.map((a) => a.title)).toEqual(['宿主', '第一卷'])
+    expect(r1.neverSkipped).toEqual([])
+    // 链二：宿主 never / 上级 never——均被排除，summary 不得进任何输出
+    const r2 = planAncestors([neverOwner, normalAnc, neverAnc])
+    expect(r2.ancestors.map((a) => a.title)).toEqual(['第一卷'])
+    expect(r2.neverSkipped).toEqual(['防剧透宿主', '防剧透上级'])
+    expect(JSON.stringify(r2)).not.toContain('结局反转')
+    expect(JSON.stringify(r2)).not.toContain('幕后黑手身份')
+    // 空链 no-op
+    expect(planAncestors([])).toEqual({ ancestors: [], neverSkipped: [] })
+  })
+})
+
 describe('beatChapterMessages（消息组装）', () => {
   it('system=上层设定+节拍设定；user=目标章+节拍序列+字数指令+直出要求', () => {
     const msgs = beatChapterMessages({
@@ -147,7 +168,7 @@ describe('beatChapterMessages（消息组装）', () => {
     expect(msgs[1]!.content).not.toContain('前情提要')
   })
 
-  it('确定性：同输入两次调用相等；maxTokens 按字数 1.2 倍向上取整', () => {
+  it('确定性：同输入两次调用相等；maxTokens 按字数 1.5 倍向上取整（审查修复：1.2 低于高消耗分词器最差情形）', () => {
     const input = {
       beats: [{ title: 'a', prompt: 'p', summary: 's' }],
       ancestors: [],
@@ -156,8 +177,8 @@ describe('beatChapterMessages（消息组装）', () => {
       lengthChars: 4000
     }
     expect(beatChapterMessages(input)).toEqual(beatChapterMessages(input))
-    expect(maxTokensOfChars(4000)).toBe(4800)
-    expect(maxTokensOfChars(2501)).toBe(3002)
+    expect(maxTokensOfChars(4000)).toBe(6000)
+    expect(maxTokensOfChars(2501)).toBe(3752)
     expect(BEAT_LENGTH_PRESETS).toHaveLength(3)
   })
 })

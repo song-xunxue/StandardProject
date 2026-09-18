@@ -49,13 +49,19 @@ export interface RecapSource {
   content: string
 }
 
-/** 组装前情提要正文：按源顺序（旧→新）逐章截取拼接；空白正文章节跳过；无可用章返回空串 */
+/** 组装前情提要正文：按源顺序（旧→新）逐章截取拼接；空白正文章节跳过；无可用章返回空串。
+ *  摘要层=每章首段（审查修复：原实现整章空白压平后从头截取，短段落风格下会混合
+ *  多段内容与「首段概述」语义不符——先按原始换行切出首段再压平截断） */
 export function assembleRecap(sources: RecapSource[], config: RecapConfig): string {
   // 每章配额 = 总量上限均摊，与档位单章上限取小（下限 1 防 slice(-0) 返回空串）
   const perCap = Math.max(1, Math.floor(RECAP_MAX_TOTAL_CHARS / Math.max(1, sources.length)))
   const parts: string[] = []
   for (const s of sources) {
-    const flat = s.content.replace(/\s+/g, ' ').trim()
+    // 摘要层取首段（首行），全文层取整章压平
+    const flat =
+      config.mode === 'summary'
+        ? (s.content.split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '').replace(/\s+/g, ' ').trim()
+        : s.content.replace(/\s+/g, ' ').trim()
     if (flat === '') continue
     const limit = Math.min(config.mode === 'summary' ? config.summaryChars : config.tailChars, perCap)
     // 全文层取尾部（衔接最近情节），摘要层取开头（章节开局概述）

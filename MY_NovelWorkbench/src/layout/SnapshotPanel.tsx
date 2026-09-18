@@ -50,10 +50,11 @@ export function SnapshotPanel(props: { onClose: () => void }): ReactElement {
     void reload()
   }, [reload])
 
-  // Esc 关闭（晨间批次：浮层族统一交互——遮罩点关 + Esc 关）
+  // Esc 关闭（晨间批次：浮层族统一交互——遮罩点关 + Esc 关）。
+  // 审查修复：Dialog 打开时（如创建快照的备注输入框）Esc 只取消 Dialog，不连带关面板
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') props.onClose()
+      if (e.key === 'Escape' && !document.querySelector('.dialog-overlay')) props.onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

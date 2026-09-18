@@ -12,8 +12,15 @@ import type { ReactElement } from 'react'
 import type { ChapterSnapshotInfo } from '@shared/types'
 import { MAX_CHAPTER_SNAPSHOTS } from '@shared/types'
 import { useNovelStore } from '@/store/novelStore'
+import { useAiStore } from '@/store/aiStore'
 import { useUiStore } from '@/store/uiStore'
 import { dialogConfirm, dialogPrompt } from '@/store/dialogStore'
+
+/** 对比前冲刷该章挂起编辑（幂等——无挂起时 no-op） */
+const useAiStoreForFlush = async (): Promise<void> => {
+  const path = useUiStore.getState().chapterSnapPanel?.path
+  if (path) await useAiStore.getState().chapterFlush?.([path])
+}
 
 /** createdAt(ISO) → 本地「MM-DD HH:mm:ss」展示（与 SnapshotPanel 同口径） */
 const fmtTime = (iso: string): string => {
@@ -45,10 +52,14 @@ export function ChapterSnapshotPanel(): ReactElement {
     void reload()
   }, [reload])
 
-  // Esc 关闭（浮层族统一交互）
+  // Esc 关闭（浮层族统一交互）。审查修复：层级管理——diff 浮层开着时本层不响应
+  // （一次 Esc 只关最上层，回到列表而非被踢出）；Dialog 打开时 Esc 只取消 Dialog
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') close()
+      if (e.key !== 'Escape') return
+      if (document.querySelector('.dialog-overlay')) return
+      if (useUiStore.getState().chapterDiff !== null) return
+      close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -145,9 +156,16 @@ export function ChapterSnapshotPanel(): ReactElement {
               <div className="resource-item-acts">
                 <button
                   className="resource-act"
-                  title="与当前正文对比（行级 diff）"
+                  title="与当前正文对比（行级 diff；对比前自动保存未落盘编辑）"
                   disabled={busy}
-                  onClick={() => openDiff({ path: target.path, title: target.title, id: info.id, createdAt: info.createdAt })}
+                  onClick={() => {
+                    // 审查修复：对比前先冲刷——「当前」以编辑器所见为准（600ms 防抖窗口内的
+                    // 最新编辑也参与对比），否则 diff 可能显示「无差异」而编辑器里有改动
+                    void (async () => {
+                      await useAiStoreForFlush()
+                      openDiff({ path: target.path, title: target.title, id: info.id, createdAt: info.createdAt })
+                    })()
+                  }}
                 >
                   ≣ 对比
                 </button>

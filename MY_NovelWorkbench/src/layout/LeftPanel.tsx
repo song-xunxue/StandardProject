@@ -45,6 +45,7 @@ import { MAX_NESTING_DEPTH } from '@shared/blueprint'
 import { SnapshotPanel } from './SnapshotPanel'
 import { StatsPanel } from './StatsPanel'
 import { SensitivePanel } from './SensitivePanel'
+import { ExtractPanel } from '@/canvas/ExtractPanel'
 import { useContextMenu } from '@/components/useContextMenu'
 
 const displayTitle = (name: string): string => name.replace(/\.blueprint\.json$/, '').replace(/\.md$/, '')
@@ -304,6 +305,7 @@ export function LeftPanel(): ReactElement {
   const [snapOpen, setSnapOpen] = useState(false)
   const [statsOpen, setStatsOpen] = useState(false)
   const [sensitiveOpen, setSensitiveOpen] = useState(false)
+  const [extractOpen, setExtractOpen] = useState(false)
   const { menu, setMenu, menuRef } = useContextMenu<{ area: MenuArea }>()
 
   /** 展示树：blueprints/ 平铺列表 → owner 嵌套层级（磁盘真相不变，仅展示重排） */
@@ -553,6 +555,14 @@ export function LeftPanel(): ReactElement {
             </button>
             <button
               className="left-footer-btn"
+              title="拆书冷启动：LLM 逐章抽取人物/地点/势力等实体 → 确认后批量入库图谱（v2-F15）"
+              disabled={!novel}
+              onClick={() => setExtractOpen(true)}
+            >
+              拆书
+            </button>
+            <button
+              className="left-footer-btn"
               title="快照：把当前小说存为可回滚的完整拷贝（.snapshots/，最多 10 份）"
               disabled={!novel}
               onClick={() => setSnapOpen(true)}
@@ -573,6 +583,7 @@ export function LeftPanel(): ReactElement {
       {snapOpen && <SnapshotPanel onClose={() => setSnapOpen(false)} />}
       {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
       {sensitiveOpen && <SensitivePanel onClose={() => setSensitiveOpen(false)} />}
+      {extractOpen && <ExtractPanel onClose={() => setExtractOpen(false)} />}
       {/* 目录右键菜单：按区域提供创建项（自动序号预填）+ 文件项通用操作 */}
       {menu && (
         <div

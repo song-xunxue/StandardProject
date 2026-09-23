@@ -36,6 +36,7 @@ import { TimelineView } from './graph/TimelineView'
 import { ChapterSnapshotPanel } from './layout/ChapterSnapshotPanel'
 import { ChapterDiffPanel } from './layout/ChapterDiffPanel'
 import { BeatLauncher } from './canvas/BeatLauncher'
+import { BeatStatusBar } from './canvas/BeatStatusBar'
 import { MultiCandidates } from './canvas/MultiCandidates'
 import { Dialog } from './components/Dialog'
 import { useNovelStore } from './store/novelStore'
@@ -190,6 +191,8 @@ export default function App(): ReactElement {
           <MultiCandidates />
         </div>
       )}
+      {/* v2 三批遗留修复：单路节拍生成的角落状态条（会话态驱动显隐——生成中可见落点/停止/终态提示） */}
+      <BeatStatusBar />
       <Dialog />
     </div>
   )

@@ -12,6 +12,12 @@
  *   1. v2-F7 初版：initStats（openNovel 全量对账——新章入账/删除清账/外部编辑入当日）、
  *      recordChapterSave（saveChapter 钩子）、removeChapterStats（deleteFile 钩子）、
  *      getWritingStats（今日新增/总字数/连续天数/近 14 天）
+
+ * 2026-09-23
+ * 变更说明：
+ *   1. v2 三批遗留修复：新增 recomputeChapterChars（全本快照恢复后全量重算——
+ *      initStats 只处理新键/死键，内容回退的 live 键永不自愈；恢复是唯一绕过
+ *      全部统计钩子的内容整体替换路径）
  */
 
 import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
@@ -133,6 +139,33 @@ export function recordChapterSave(path: string, content: string): void {
   const stats = loadStats()
   stats.chapterChars[path] = countChars(content)
   stampToday(stats)
+  saveStats(stats)
+}
+
+/**
+ * 全量重算 chapterChars（v2 三批遗留修复：全本快照恢复后对账）——
+ * 以当前文件树 + 磁盘内容整体替换键值集（键集=live 章节、值=当前正文字数）。
+ * 缺陷背景：initStats 对账只处理新键/死键（L117 continue 跳过既有键），而全本恢复
+ * 是唯一绕过全部统计钩子的内容整体替换路径——章节在恢复前后都存在但内容回退时，
+ * 键值停留恢复前（更新的）字数永不自愈。days 原样保留（「发生过的事」语义——
+ * 恢复改变当前状态而非穿越时间，晨间审查已拍板统计历史不随内容回滚）；
+ * 不 stampToday——随后 openNovel→initStats 以校正后总量记当日，明日日增基线随之正确
+ * （若此处 stamp 会把「校正前总量→校正后总量」的差值误记为当日增减之外的又一次跳变）。
+ * 调用方（ipc.ts snapshotRestore）以 try/catch 包裹，重算失败不阻断恢复
+ */
+export function recomputeChapterChars(): void {
+  if (!currentNovel()) return
+  const stats = loadStats()
+  const chapterChars: Record<string, number> = {}
+  for (const path of chapterPaths()) {
+    try {
+      const { content } = parseFrontmatter(readFileSync(join(currentNovel()!.dir, path), 'utf-8'))
+      chapterChars[path] = countChars(content)
+    } catch {
+      /* 单章读取失败不阻断重算（沿用 initStats 容错口径） */
+    }
+  }
+  stats.chapterChars = chapterChars
   saveStats(stats)
 }
 

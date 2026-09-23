@@ -5,9 +5,15 @@
  *
  * 作者: 李文煜
  * 日期: 2026-09-17
+ *
+ * 2026-09-23
+ * 变更说明：
+ *   1. v2 三批遗留修复：单路写入器生命周期迁入 beatSingleSession（模块级单例）——
+ *      发起成功即关浮层，进度转 App 根级 BeatStatusBar 角落状态条；顺带补齐
+ *      中断入口与失败提示（原先浮层全屏遮罩挡编辑器、无停止按钮、失败静默）
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactElement } from 'react'
 import { BEAT_LENGTH_PRESETS, beatChapterMessages, maxTokensOfChars, planAncestors, planBeats } from '@/services/beatAssembly'
 import { estimateTokens } from '@/services/contextAssembly'
@@ -15,8 +21,7 @@ import { ancestorNodesOf } from '@/services/graphTraversal'
 import { flattenChapterFiles, volumeOfChapter } from '@/services/chapterTree'
 import { assembleRecap, recapConfigOf } from '@/services/recapAssembly'
 import { nextNumberedName } from '@shared/naming'
-import { StreamInserter } from '@/services/streamInsert'
-import { GenerationWriter } from '@/services/generationWriter'
+import { beatSingleSession } from '@/services/beatSingleSession'
 import { useAiStore } from '@/store/aiStore'
 import { useGraphStore } from '@/store/graphStore'
 import { useNovelStore } from '@/store/novelStore'
@@ -39,10 +44,6 @@ export function BeatLauncher(): ReactElement {
   const [targetMode, setTargetMode] = useState<'current' | 'new'>('current')
   const [lanes, setLanes] = useState<1 | 3>(3)
   const [launching, setLaunching] = useState(false)
-  /** 单路模式的流式写入器（生命周期随本浮层，收尾口径与 AiPanel 一致） */
-  const inserterRef = useRef<StreamInserter | null>(null)
-  const writerRef = useRef<GenerationWriter | null>(null)
-  const [singlePathDone, setSinglePathDone] = useState(false)
 
   const data = useMemo(() => ({ nodes, edges, graphs }), [nodes, edges, graphs])
   const plan = useMemo(() => (target ? planBeats(data, target.graphId) : null), [data, target])
@@ -123,35 +124,6 @@ export function BeatLauncher(): ReactElement {
     return () => window.removeEventListener('keydown', onKey)
   }, [close, launching])
 
-  /** 单路收尾：冲刷挂起批次并按 markdown 重排（与 AiPanel 收尾同口径） */
-  useEffect(() => {
-    if (generation === null && writerRef.current) {
-      const writer = writerRef.current
-      writerRef.current = null
-      if (inserterRef.current) {
-        if (useAiStore.getState().generationError) inserterRef.current.abort()
-        else inserterRef.current.close()
-        inserterRef.current = null
-      }
-      writer.finalize()
-      setSinglePathDone(true)
-    }
-  }, [generation])
-
-  /** 卸载收尾：单路生成中进行中关闭浮层 → 中断并 finalize 已生成部分 */
-  useEffect(() => {
-    return () => {
-      const ai = useAiStore.getState()
-      if (ai.generation !== null) void ai.stopGeneration()
-      if (writerRef.current) {
-        inserterRef.current?.close()
-        inserterRef.current = null
-        writerRef.current.finalize()
-        writerRef.current = null
-      }
-    }
-  }, [])
-
   if (!target || !plan) return <></>
 
   const busy = generation !== null || multiGen?.running === true || launching
@@ -200,41 +172,24 @@ export function BeatLauncher(): ReactElement {
         })
         close()
       } else {
-        // 单路：流式写入目标章编辑器（仅当前章目标；光标处生长，finalize 按 markdown 重排）
+        // 单路：流式写入目标章编辑器（仅当前章目标）。写入器生命周期在 beatSingleSession
+        // （v2 三批遗留修复：原挂在浮层 ref 上——全屏遮罩挡编辑器、无中断入口、失败静默）；
+        // 发起成功即关浮层，生成进度转 App 根级右下角状态条（BeatStatusBar）
         const ai = useAiStore.getState()
         const editor = ai.chapterEditor
         if (!editor || ai.editingDraft?.path !== targetPath) {
           await dialogConfirm('单路生成需要先打开目标章节（或改用三路模式——可在采纳时自动建章）', '知道了')
           return
         }
-        const writer = new GenerationWriter(() => useAiStore.getState().chapterEditor)
-        writerRef.current = writer
-        inserterRef.current = new StreamInserter((batch) => writer.applyBatch(batch))
-        await ai.startGeneration(
-          'continue',
-          messages,
-          (delta) => inserterRef.current?.push(delta),
-          { maxTokens }
-        )
-        // 浮层保持挂载承载写入器生命周期；生成结束由上方收尾 effect 关闭
+        await beatSingleSession.start({ messages, maxTokens, targetTitle })
+        close()
       }
     } catch (err) {
       await dialogConfirm(`整章生成发起失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
-      inserterRef.current?.abort()
-      inserterRef.current = null
-      if (writerRef.current) {
-        writerRef.current.finalize()
-        writerRef.current = null
-      }
     } finally {
       setLaunching(false)
     }
   }
-
-  // 单路完成后自动关闭浮层（已 finalize，正文落进编辑器）
-  useEffect(() => {
-    if (singlePathDone) close()
-  }, [singlePathDone, close])
 
   const toggle = (id: string): void => {
     setChecked((prev) => {

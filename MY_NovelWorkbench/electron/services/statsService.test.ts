@@ -8,6 +8,11 @@
  * 2026-08-31
  * 变更说明：
  *   1. v2-F7 初版
+
+ * 2026-09-23
+ * 变更说明：
+ *   1. v2 三批遗留修复：快照恢复统计对账用例组（内容回退重算/days 保留/键集镜像/
+ *      卷目录/负增量链路）
  */
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
@@ -23,7 +28,16 @@ vi.mock('electron', () => ({
 }))
 
 import { openNovel } from './novelService'
-import { countChars, exchangeChapterStats, getWritingStats, initStats, recordChapterSave, removeChapterStats, renameChapterStats } from './statsService'
+import {
+  countChars,
+  exchangeChapterStats,
+  getWritingStats,
+  initStats,
+  recomputeChapterChars,
+  recordChapterSave,
+  removeChapterStats,
+  renameChapterStats
+} from './statsService'
 
 let novelDir = ''
 function makeNovel(): string {
@@ -137,5 +151,73 @@ describe('晨间审查修复回归', () => {
     // 只有今天一条记录：前 13 天应全部为 0（原先错误显示今天的总量）
     expect(view.recent.slice(0, 13).every((r) => r.total === 0 && r.gain === 0)).toBe(true)
     expect(view.recent[13]!.total).toBe(countChars('今日首写'))
+  })
+})
+
+describe('快照恢复统计对账（v2 三批遗留修复）', () => {
+  /** 直写 writing-stats.json 模拟「恢复前的旧账本」（恢复不迁移统计文件） */
+  function seedStats(chapterChars: Record<string, number>, days: Record<string, number>): void {
+    writeFileSync(join(novelDir, 'writing-stats.json'), JSON.stringify({ chapterChars, days }), 'utf-8')
+  }
+
+  it('缺陷现状固化：initStats 跳过既有键——内容回退后仅靠 openNovel 对账不自愈', () => {
+    writeChapter('第01章.md', '这是恢复后的短版本正文')
+    // 模拟恢复前账本：同一章存在但记的是恢复前（更长的）字数
+    seedStats({ 'chapters/第01章.md': 9999 }, { '2026-09-01': 5000 })
+    openNovel(novelDir) // 恢复后水合会跑 initStats——实证此路径不校正既有键
+    expect(getWritingStats().totalChars).toBe(9999)
+  })
+
+  it('修复链路（生产时序）：recompute 在 openNovel 前 → 总量与当日戳均以校正后值落账', () => {
+    writeChapter('第01章.md', '这是恢复后的短版本正文')
+    seedStats({ 'chapters/第01章.md': 9999 }, { '2026-09-01': 5000 })
+    recomputeChapterChars() // ipc 编排：恢复成功后、openNovel 前
+    openNovel(novelDir) // initStats→stampToday 以校正后总量覆盖今日
+    const view = getWritingStats()
+    expect(view.totalChars).toBe(countChars('这是恢复后的短版本正文'))
+    // 今日总量=校正后字数（非 9999）→ 次日日增基线正确
+    expect(view.recent[13]!.total).toBe(countChars('这是恢复后的短版本正文'))
+    expect(view.todayGain).toBe(countChars('这是恢复后的短版本正文') - 5000) // 对上一记录日的负差
+  })
+
+  it('重算后 days 历史原样保留（发生过的事不随内容回滚）', () => {
+    writeChapter('第01章.md', '正文十个字')
+    seedStats({}, { '2026-09-01': 5000, '2026-09-02': 8000 })
+    recomputeChapterChars()
+    const raw = JSON.parse(readFileSync(join(novelDir, 'writing-stats.json'), 'utf-8')) as {
+      chapterChars: Record<string, number>
+      days: Record<string, number>
+    }
+    expect(raw.days).toEqual({ '2026-09-01': 5000, '2026-09-02': 8000 })
+    expect(raw.chapterChars['chapters/第01章.md']).toBe(countChars('正文十个字'))
+  })
+
+  it('键集整体镜像当前文件树：死键清除、复活/新增章按磁盘内容入账', () => {
+    writeChapter('第01章.md', '保留章正文')
+    seedStats({ 'chapters/第01章.md': 100, 'chapters/已删章.md': 50 }, {})
+    // 模拟恢复后文件树变化：新增一章、账本里的已删章在磁盘不存在
+    writeChapter('第02章.md', '恢复带回的旧章')
+    recomputeChapterChars()
+    const raw = JSON.parse(readFileSync(join(novelDir, 'writing-stats.json'), 'utf-8')) as {
+      chapterChars: Record<string, number>
+    }
+    expect(Object.keys(raw.chapterChars).sort()).toEqual(['chapters/第01章.md', 'chapters/第02章.md'])
+    expect(raw.chapterChars['chapters/第01章.md']).toBe(countChars('保留章正文'))
+    expect(raw.chapterChars['chapters/第02章.md']).toBe(countChars('恢复带回的旧章'))
+  })
+
+  it('卷目录章节同样参与重算（chapterPaths 含一层卷）', () => {
+    mkdirSync(join(novelDir, 'chapters', '第一卷'), { recursive: true })
+    writeFileSync(
+      join(novelDir, 'chapters', '第一卷', '第01章.md'),
+      '---\ntitle: 第01章\ntags: []\naliases: []\n---\n\n卷内正文。',
+      'utf-8'
+    )
+    seedStats({}, {})
+    recomputeChapterChars()
+    const raw = JSON.parse(readFileSync(join(novelDir, 'writing-stats.json'), 'utf-8')) as {
+      chapterChars: Record<string, number>
+    }
+    expect(raw.chapterChars['chapters/第一卷/第01章.md']).toBe(countChars('卷内正文。'))
   })
 })

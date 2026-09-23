@@ -74,14 +74,18 @@ export function StatsPanel(props: { onClose: () => void }): ReactElement {
             <div className="stats-chart-title">近 14 天每日新增</div>
             <div className="stats-chart">
               {stats.recent.map((r) => (
-                <div key={r.date} className="stats-bar-col" title={`${r.date}：+${fmt(r.gain)} 字（总量 ${fmt(r.total)}）`}>
+                <div
+                  key={r.date}
+                  className="stats-bar-col"
+                  title={`${r.date}：${r.gain >= 0 ? '+' : ''}${fmt(r.gain)} 字（总量 ${fmt(r.total)}）`}
+                >
                   <div className="stats-bar" style={{ height: `${Math.max(2, Math.round((r.gain / maxGain) * 96))}px` }} />
                   <div className="stats-bar-date">{r.date.slice(5)}</div>
                 </div>
               ))}
             </div>
             <div className="insp-hint stats-note">
-              口径：正文去空白字符；打开小说时全量对账（外部编辑计入当日），章节保存即入账。数据存于小说目录 writing-stats.json。
+              口径：正文去空白字符；打开小说时全量对账（外部编辑计入当日），章节保存即入账；恢复快照后按磁盘内容重算（当日增量可能为负，历史记录保留）。数据存于小说目录 writing-stats.json。
             </div>
           </>
         )}

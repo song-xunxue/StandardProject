@@ -24,6 +24,12 @@
  * 2026-09-17
  * 变更说明：
  *   1. v2-F8：章节快照五通道路由（轻量恢复编排 + recordChapterSave 统计入账）
+
+ * 2026-09-23
+ * 变更说明：
+ *   1. v2 三批遗留修复：snapshotRestore 恢复成功后、openNovel 前调
+ *      recomputeChapterChars 全量重算 chapterChars（live 键值随内容回退校正），
+ *      days 历史保留；失败兜底分支同样重算（内容可能半换血，尽量对齐磁盘现状）
 */
 
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
@@ -56,7 +62,7 @@ import {
 } from './services/snapshotService'
 import { deleteProvider, listProviders, saveProvider, testProvider } from './services/providerService'
 import { startGeneration, stopGeneration } from './services/llmService'
-import { getWritingStats, recordChapterSave } from './services/statsService'
+import { getWritingStats, recordChapterSave, recomputeChapterChars } from './services/statsService'
 import { parseFrontmatter } from '../shared/frontmatter'
 import { deleteWordbank, importWordbankTxt, listWordbanks, saveWordbank } from './services/wordbankService'
 import { indexStats, rebuildIndex, closeIndex } from './services/indexService'
@@ -185,6 +191,12 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       } catch (err) {
         // 恢复失败兜底（M5 审查修复）：尽力回到可编辑状态——否则监听永久停止、
         // 索引关闭，后续编辑静默不刷新（novel.json 缺失等极端情形重开失败则保持原始错误上抛）
+        // v2 三批：兜底路径同样重算统计（内容可能半换血，尽量对齐磁盘现状；失败不阻断）
+        try {
+          recomputeChapterChars()
+        } catch (statsErr) {
+          console.error('[ipc] 恢复失败兜底的统计重算失败（不阻断）:', statsErr)
+        }
         try {
           openNovel(novel.dir)
           startWatching(win)
@@ -192,6 +204,15 @@ export function registerIpcHandlers(win: BrowserWindow): void {
           /* 二次失败：上抛原始错误，用户重开小说自愈 */
         }
         throw err
+      }
+      // v2 三批遗留修复：恢复后、openNovel 前全量重算 chapterChars——initStats 对账
+      // 只处理新键/死键，内容回退的 live 键停留恢复前字数永不自愈；days 历史保留，
+      // 随后 openNovel→initStats→stampToday 以校正后总量记当日。重算失败不阻断恢复
+      // （统计是衍生账本，下次 openNovel 的对账仍保证新键/死键正确）
+      try {
+        recomputeChapterChars()
+      } catch (statsErr) {
+        console.error('[ipc] 快照恢复后统计重算失败（不阻断恢复）:', statsErr)
       }
       openNovel(novel.dir)
       startWatching(win)

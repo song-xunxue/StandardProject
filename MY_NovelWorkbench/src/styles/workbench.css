@@ -2554,3 +2554,60 @@
 .beat-candidates-float .ai-candidates {
   margin: 0;
 }
+
+/* v2 三批遗留修复：单路节拍生成状态条（右下角固定，与 .beat-candidates-float 同视觉族；
+ * 单路 generation 与三路 multiGen 在 aiStore 层互斥，两浮层不同时出现） */
+.beat-status-bar {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 360px));
+  padding: 8px 12px;
+  background: rgba(24, 26, 30, 0.97);
+  border: 1px solid #3a3d44;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  font-size: 12.5px;
+}
+
+.beat-status-title {
+  flex-shrink: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9aa0aa;
+}
+
+.beat-status-text {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.beat-status-error {
+  color: #e06c5e;
+}
+
+.beat-status-stop {
+  flex-shrink: 0;
+  padding: 3px 10px;
+}
+
+.beat-status-close {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: #9aa0aa;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.beat-status-close:hover {
+  color: #d7dae0;
+}

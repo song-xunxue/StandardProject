@@ -30,9 +30,15 @@
  *   1. v2 三批遗留修复：snapshotRestore 恢复成功后、openNovel 前调
  *      recomputeChapterChars 全量重算 chapterChars（live 键值随内容回退校正），
  *      days 历史保留；失败兜底分支同样重算（内容可能半换血，尽量对齐磁盘现状）
+
+ * 2026-09-24
+ * 变更说明：
+ *   1. v2-F18：导出双通道路由（export:checkPandoc 检测缓存 / export:exportNovel
+ *      一站式=showSaveDialog + runExport；取消返回 null）
 */
 
-import { dialog, ipcMain, type BrowserWindow } from 'electron'
+import { app, dialog, ipcMain, type BrowserWindow } from 'electron'
+import { join } from 'node:path'
 import { IPC } from '../shared/types'
 import type { ProviderConfig } from '../shared/types'
 import { createNovel, currentNovel, openNovel, readMeta, recentNovels, saveMeta } from './services/novelService'
@@ -63,6 +69,7 @@ import {
 import { deleteProvider, listProviders, saveProvider, testProvider } from './services/providerService'
 import { startGeneration, stopGeneration } from './services/llmService'
 import { getWritingStats, recordChapterSave, recomputeChapterChars } from './services/statsService'
+import { defaultExportName, detectPandoc, runExport } from './services/exportService'
 import { parseFrontmatter } from '../shared/frontmatter'
 import { deleteWordbank, importWordbankTxt, listWordbanks, saveWordbank } from './services/wordbankService'
 import { indexStats, rebuildIndex, closeIndex } from './services/indexService'
@@ -279,4 +286,31 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     })
   )
   ipcMain.handle(IPC.llmStop, (_e, p: { requestId: string }) => opened(() => stopGeneration(p.requestId)))
+
+  // v2-F18：导出管线（检测通道无打开小说前置；导出一站式=保存对话框+落盘在同一 handler）
+  ipcMain.handle(IPC.exportCheckPandoc, () => opened(() => detectPandoc()))
+  ipcMain.handle(
+    IPC.exportNovel,
+    (_e, p: Omit<Parameters<typeof runExport>[1], 'metaTitle'> & { metaTitle?: string }) =>
+      opened(async () => {
+        const novel = currentNovel()
+        if (!novel) throw new Error('尚未打开小说')
+        // 书名以 novel.json 为准（主进程注入——渲染层不传，防漂移）
+        const metaTitle = p.metaTitle ?? readMeta().title
+        // 保存对话框（defaultPath 指向文档目录+书名清洗文件名；取消返回 null 不报错）
+        const result = await dialog.showSaveDialog(win, {
+          title: '导出小说',
+          defaultPath: join(app.getPath('documents'), defaultExportName(metaTitle, p.format)),
+          filters: [
+            {
+              name:
+                p.format === 'epub' ? 'EPUB 电子书' : p.format === 'docx' ? 'Word 文档' : p.format === 'txt' ? '纯文本' : 'Markdown',
+              extensions: [p.format]
+            }
+          ]
+        })
+        if (result.canceled || !result.filePath) return null
+        return runExport(result.filePath, { ...p, metaTitle })
+      })
+  )
 }

@@ -2742,3 +2742,75 @@
   grid-column: 3 / 6;
   grid-row: 2;
 }
+
+/* v2-F18 导出浮层：范围 × 格式 × 选项 分区表单 */
+.snapshot-overlay .export-panel {
+  width: 540px;
+  max-height: 76vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.export-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.export-section {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.export-section-title {
+  font-size: 12px;
+  color: #9aa0aa;
+  margin-bottom: 6px;
+}
+
+.export-scope-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.export-radio {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.export-radio.disabled {
+  color: #6b7078;
+  cursor: not-allowed;
+}
+
+.export-pick-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.export-chapter-list {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.export-pick {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}

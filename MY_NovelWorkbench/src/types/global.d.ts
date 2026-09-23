@@ -22,6 +22,10 @@
  * 2026-09-17
  * 变更说明：
  *   1. v2-F8：fs.snapshotChapter* 五方法（章节级快照）类型
+
+ * 2026-09-24
+ * 变更说明：
+ *   1. v2-F18：export 组（checkPandoc / novel 一站式导出）类型
  */
 
 import type {
@@ -108,6 +112,11 @@ export interface Api {
     }) => Promise<void>
     stop: (requestId: string) => Promise<void>
     onChunk: (callback: (chunk: LlmChunkPayload) => void) => () => void
+  }
+  /** v2-F18：导出（TXT/MD 零依赖；EPUB/DOCX 可选 Pandoc） */
+  export: {
+    checkPandoc: () => Promise<{ available: boolean; version: string | null }>
+    novel: (payload: unknown) => Promise<unknown>
   }
 }
 

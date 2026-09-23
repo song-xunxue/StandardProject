@@ -45,6 +45,7 @@ import { MAX_NESTING_DEPTH } from '@shared/blueprint'
 import { SnapshotPanel } from './SnapshotPanel'
 import { StatsPanel } from './StatsPanel'
 import { SensitivePanel } from './SensitivePanel'
+import { ExportPanel } from './ExportPanel'
 import { ExtractPanel } from '@/canvas/ExtractPanel'
 import { useContextMenu } from '@/components/useContextMenu'
 
@@ -306,6 +307,7 @@ export function LeftPanel(): ReactElement {
   const [statsOpen, setStatsOpen] = useState(false)
   const [sensitiveOpen, setSensitiveOpen] = useState(false)
   const [extractOpen, setExtractOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const { menu, setMenu, menuRef } = useContextMenu<{ area: MenuArea }>()
 
   /** 展示树：blueprints/ 平铺列表 → owner 嵌套层级（磁盘真相不变，仅展示重排） */
@@ -577,6 +579,14 @@ export function LeftPanel(): ReactElement {
             >
               重建索引
             </button>
+            <button
+              className="left-footer-btn"
+              title="导出小说：TXT/MD 零依赖，EPUB/DOCX 走可选 Pandoc（v2-F18）"
+              disabled={!novel}
+              onClick={() => setExportOpen(true)}
+            >
+              导出
+            </button>
           </div>
         </div>
       )}
@@ -584,6 +594,7 @@ export function LeftPanel(): ReactElement {
       {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
       {sensitiveOpen && <SensitivePanel onClose={() => setSensitiveOpen(false)} />}
       {extractOpen && <ExtractPanel onClose={() => setExtractOpen(false)} />}
+      {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
       {/* 目录右键菜单：按区域提供创建项（自动序号预填）+ 文件项通用操作 */}
       {menu && (
         <div

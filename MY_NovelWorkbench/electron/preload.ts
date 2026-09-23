@@ -20,6 +20,10 @@
  * 2026-09-17
  * 变更说明：
  *   1. v2-F8：fs.snapshotChapter* 五方法暴露（章节级快照）
+
+ * 2026-09-24
+ * 变更说明：
+ *   1. v2-F18：export 组暴露（checkPandoc 检测 / novel 一站式导出）
 */
 
 import { contextBridge, ipcRenderer } from 'electron'
@@ -99,6 +103,11 @@ const api = {
       ipcRenderer.on(IPC_PUSH.llmChunk, listener)
       return () => ipcRenderer.removeListener(IPC_PUSH.llmChunk, listener)
     }
+  },
+  /** v2-F18：导出（TXT/MD 零依赖；EPUB/DOCX 可选 Pandoc，缺失降级提示） */
+  export: {
+    checkPandoc: () => ipcRenderer.invoke(IPC.exportCheckPandoc),
+    novel: (payload: unknown) => ipcRenderer.invoke(IPC.exportNovel, payload)
   }
 }
 

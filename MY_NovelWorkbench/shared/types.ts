@@ -49,6 +49,8 @@ export interface NovelMeta {
   tagLibrary: Array<{ name: string; color: string; builtin: boolean }>
   /** v2-F9 前情提要双档配置（可选，缺省=现状行为：尾部 2 章×800 字） */
   recap?: RecapConfig
+  /** v2-F18 作者（可选；EPUB/DOCX 导出元数据用，导出面板可编辑写回） */
+  author?: string
 }
 
 /** 最近打开记录（userData/recent.json，仅主进程读写） */
@@ -164,7 +166,11 @@ export const IPC = {
 
   // M3：LLM 流式生成（主进程 fetch SSE，ADR-10；chunk 经 IPC_PUSH.llmChunk 推送）
   llmGenerate: 'llm:generate', // (payload: { providerId, requestId, messages, maxTokens? }) => void
-  llmStop: 'llm:stop' // (payload: { requestId }) => void
+  llmStop: 'llm:stop', // (payload: { requestId }) => void
+
+  // v2-F18：导出管线（TXT/MD 零依赖基线 + EPUB/DOCX 可选 Pandoc）
+  exportCheckPandoc: 'export:checkPandoc', // () => { available: boolean; version: string | null }（会话级缓存）
+  exportNovel: 'export:exportNovel' // (payload: { format, scope, options, author? }) => ExportResult | null（null=用户取消保存框）
 } as const
 
 /** 主进程 → 渲染进程推送（webContents.send） */

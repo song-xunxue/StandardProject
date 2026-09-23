@@ -41,6 +41,7 @@ import type { NovelMeta, RecentNovel, RecapConfig, TreeNode } from '@shared/type
 import type { TagDef } from '@shared/tags'
 import { hydrateGraphData } from '@shared/blueprintCodec'
 import type { BlueprintFile } from '@shared/types'
+import type { ExportFormat, ExportOptions, ExportResult, ExportScope } from '@shared/exportFormat'
 import { useGraphStore } from './graphStore'
 import { useAiStore } from './aiStore'
 
@@ -74,6 +75,10 @@ interface NovelState {
   createChapterSnapshot: (chapterPath: string, note: string) => Promise<void>
   /** v2-F8：恢复章节快照（冲刷→IPC 整文件直写→chapterReloadSeq 重挂载编辑器防旧内存回写） */
   restoreChapterSnapshot: (chapterPath: string, id: string) => Promise<void>
+  /** v2-F18：导出小说（前置冲刷全部章节编辑器防抖——导出读磁盘，不冲刷即导出旧文） */
+  exportNovel: (
+    payload: { format: ExportFormat; scope: ExportScope; options: ExportOptions; author?: string }
+  ) => Promise<ExportResult | null>
   /** 刷新文件树 + 重新水合图数据；传入变更蓝图清单时走增量合并（watcher 推送路径） */
   refreshTree: (changedBlueprints?: string[]) => Promise<void>
   /** 创建蓝图/章节文件（章节可指定卷目录名）；返回实际创建的相对路径（v2-F16：序号回绕等可能改名） */
@@ -231,6 +236,13 @@ export const useNovelStore = create<NovelState>()((set, get) => ({
     await useAiStore.getState().chapterFlush?.([chapterPath])
     await api().fs.snapshotChapterRestore(chapterPath, id)
     set((s) => ({ chapterReloadSeq: s.chapterReloadSeq + 1 }))
+  },
+
+  exportNovel: async (payload) => {
+    // 前置冲刷（v2-F18，对齐 createSnapshot 先例）：导出读磁盘，编辑器 600ms 防抖
+    // 窗口内的正文不冲刷即静默导出旧文——无参调用=无条件冲刷全部挂载编辑器
+    await useAiStore.getState().chapterFlush?.()
+    return (await api().export.novel(payload)) as ExportResult | null
   },
 
   refreshTree: async (changedBlueprints) => {

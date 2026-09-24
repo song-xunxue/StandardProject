@@ -13,6 +13,7 @@ import type { ReactElement } from 'react'
 import { EXTRACT_TYPES, entityKeyOf, matchExistingNodes } from '@shared/extract'
 import type { ExtractType } from '@shared/extract'
 import { flattenChapterFiles } from '@/services/chapterTree'
+import { defaultTitle } from '@shared/naming'
 import { useExtractStore } from '@/store/extractStore'
 import { useNovelStore } from '@/store/novelStore'
 import { useGraphStore } from '@/store/graphStore'
@@ -56,8 +57,13 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
   const [checked, setChecked] = useState<Set<string>>(new Set())
   const [inserting, setInserting] = useState(false)
   const [targetGraph, setTargetGraph] = useState<string>(NEW_GRAPH)
-  /** 已见候选键（区分「新实体默认勾选」与「用户手动取消」——取消过的不再自动补勾） */
-  const seenKeysRef = useRef<Set<string>>(new Set())
+  /** 已见候选 id（区分「新实体默认勾选」与「用户手动取消」——取消过的不再自动补勾）。
+   *  审查修复：键从 name 派生改为实体稳定 id——改名不再导致输入框失焦（key 变化=DOM
+   *  重建）与勾选状态失真（取消项被自动补勾/撞同名静默取消/计数虚高） */
+  const seenIdsRef = useRef<Set<string>>(new Set())
+  /** 别名行内编辑草稿（审查修复：受控往返即时过滤会吞掉尾随分隔符——「老张、」被归一
+   *  回「老张」，键盘无法输入多个别名；改为草稿态编辑、失焦时解析落库） */
+  const [aliasDrafts, setAliasDrafts] = useState<Record<number, string>>({})
 
   // 挂载时按文件树准备章节任务（候选/进度重置）
   useEffect(() => {
@@ -65,17 +71,16 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /** 与既有节点（全部图）同名/同别名命中——防重复入库的标记 */
+  /** 与既有节点（全部图）同名/同别名命中——防重复入库的标记（仍按 name 派生键匹配） */
   const matched = useMemo(() => matchExistingNodes(candidates, Object.values(nodes)), [candidates, nodes])
   // 候选推进（跨章合并追加）时：首见且未与既有节点同名的默认勾选
   useEffect(() => {
-    const known = seenKeysRef.current
+    const known = seenIdsRef.current
     const additions: string[] = []
-    for (const e of candidates) {
-      const key = entityKeyOf(e.name)
-      if (known.has(key)) continue
-      known.add(key)
-      if (!matched.has(key)) additions.push(key)
+    for (const ent of candidates) {
+      if (known.has(ent.id)) continue
+      known.add(ent.id)
+      if (!matched.has(entityKeyOf(ent.name))) additions.push(ent.id)
     }
     if (additions.length === 0) return
     setChecked((prev) => {
@@ -85,21 +90,25 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
     })
   }, [candidates, matched])
 
-  // Esc 关闭（浮层族统一交互；running 中只提供停止按钮）
+  // Esc 关闭（浮层族统一交互；running 中只提供停止按钮）。审查修复：走 handleClose
+  // ——与 ×/遮罩同款「候选将丢失」确认兜底，不再绕过守卫静默丢弃抽取结果
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       const t = e.target
       if (t instanceof HTMLElement && (t.tagName === 'SELECT' || t.tagName === 'OPTION' || t.tagName === 'INPUT')) return
-      if (!running && !inserting) props.onClose()
+      if (!running && !inserting) void handleCloseRef.current()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [running, inserting, props])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, inserting])
 
   const doneCount = chapters.filter((c) => c.status === 'done').length
   const failedCount = chapters.filter((c) => c.status === 'failed').length
   const busy = running || inserting
+  /** 实际勾选数（按当前候选计算——移除行后不虚高） */
+  const checkedCount = candidates.filter((ent) => checked.has(ent.id)).length
 
   const handleClose = async (): Promise<void> => {
     if (candidates.length > 0) {
@@ -109,6 +118,9 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
     reset()
     props.onClose()
   }
+  /** Esc 监听引用最新 handleClose（避免依赖数组引入 async 闭包） */
+  const handleCloseRef = useRef(handleClose)
+  handleCloseRef.current = handleClose
 
   const handleStart = async (): Promise<void> => {
     try {
@@ -118,18 +130,34 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
     }
   }
 
-  const toggle = (key: string): void => {
+  /** 重试失败章（审查修复：与开始抽取同款错误提示——原先 void 掉的 rejection 静默） */
+  const handleRetry = async (): Promise<void> => {
+    try {
+      await retryFailed()
+    } catch (err) {
+      await dialogConfirm(`抽取发起失败：${err instanceof Error ? err.message : String(err)}`, '知道了')
+    }
+  }
+
+  const toggle = (id: string): void => {
     setChecked((prev) => {
       const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
 
+  /** 移除候选行：同步清勾选集（审查修复：按钮计数不再虚高、空勾选不再出现死按钮） */
+  const handleRemove = (index: number): void => {
+    const ent = candidates[index]
+    removeCandidate(index)
+    if (ent) setChecked((prev) => { const next = new Set(prev); next.delete(ent.id); return next })
+  }
+
   /** 确认入库：类别标签（幂等）→ 目标图（可选新建「拆书」蓝图）→ addNodesBatch 单笔落盘 */
   const handleInsert = async (): Promise<void> => {
-    const picked = candidates.filter((e) => checked.has(entityKeyOf(e.name)))
+    const picked = candidates.filter((ent) => checked.has(ent.id))
     if (picked.length === 0 || busy) return
     setInserting(true)
     try {
@@ -138,10 +166,15 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
       for (const type of new Set(picked.map((e) => e.type))) {
         await ns.createTag(type, TYPE_COLORS[type])
       }
-      // 2. 目标图：既有蓝图或新建「拆书」（先建文件 → refreshTree 补 graphPaths → 再批量插）
+      // 2. 目标图：既有蓝图或新建「拆书」（先建文件 → refreshTree 补 graphPaths → 再批量插）。
+      //    审查修复：蓝图标题按既有蓝图去重（defaultTitle 同名加序）——原先硬编码「拆书」，
+      //    二次拆书默认路径必因重名抛错阻断入库
       let graphId: string | null = targetGraph
       if (targetGraph === NEW_GRAPH) {
-        const created = await window.api.fs.createFile('blueprint', '拆书')
+        const gs0 = useGraphStore.getState()
+        const existingTitles = Object.values(gs0.graphPaths).map((p) => p.split('/').pop()?.replace(/\.blueprint\.json$/, '') ?? '')
+        const title = defaultTitle('拆书', existingTitles)
+        const created = await window.api.fs.createFile('blueprint', title)
         await ns.refreshTree()
         graphId = created.id ?? Object.entries(useGraphStore.getState().graphPaths).find(([, p]) => p === created.path)?.[0] ?? null
         if (!graphId) throw new Error('新建拆书蓝图失败（未取得图 id）')
@@ -219,23 +252,22 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
                 {'　'}与既有节点同名的默认不勾选（可强制勾选合并入库）
               </div>
             )}
-            {candidates.map((e, i) => {
-              const key = entityKeyOf(e.name)
-              const isMatched = matched.has(key)
+            {candidates.map((ent, i) => {
+              const isMatched = matched.has(entityKeyOf(ent.name))
               return (
-                <div key={`${key}#${i}`} className={`extract-candidate${checked.has(key) ? '' : ' off'}`}>
+                <div key={ent.id} className={`extract-candidate${checked.has(ent.id) ? '' : ' off'}`}>
                   <label className="extract-candidate-check">
-                    <input type="checkbox" checked={checked.has(key)} onChange={() => toggle(key)} disabled={busy} />
+                    <input type="checkbox" checked={checked.has(ent.id)} onChange={() => toggle(ent.id)} disabled={busy} />
                   </label>
                   <input
                     className="dialog-input extract-name"
-                    value={e.name}
+                    value={ent.name}
                     disabled={busy}
                     onChange={(ev) => updateCandidate(i, { name: ev.target.value })}
                   />
                   <select
                     className="dialog-input extract-type"
-                    value={e.type}
+                    value={ent.type}
                     disabled={busy}
                     onChange={(ev) => updateCandidate(i, { type: ev.target.value as ExtractType })}
                   >
@@ -250,27 +282,36 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
                       已有同名
                     </span>
                   )}
-                  <button className="extract-remove" title="移除该候选" disabled={busy} onClick={() => removeCandidate(i)}>
+                  <button className="extract-remove" title="移除该候选" disabled={busy} onClick={() => handleRemove(i)}>
                     ×
                   </button>
                   <input
                     className="dialog-input extract-aliases"
-                    placeholder="别名（、分隔）"
-                    value={e.aliases.join('、')}
+                    placeholder="别名（、分隔，失焦生效）"
+                    value={aliasDrafts[i] ?? ent.aliases.join('、')}
                     disabled={busy}
-                    onChange={(ev) =>
+                    onChange={(ev) => setAliasDrafts((d) => ({ ...d, [i]: ev.target.value }))}
+                    onBlur={() => {
+                      // 草稿态编辑、失焦解析落库（审查修复：受控往返即时过滤会吞尾随分隔符）
+                      const raw = aliasDrafts[i]
+                      if (raw === undefined) return
                       updateCandidate(i, {
-                        aliases: ev.target.value
+                        aliases: raw
                           .split(/[,，、]/)
                           .map((a) => a.trim())
                           .filter((a) => a !== '')
                       })
-                    }
+                      setAliasDrafts((d) => {
+                        const next = { ...d }
+                        delete next[i]
+                        return next
+                      })
+                    }}
                   />
                   <input
                     className="dialog-input extract-summary"
                     placeholder="一句话概括（可编辑）"
-                    value={e.summary}
+                    value={ent.summary}
                     disabled={busy}
                     onChange={(ev) => updateCandidate(i, { summary: ev.target.value })}
                   />
@@ -302,7 +343,7 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
             候选未入库前仅存内存，关闭浮层即丢失；失败章可重试，中断保留已完成部分
           </span>
           {failedCount > 0 && !running && (
-            <button className="left-tool-btn" disabled={busy} onClick={() => void retryFailed()}>
+            <button className="left-tool-btn" disabled={busy} onClick={() => void handleRetry()}>
               重试失败章（{failedCount}）
             </button>
           )}
@@ -322,11 +363,11 @@ export function ExtractPanel(props: { onClose: () => void }): ReactElement {
           )}
           <button
             className="left-tool-btn"
-            disabled={busy || checked.size === 0}
-            title={`勾选 ${checked.size} 个候选入库`}
+            disabled={busy || checkedCount === 0}
+            title={`勾选 ${checkedCount} 个候选入库`}
             onClick={() => void handleInsert()}
           >
-            {inserting ? '入库中…' : `入库（${checked.size}）`}
+            {inserting ? '入库中…' : `入库（${checkedCount}）`}
           </button>
         </div>
       </div>

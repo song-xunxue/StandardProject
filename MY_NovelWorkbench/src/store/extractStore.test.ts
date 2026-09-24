@@ -177,12 +177,12 @@ describe('拆书抽取会话（v2-F15）', () => {
     useExtractStore.getState().prepare([])
     useExtractStore.setState({
       candidates: [
-        { name: '甲', aliases: [], type: '人物', summary: '' },
-        { name: '乙', aliases: [], type: '地点', summary: '' }
+        { id: 'e1', name: '甲', aliases: [], type: '人物', summary: '' },
+        { id: 'e2', name: '乙', aliases: [], type: '地点', summary: '' }
       ]
     })
     useExtractStore.getState().updateCandidate(0, { name: '甲改', type: '势力' })
-    expect(useExtractStore.getState().candidates[0]).toEqual({ name: '甲改', aliases: [], type: '势力', summary: '' })
+    expect(useExtractStore.getState().candidates[0]).toEqual({ id: 'e1', name: '甲改', aliases: [], type: '势力', summary: '' })
     useExtractStore.getState().removeCandidate(0)
     expect(useExtractStore.getState().candidates.map((c) => c.name)).toEqual(['乙'])
   })

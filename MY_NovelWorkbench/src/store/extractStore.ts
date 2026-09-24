@@ -65,6 +65,8 @@ const extractWaiters = new Map<string, ExtractWaiter>()
 let unsubscribeChunks: (() => void) | null = null
 /** 停止标记（stop() 置位；循环与在途请求据此中断） */
 let stopRequested = false
+/** 会话代际号（审查修复：reset 后快速重开时，旧循环的迟到结算不得写入新会话/打回 running） */
+let sessionEpoch = 0
 
 function ensureChunkSubscription(): void {
   if (unsubscribeChunks) return
@@ -135,6 +137,7 @@ export const useExtractStore = create<ExtractState>()((set, get) => ({
     const providerId = useAiStore.getState().activeProviderId
     if (!providerId) throw new Error('未选择 AI Provider（先在 AI 面板配置）')
     ensureChunkSubscription()
+    const epoch = ++sessionEpoch
     stopRequested = false
     set({ running: true })
     try {
@@ -148,6 +151,7 @@ export const useExtractStore = create<ExtractState>()((set, get) => ({
         })
         try {
           const doc = await api().fs.readChapter(task.path)
+          if (epoch !== sessionEpoch) return // 旧会话迟到结算：不写新会话状态
           const windows = splitChapterWindows(doc.content)
           const windowResults: ExtractedEntity[][] = []
           for (let w = 0; w < windows.length; w++) {
@@ -158,6 +162,7 @@ export const useExtractStore = create<ExtractState>()((set, get) => ({
               knownEntities: get().candidates
             })
             windowResults.push(await generateExtract(providerId, messages))
+            if (epoch !== sessionEpoch) return // 同上（窗口结算点）
           }
           if (stopRequested) {
             // 中断：当前章回退 pending（含已完成的窗口结果——重试整章，避免半章状态）
@@ -173,6 +178,7 @@ export const useExtractStore = create<ExtractState>()((set, get) => ({
             chapters: get().chapters.map((c) => (c.path === task.path ? { ...c, status: 'done' } : c))
           })
         } catch (err) {
+          if (epoch !== sessionEpoch) return // 旧会话迟到失败：不写新会话状态
           if (stopRequested) {
             set({
               chapters: get().chapters.map((c) =>
@@ -192,7 +198,8 @@ export const useExtractStore = create<ExtractState>()((set, get) => ({
         }
       }
     } finally {
-      set({ running: false })
+      // 代际守卫：旧会话退出不得把新会话刚置位的 running 打回 false
+      if (epoch === sessionEpoch) set({ running: false })
     }
   },
 
@@ -220,6 +227,7 @@ export const useExtractStore = create<ExtractState>()((set, get) => ({
   },
 
   reset: () => {
+    sessionEpoch++
     stopRequested = true
     cancelActiveRequests()
     set({ chapters: [], candidates: [], running: false })

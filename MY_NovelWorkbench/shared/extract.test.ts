@@ -14,17 +14,27 @@ import {
   parseExtractOutput,
   splitChapterWindows
 } from './extract'
+import type { ExtractedEntity } from './extract'
 import type { BlueprintNode } from './blueprint'
+
+/** 测试夹具构造（id 以 name 派生，仅测试内唯一即可） */
+const e = (name: string, aliases: string[] = [], summary = '', type: ExtractedEntity['type'] = '人物'): ExtractedEntity => ({
+  id: `e-${name}`,
+  name,
+  aliases,
+  type,
+  summary
+})
 
 describe('parseExtractOutput（容错解析）', () => {
   it('干净 JSON（entities 包装形态）', () => {
     const out = parseExtractOutput('{"entities":[{"name":"林越","aliases":["越哥"],"type":"人物","summary":"主角"}]}')
-    expect(out).toEqual([{ name: '林越', aliases: ['越哥'], type: '人物', summary: '主角' }])
+    expect(out).toEqual([{ id: expect.stringMatching(/^ent-/), name: '林越', aliases: ['越哥'], type: '人物', summary: '主角' }])
   })
 
   it('裸数组形态', () => {
     const out = parseExtractOutput('[{"name":"青云宗","type":"势力","summary":""}]')
-    expect(out).toEqual([{ name: '青云宗', aliases: [], type: '势力', summary: '' }])
+    expect(out).toMatchObject([{ name: '青云宗', aliases: [], type: '势力', summary: '' }])
   })
 
   it('```json 围栏与前后解释文字', () => {
@@ -46,7 +56,7 @@ describe('parseExtractOutput（容错解析）', () => {
   })
 
   it('坏条目跳过不阻断（name 缺失/非对象）', () => {
-    const out = parseExtractOutput('{"entities":[{"name":"甲","type":"人物"},"无名条目",{"aliases":["乙"],"type":"人物"},"字符串"]}').map((e) => e.name)
+    const out = parseExtractOutput('{"entities":[{"name":"甲","type":"人物"},"无名条目",{"aliases":["乙"],"type":"人物"},"字符串"]}').map((x) => x.name)
     expect(out).toEqual(['甲'])
   })
 
@@ -68,45 +78,41 @@ describe('parseExtractOutput（容错解析）', () => {
 })
 
 describe('mergeExtractedEntities（跨章合并）', () => {
-  it('同名合并：别名并集、summary 取最长、保序', () => {
-    const a = [{ name: '林越', aliases: ['越哥'], type: '人物' as const, summary: '短' }]
-    const b = [{ name: '林越', aliases: ['林大哥', '越哥'], type: '人物' as const, summary: '主角，剑修，北境人氏' }]
+  it('同名合并：别名并集、summary 取最长、保序、id 随首见存续', () => {
+    const a = [e('林越', ['越哥'], '短')]
+    const b = [e('林越', ['林大哥', '越哥'], '主角，剑修，北境人氏')]
     const out = mergeExtractedEntities([a, b])
     expect(out).toHaveLength(1)
     expect(out[0]!.aliases).toEqual(['越哥', '林大哥'])
     expect(out[0]!.summary).toBe('主角，剑修，北境人氏')
+    expect(out[0]!.id).toBe('e-林越') // 首见 id 存续（改名不换 key 的根基）
   })
 
   it('别名命中合并：他章以别名作名出现（老张/张师长）', () => {
-    const a = [{ name: '张师长', aliases: [], type: '人物' as const, summary: '一' }]
-    const b = [{ name: '老张', aliases: [], type: '人物' as const, summary: '二' }]
     // 无交叉键：保持两个（不做单向包含合并）
-    expect(mergeExtractedEntities([a, b])).toHaveLength(2)
+    expect(mergeExtractedEntities([[e('张师长', [], '一')], [e('老张', [], '二')]])).toHaveLength(2)
     // 有别名桥：合并
-    const c = [{ name: '张师长', aliases: ['老张'], type: '人物' as const, summary: '一' }]
-    const d = [{ name: '老张', aliases: [], type: '人物' as const, summary: '二' }]
-    const out = mergeExtractedEntities([c, d])
+    const out = mergeExtractedEntities([[e('张师长', ['老张'], '一')], [e('老张', [], '二')]])
     expect(out).toHaveLength(1)
     expect(out[0]!.name).toBe('张师长')
     expect(out[0]!.aliases).toContain('老张')
   })
 
   it('不误并：无别名关系时「张三丰」与「张真人」保持两个', () => {
-    const out = mergeExtractedEntities([
-      [{ name: '张三丰', aliases: [], type: '人物' as const, summary: '' }],
-      [{ name: '张真人', aliases: [], type: '人物' as const, summary: '' }]
-    ])
+    const out = mergeExtractedEntities([[e('张三丰')], [e('张真人')]])
     expect(out).toHaveLength(2)
   })
 
   it('累积合并（三章流式场景）：键索引随合并增长', () => {
     let cur = mergeExtractedEntities([[]])
-    cur = mergeExtractedEntities([cur, [{ name: '甲', aliases: [], type: '人物' as const, summary: 'a' }]])
-    cur = mergeExtractedEntities([cur, [{ name: '甲', aliases: ['大甲'], type: '人物' as const, summary: 'aa' }]])
-    cur = mergeExtractedEntities([cur, [{ name: '乙', aliases: [], type: '地点' as const, summary: 'b' }]])
-    expect(cur.map((e) => e.name)).toEqual(['甲', '乙'])
+    cur = mergeExtractedEntities([cur, [e('甲', [], 'a')]])
+    const idOf甲 = cur[0]!.id
+    cur = mergeExtractedEntities([cur, [e('甲', ['大甲'], 'aa')]])
+    cur = mergeExtractedEntities([cur, [e('乙', [], 'b', '地点')]])
+    expect(cur.map((x) => x.name)).toEqual(['甲', '乙'])
     expect(cur[0]!.aliases).toEqual(['大甲'])
     expect(cur[0]!.summary).toBe('aa')
+    expect(cur[0]!.id).toBe(idOf甲) // 累积合并中 id 稳定
   })
 })
 
@@ -116,11 +122,7 @@ describe('matchExistingNodes（既有节点匹配）', () => {
 
   it('标题与别名双向命中（实体名==节点别名 / 实体别名==节点标题）', () => {
     const nodes = [node('n1', '林越', ['越哥']), node('n2', '青云宗', [])]
-    const entities = [
-      { name: '越哥', aliases: [], type: '人物' as const, summary: '' },
-      { name: '林越', aliases: [], type: '人物' as const, summary: '' },
-      { name: '北荒', aliases: [], type: '地点' as const, summary: '' }
-    ]
+    const entities = [e('越哥'), e('林越'), e('北荒', [], '', '地点')]
     const out = matchExistingNodes(entities, nodes)
     expect(out.get(entityKeyOf('越哥'))).toBe('n1')
     expect(out.get(entityKeyOf('林越'))).toBe('n1')
@@ -129,7 +131,7 @@ describe('matchExistingNodes（既有节点匹配）', () => {
 
   it('空白与大小写归一（英文名变体）', () => {
     const nodes = [node('n1', 'Ling Yue', [])]
-    const entities = [{ name: 'ling  yue', aliases: [], type: '人物' as const, summary: '' }]
+    const entities = [e('ling  yue')]
     expect(matchExistingNodes(entities, nodes).get(entityKeyOf('ling  yue'))).toBe('n1')
   })
 })

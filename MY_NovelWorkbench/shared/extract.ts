@@ -16,8 +16,12 @@ export type ExtractType = (typeof EXTRACT_TYPES)[number]
 /** 类型漂移/未识别时的兜底桶（与内置标签「设定」语义对齐） */
 const FALLBACK_TYPE: ExtractType = '人物'
 
-/** 抽取实体（LLM 输出归一化后的中间形态；入库时映射 AddNodeInput） */
+/** 抽取实体（LLM 输出归一化后的中间形态；入库时映射 AddNodeInput）。
+ *  id 为会话内稳定标识（首见时生成、跨章合并随首见实体存续）——审查修复：
+ *  React 行 key 与勾选集原先用 name 派生键，行内改名会导致输入框每键失焦
+ *  （key 变化=DOM 重建）与勾选状态失真 */
 export interface ExtractedEntity {
+  id: string
   name: string
   aliases: string[]
   type: ExtractType
@@ -36,6 +40,9 @@ const SUMMARY_MAX = 200
 export function entityKeyOf(name: string): string {
   return name.replace(/\s+/g, '').toLowerCase()
 }
+
+/** 实体 id 会话内自增序号（唯一即可，无需跨会话稳定——候选未入库前仅存内存） */
+let entityIdSeq = 0
 
 /** 条目归一化：字段类型漂移纠正 + 长度钳制；无效条目（无名）返回 null */
 function normalizeEntity(raw: unknown): ExtractedEntity | null {
@@ -59,7 +66,7 @@ function normalizeEntity(raw: unknown): ExtractedEntity | null {
   ].slice(0, ALIAS_MAX_COUNT)
   const type = EXTRACT_TYPES.includes(r.type as ExtractType) ? (r.type as ExtractType) : FALLBACK_TYPE
   const summary = typeof r.summary === 'string' ? r.summary.trim().slice(0, SUMMARY_MAX) : ''
-  return { name, aliases, type, summary }
+  return { id: `ent-${++entityIdSeq}`, name, aliases, type, summary }
 }
 
 /**

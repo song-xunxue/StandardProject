@@ -18,9 +18,11 @@ import { Markdown } from '@tiptap/markdown'
 import type { Editor as EditorType } from '@tiptap/core'
 
 // ---- window.api stub（须在导入 aiStore 前就位；jsdom 下保留原生 window——
-// vi.stubGlobal 整替会丢 DOMParser，Tiptap Editor 初始化会崩） ----
+// vi.stubGlobal 整替会丢 DOMParser，Tiptap Editor 初始化会崩）。
+// onChunk 支持多订阅（会话自订阅 + aiStore 单订阅并存，按注册序派发——
+// 单 sink 互相覆盖会吞掉会话的 done 包捕获） ----
 const stopCalls: string[] = []
-let chunkSink: ((chunk: unknown) => void) | null = null
+const chunkSinks: Array<(chunk: unknown) => void> = []
 ;(globalThis.window as unknown as { api: unknown }).api = {
   llm: {
     generate: async (): Promise<void> => {},
@@ -28,9 +30,10 @@ let chunkSink: ((chunk: unknown) => void) | null = null
       stopCalls.push(requestId)
     },
     onChunk: (cb: (chunk: unknown) => void): (() => void) => {
-      chunkSink = cb
+      chunkSinks.push(cb)
       return () => {
-        chunkSink = null
+        const i = chunkSinks.indexOf(cb)
+        if (i >= 0) chunkSinks.splice(i, 1)
       }
     }
   }
@@ -42,7 +45,7 @@ const { beatSingleSession } = await import('@/services/beatSingleSession')
 type MarkdownEditor = EditorType & { getMarkdown: () => string }
 
 const pushChunk = (chunk: Record<string, unknown>): void => {
-  chunkSink?.(chunk)
+  for (const cb of [...chunkSinks]) cb(chunk)
 }
 
 /** 等待帧调度落地（StreamInserter 走 rAF/16ms 定时） */
@@ -105,6 +108,26 @@ describe('BeatSingleSession（v2 三批遗留修复）', () => {
     expect(stopCalls).toContain(rid)
     expect(beatSingleSession.getState()?.status).toBe('stopped')
     expect(editor.getMarkdown()).toContain('已生成的部分。')
+    editor.destroy()
+    beatSingleSession.clear()
+  })
+
+  it('外部中断（切/关 Tab 触发编辑器卸载守卫等）：无 done 包 → 标 stopped 不误报完成', async () => {
+    const editor = new Editor({ extensions: [StarterKit, Markdown] }) as MarkdownEditor
+    editor.commands.setContent('', { contentType: 'markdown' } as never)
+    useAiStore.setState({ chapterEditor: editor })
+
+    await beatSingleSession.start({ messages: [], maxTokens: 500, targetTitle: '第02章' })
+    const rid = useAiStore.getState().generation!.requestId
+    pushChunk({ requestId: rid, delta: '半章文本。' })
+    await nextFrames()
+    // 模拟外部中断：不经会话 stop、无 done 包——直接摘会话置空 generation
+    // （ChapterEditor 卸载守卫 / AI 面板停止按钮的实际路径）
+    useAiStore.setState({ generation: null })
+
+    const state = beatSingleSession.getState()
+    expect(state?.status).toBe('stopped') // 原先误报 'done'
+    expect(editor.getMarkdown()).toContain('半章文本。') // 已落文本保留
     editor.destroy()
     beatSingleSession.clear()
   })

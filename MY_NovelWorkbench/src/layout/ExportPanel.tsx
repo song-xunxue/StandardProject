@@ -60,10 +60,14 @@ export function ExportPanel(props: { onClose: () => void }): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novel?.id])
 
-  // Esc 关闭（浮层族统一交互）
+  // Esc 关闭（浮层族统一交互）。审查修复：输入控件内 Esc（含中文输入法取消组合态）
+  // 只应作用于控件本身，不关浮层——否则作者栏打字按 Esc 丢全部已选配置
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !exporting) props.onClose()
+      if (e.key !== 'Escape' || e.isComposing || exporting) return
+      const t = e.target
+      if (t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'OPTION' || t.tagName === 'TEXTAREA')) return
+      props.onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -197,7 +201,9 @@ export function ExportPanel(props: { onClose: () => void }): ReactElement {
             <div className="export-section-title">格式</div>
             <div className="export-scope-modes">
               {(Object.keys(FORMAT_LABEL) as ExportFormat[]).map((f) => {
-                const disabled = (f === 'epub' || f === 'docx') && pandoc !== null && !pandoc.available
+                // 审查修复：探测中也禁用（原先探测期可选中，无 Pandoc 机器上导出得到
+                // 晦涩的 spawn ENOENT 而非置灰引导）
+                const disabled = (f === 'epub' || f === 'docx') && (pandoc === null || !pandoc.available)
                 return (
                   <label key={f} className={`export-radio${disabled ? ' disabled' : ''}`} title={disabled ? '未检测到 Pandoc' : undefined}>
                     <input type="radio" name="export-format" checked={format === f} disabled={disabled || exporting} onChange={() => setFormat(f)} />

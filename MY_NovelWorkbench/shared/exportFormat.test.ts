@@ -59,13 +59,18 @@ describe('assembleTxt（网文粘贴档）', () => {
     expect(out).toContain('[[林越]]')
   })
 
-  it('未分卷章节无卷分隔行（首章直入）', () => {
+  it('未分卷章节无卷分隔行，块间距统一双空行（审查修复：不再压入空卷块）', () => {
     const noVol: ExportChapterSource[] = [
       { title: '第01章', content: '一' },
       { title: '第02章', content: '二' }
     ]
     const out = assembleTxt({ title: '书' }, noVol, stripOpts)
     expect(out).not.toContain('【')
+    // 书名行与首章之间恰为块分隔双空行（原先空卷块使间距翻倍为四空行）
+    expect(out.startsWith('《书》\r\n\r\n\r\n第01章')).toBe(true)
+    expect(out).not.toContain('\r\n\r\n\r\n\r\n')
+    // 章与章之间同样双空行
+    expect(out).toContain('一\r\n\r\n\r\n第02章')
   })
 })
 

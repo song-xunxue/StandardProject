@@ -92,9 +92,13 @@ export function saveBlueprint(path: string, file: BlueprintFile): void {
   writeFileSync(resolveInNovel(path), JSON.stringify(file, null, 2), 'utf-8')
 }
 
-/** 读取章节（frontmatter + 正文；未知键以原样行透传） */
+/** 读取章节（frontmatter + 正文；未知键以原样行透传）。
+ *  审查修复（v2 三批）：读取边界归一换行——parseFrontmatter 仅在命中 frontmatter 分支
+ *  归一 CRLF，无 frontmatter 的外部导入章节（拆书/导出的主场景，Windows 编辑器典型
+ *  CRLF）原样透传，下游 \n{2,} 段落切分全部失配；此处统一 \r\n?→\n（应用自建章节
+ *  本就是 LF，行为不变；导入章节经编辑器保存后亦落为 LF） */
 export function readChapter(path: string): ChapterDoc {
-  const raw = readFileSync(resolveInNovel(path), 'utf-8')
+  const raw = readFileSync(resolveInNovel(path), 'utf-8').replace(/\r\n?/g, '\n')
   const { data, content } = parseFrontmatter(raw)
   return {
     path,

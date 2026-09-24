@@ -75,12 +75,14 @@ export function assembleTxt(
   const blocks: string[] = []
   // 书名行仅在全本多章时给出（单章粘贴档直接正文）
   if (chapters.length > 1) blocks.push(`《${meta.title}》`)
-  let lastVolume: string | undefined | null = null
+  let lastVolume: string | undefined
   for (const ch of chapters) {
-    if (ch.volume !== lastVolume && chapters.length > 1) {
-      blocks.push(ch.volume === undefined ? '' : `【${ch.volume}】`)
-      lastVolume = ch.volume
+    // 卷分隔行仅在卷名变化且有卷名时给出（审查修复：原先未分卷首章 push('') 空块，
+    // join 时空块两侧各贡献一次分隔符，书名行与首章间距翻倍违反「块间双空行」口径）
+    if (chapters.length > 1 && ch.volume !== undefined && ch.volume !== lastVolume) {
+      blocks.push(`【${ch.volume}】`)
     }
+    lastVolume = ch.volume
     const body = options.wikilinkMode === 'strip' ? plainizeMarkdown(ch.content) : ch.content
     const paras = body.split(/\n{2,}/).map((p) => p.replace(/\n/g, ''))
     const chapterBlock = options.chapterTitles ? [ch.title, ...paras] : paras
@@ -99,12 +101,12 @@ export function assembleMd(
   options: ExportOptions
 ): string {
   const lines: string[] = [`# ${meta.title}`, '']
-  let lastVolume: string | undefined | null = null
+  let lastVolume: string | undefined
   for (const ch of chapters) {
-    if (ch.volume !== lastVolume) {
-      lines.push(ch.volume === undefined ? '' : `# ${ch.volume}`, '')
-      lastVolume = ch.volume
+    if (ch.volume !== undefined && ch.volume !== lastVolume) {
+      lines.push(`# ${ch.volume}`, '')
     }
+    lastVolume = ch.volume
     if (options.chapterTitles) lines.push(`## ${ch.title}`, '')
     const body = options.wikilinkMode === 'strip' ? stripWikilinks(ch.content) : ch.content
     lines.push(body.trimEnd(), '')

@@ -140,6 +140,23 @@ describe('runExport（TXT/MD 落盘）', () => {
     await runExport(target, { format: 'txt', scope: { kind: 'chapters', paths: ['chapters/第10章.md'] }, options: opts, metaTitle: '书', author: '' })
     expect(readFileSync(target, 'utf-8')).toContain('北上') // frontmatter title，非文件名「第10章」
   })
+
+  it('CRLF 无 frontmatter 的外部导入章节：段落按空行分隔、无孤立 \\r（审查修复回归）', async () => {
+    // Windows 编辑器典型产物：CRLF + 无 frontmatter（F15/F18 的主场景）
+    writeFileSync(join(novelDir, 'chapters', '第20章.md'), '第一段。\r\n\r\n第二段。\r\n\r\n第三段。', 'utf-8')
+    const target = join(outDir, 'crlf.txt')
+    const result = await runExport(target, {
+      format: 'txt',
+      scope: { kind: 'chapters', paths: ['chapters/第20章.md'] },
+      options: opts,
+      metaTitle: '书',
+      author: ''
+    })
+    expect(result.chapters).toBe(1)
+    const text = readFileSync(target, 'utf-8')
+    expect(text).toContain('第一段。\r\n\r\n第二段。\r\n\r\n第三段。') // 段间单空行
+    expect(text).not.toMatch(/\r[^\n]/) // 无孤立 \r（原先整章坍缩单段并残留 \r）
+  })
 })
 
 describe('Pandoc 链路（fake runner）', () => {
